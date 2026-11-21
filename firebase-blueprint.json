@@ -1,0 +1,287 @@
+{
+  "entities": {
+    "ChurchInfoDoc": {
+      "title": "ChurchInfoDoc",
+      "description": "General church profile, introduction, core values, contact info, and roster week labels",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "englishName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "founded": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "scriptureQuote": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "scriptureRef": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "heroSubtitle": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "heroImage": { "type": "string", "minLength": 1, "maxLength": 200000 },
+        "fellowshipImage": { "type": "string", "minLength": 1, "maxLength": 200000 },
+        "address": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "shortAddress": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "phone": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "pastoralPhone": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "email": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "wechatId": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "officeHours": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "themeVerse": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "themeVerseRef": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "thisWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "nextWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "transitGuide": { "type": "array", "description": "Up to 10 transit instructions" },
+        "introParagraphs": { "type": "array", "description": "Up to 10 intro paragraphs" },
+        "coreValues": { "type": "array", "description": "Up to 10 core value items" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "name",
+        "englishName",
+        "founded",
+        "scriptureQuote",
+        "scriptureRef",
+        "heroSubtitle",
+        "heroImage",
+        "fellowshipImage",
+        "address",
+        "shortAddress",
+        "phone",
+        "pastoralPhone",
+        "email",
+        "wechatId",
+        "officeHours",
+        "themeVerse",
+        "themeVerseRef",
+        "thisWeekLabel",
+        "nextWeekLabel",
+        "transitGuide",
+        "introParagraphs",
+        "coreValues",
+        "updatedAt"
+      ]
+    },
+    "PastorDoc": {
+      "title": "PastorDoc",
+      "description": "Pastor and featured elder profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "tenure": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "image": { "type": "string", "minLength": 1, "maxLength": 120000 },
+        "education": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "ministryFocus": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "bio": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "role", "tenure", "image", "education", "ministryFocus", "bio", "sortOrder", "updatedAt"]
+    },
+    "CoworkerDoc": {
+      "title": "CoworkerDoc",
+      "description": "Pulpit coworker rotation and ministry lead",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "responsibility": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "sermonTopic": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "image": { "type": "string", "maxLength": 60000 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "title", "responsibility", "sermonTopic", "sortOrder", "updatedAt"]
+    },
+    "WorshipTimeDoc": {
+      "title": "WorshipTimeDoc",
+      "description": "Sunday schedule time block",
+      "type": "object",
+      "properties": {
+        "time": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "place": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "desc": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["time", "title", "place", "desc", "sortOrder", "updatedAt"]
+    },
+    "LiturgyStepDoc": {
+      "title": "LiturgyStepDoc",
+      "description": "Order of worship step",
+      "type": "object",
+      "properties": {
+        "liturgyType": { "type": "string", "enum": ["standard", "communion"] },
+        "time": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "step": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "scriptureOrHymn": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "leader": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "note": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["liturgyType", "time", "step", "scriptureOrHymn", "leader", "note", "sortOrder", "updatedAt"]
+    },
+    "WorshipSongDoc": {
+      "title": "WorshipSongDoc",
+      "description": "Sunday worship song title and YouTube video link",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "youtubeUrl": { "type": "string", "maxLength": 500 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "youtubeUrl", "sortOrder", "updatedAt"]
+    },
+    "MinistryRosterDoc": {
+      "title": "MinistryRosterDoc",
+      "description": "Sunday ministry duty, Sunday school class, or fellowship assignment",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "enum": ["worship", "sunday-school", "fellowship"] },
+        "role": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "timeOrPlace": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "thisWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "nextWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "note": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "role", "timeOrPlace", "thisWeek", "nextWeek", "note", "sortOrder", "updatedAt"]
+    },
+    "WeekdayMinistryDoc": {
+      "title": "WeekdayMinistryDoc",
+      "description": "Tuesday to Saturday weekday ministry schedule",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "leader": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["day", "time", "title", "location", "leader", "description", "sortOrder", "updatedAt"]
+    },
+    "AnnouncementDoc": {
+      "title": "AnnouncementDoc",
+      "description": "Church gathering announcement or notice",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "enum": ["特别聚会", "洗礼与课程", "社区关怀", "诗班与事奉"] },
+        "date": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "contact": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "isFeatured": { "type": "boolean" },
+        "details": { "type": "array", "description": "Up to 20 detail paragraphs" },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "date", "title", "summary", "time", "location", "contact", "isFeatured", "details", "sortOrder", "updatedAt"]
+    },
+    "VisitorRequestDoc": {
+      "title": "VisitorRequestDoc",
+      "description": "Visitor registration or prayer request containing PII (admin read only)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "contact": { "type": "string", "minLength": 5, "maxLength": 140 },
+        "intent": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "archived"] },
+        "adminNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "contact", "intent", "message", "status", "createdAt"]
+    },
+    "PublicBundleDoc": {
+      "title": "PublicBundleDoc",
+      "description": "Single-document denormalized snapshot containing all public homepage modules for 1-read visitor loading",
+      "type": "object",
+      "properties": {
+        "churchInfo": { "type": "object" },
+        "pastors": { "type": "array", "description": "Up to 30 pastors" },
+        "coworkers": { "type": "array", "description": "Up to 50 coworkers" },
+        "worshipTimes": { "type": "array", "description": "Up to 20 worship times" },
+        "liturgySteps": { "type": "array", "description": "Up to 40 liturgy steps" },
+        "worshipSongs": { "type": "array", "description": "Up to 30 worship songs" },
+        "ministryRoster": { "type": "array", "description": "Up to 80 ministry roster items" },
+        "weekdayMinistries": { "type": "array", "description": "Up to 30 weekday ministries" },
+        "announcements": { "type": "array", "description": "Up to 50 announcements" },
+        "version": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "churchInfo",
+        "pastors",
+        "coworkers",
+        "worshipTimes",
+        "liturgySteps",
+        "worshipSongs",
+        "ministryRoster",
+        "weekdayMinistries",
+        "announcements",
+        "version",
+        "updatedAt"
+      ]
+    },
+    "AdminUserDoc": {
+      "title": "AdminUserDoc",
+      "description": "Admin role assignment document keyed by UID",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "displayName", "addedAt"]
+    }
+  },
+  "firestore": {
+    "/church_sections/{sectionId}": {
+      "schema": { "$ref": "#/entities/ChurchInfoDoc" },
+      "description": "Singleton church metadata ('info') and denormalized public snapshot ('public_bundle')"
+    },
+    "/pastors/{pastorId}": {
+      "schema": { "$ref": "#/entities/PastorDoc" },
+      "description": "Pastors and featured pulpit elders"
+    },
+    "/coworkers/{coworkerId}": {
+      "schema": { "$ref": "#/entities/CoworkerDoc" },
+      "description": "Pulpit coworkers and worship leaders"
+    },
+    "/worship_times/{slotId}": {
+      "schema": { "$ref": "#/entities/WorshipTimeDoc" },
+      "description": "Sunday worship schedule blocks"
+    },
+    "/liturgy_steps/{stepId}": {
+      "schema": { "$ref": "#/entities/LiturgyStepDoc" },
+      "description": "Sunday liturgy order steps"
+    },
+    "/worship_songs/{songId}": {
+      "schema": { "$ref": "#/entities/WorshipSongDoc" },
+      "description": "Sunday worship songs and lyrics"
+    },
+    "/ministry_roster/{rosterId}": {
+      "schema": { "$ref": "#/entities/MinistryRosterDoc" },
+      "description": "Sunday ministry duty roster, Sunday school, and fellowships"
+    },
+    "/weekday_ministries/{weekdayId}": {
+      "schema": { "$ref": "#/entities/WeekdayMinistryDoc" },
+      "description": "Weekday ministry meetings"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/AnnouncementDoc" },
+      "description": "Church gathering announcements"
+    },
+    "/visitor_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/VisitorRequestDoc" },
+      "description": "Private visitor registrations and prayer requests"
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminUserDoc" },
+      "description": "Authorized admin UIDs"
+    }
+  }
+}

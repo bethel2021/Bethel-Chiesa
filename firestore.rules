@@ -1,0 +1,393 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'chinarenzhian@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isStringBounds(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isValidMapList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is map);
+    }
+
+    function isValidImageRef(val, minLen, maxLen) {
+      return val is string
+        && val.size() >= minLen
+        && val.size() <= maxLen
+        && (
+          val == '' ||
+          val.matches('^(https?://|/).+$') ||
+          val.matches('^data:image/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        );
+    }
+
+    function isValidYoutubeUrl(val) {
+      return val is string
+        && val.size() <= 500
+        && (
+          val == '' ||
+          val.matches('^https://([a-zA-Z0-9-]+\\.)?(youtube\\.com|youtu\\.be|youtube-nocookie\\.com)/.+$')
+        );
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidChurchInfo(data) {
+      return data.keys().hasAll([
+        'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
+        'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
+        'phone', 'pastoralPhone', 'email', 'wechatId', 'officeHours',
+        'themeVerse', 'themeVerseRef', 'thisWeekLabel', 'nextWeekLabel',
+        'transitGuide', 'introParagraphs', 'coreValues', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
+        'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
+        'phone', 'pastoralPhone', 'email', 'wechatId', 'officeHours',
+        'themeVerse', 'themeVerseRef', 'thisWeekLabel', 'nextWeekLabel',
+        'transitGuide', 'introParagraphs', 'coreValues', 'updatedAt'
+      ])
+      && isStringBounds(data.name, 1, 100)
+      && isStringBounds(data.englishName, 1, 100)
+      && isStringBounds(data.founded, 1, 100)
+      && isStringBounds(data.scriptureQuote, 1, 400)
+      && isStringBounds(data.scriptureRef, 1, 100)
+      && isStringBounds(data.heroSubtitle, 1, 400)
+      && isValidImageRef(data.heroImage, 1, 200000)
+      && isValidImageRef(data.fellowshipImage, 1, 200000)
+      && isStringBounds(data.address, 1, 300)
+      && isStringBounds(data.shortAddress, 1, 100)
+      && isStringBounds(data.phone, 1, 100)
+      && isStringBounds(data.pastoralPhone, 1, 100)
+      && isStringBounds(data.email, 1, 120)
+      && isStringBounds(data.wechatId, 1, 100)
+      && isStringBounds(data.officeHours, 1, 200)
+      && isStringBounds(data.themeVerse, 1, 300)
+      && isStringBounds(data.themeVerseRef, 1, 100)
+      && isStringBounds(data.thisWeekLabel, 1, 60)
+      && isStringBounds(data.nextWeekLabel, 1, 60)
+      && isValidStringList(data.transitGuide, 10)
+      && isValidStringList(data.introParagraphs, 10)
+      && isValidMapList(data.coreValues, 10)
+      && data.updatedAt == request.time;
+    }
+
+    function isValidPublicBundle(data) {
+      return data.keys().hasAll([
+        'churchInfo', 'pastors', 'coworkers', 'worshipTimes', 'liturgySteps',
+        'worshipSongs', 'ministryRoster', 'weekdayMinistries', 'announcements',
+        'version', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'churchInfo', 'pastors', 'coworkers', 'worshipTimes', 'liturgySteps',
+        'worshipSongs', 'ministryRoster', 'weekdayMinistries', 'announcements',
+        'version', 'updatedAt'
+      ])
+      && data.churchInfo is map
+      && isValidMapList(data.pastors, 30)
+      && isValidMapList(data.coworkers, 50)
+      && isValidMapList(data.worshipTimes, 20)
+      && isValidMapList(data.liturgySteps, 40)
+      && isValidMapList(data.worshipSongs, 30)
+      && isValidMapList(data.ministryRoster, 80)
+      && isValidMapList(data.weekdayMinistries, 30)
+      && isValidMapList(data.announcements, 50)
+      && data.version is number && data.version >= 0
+      && data.updatedAt == request.time;
+    }
+
+    function isValidPastor(data) {
+      return data.keys().hasAll([
+        'name', 'role', 'tenure', 'image', 'education', 'ministryFocus', 'bio', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'name', 'role', 'tenure', 'image', 'education', 'ministryFocus', 'bio', 'sortOrder', 'updatedAt'
+      ])
+      && isStringBounds(data.name, 1, 80)
+      && isStringBounds(data.role, 1, 120)
+      && isStringBounds(data.tenure, 1, 60)
+      && isValidImageRef(data.image, 1, 120000)
+      && isStringBounds(data.education, 1, 200)
+      && isStringBounds(data.ministryFocus, 1, 200)
+      && isStringBounds(data.bio, 1, 1200)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidCoworker(data) {
+      return data.keys().hasAll([
+        'name', 'title', 'responsibility', 'sermonTopic', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'name', 'title', 'responsibility', 'sermonTopic', 'image', 'sortOrder', 'updatedAt'
+      ])
+      && isStringBounds(data.name, 1, 80)
+      && isStringBounds(data.title, 1, 120)
+      && isStringBounds(data.responsibility, 1, 200)
+      && isStringBounds(data.sermonTopic, 1, 200)
+      && (!('image' in data) || isValidImageRef(data.image, 0, 60000))
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidWorshipTime(data) {
+      return data.keys().hasAll([
+        'time', 'title', 'place', 'desc', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'time', 'title', 'place', 'desc', 'sortOrder', 'updatedAt'
+      ])
+      && isStringBounds(data.time, 1, 60)
+      && isStringBounds(data.title, 1, 120)
+      && isStringBounds(data.place, 1, 120)
+      && isStringBounds(data.desc, 1, 300)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidLiturgyStep(data) {
+      return data.keys().hasAll([
+        'liturgyType', 'time', 'step', 'scriptureOrHymn', 'leader', 'note', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'liturgyType', 'time', 'step', 'scriptureOrHymn', 'leader', 'note', 'sortOrder', 'updatedAt'
+      ])
+      && data.liturgyType in ['standard', 'communion']
+      && isStringBounds(data.time, 1, 40)
+      && isStringBounds(data.step, 1, 120)
+      && isStringBounds(data.scriptureOrHymn, 1, 200)
+      && isStringBounds(data.leader, 1, 100)
+      && isStringBounds(data.note, 1, 500)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidWorshipSong(data) {
+      return data.keys().hasAll([
+        'title', 'youtubeUrl', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'title', 'youtubeUrl', 'sortOrder', 'updatedAt'
+      ])
+      && isStringBounds(data.title, 1, 140)
+      && isValidYoutubeUrl(data.youtubeUrl)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidMinistryRoster(data) {
+      return data.keys().hasAll([
+        'category', 'role', 'timeOrPlace', 'thisWeek', 'nextWeek', 'note', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'category', 'role', 'timeOrPlace', 'thisWeek', 'nextWeek', 'note', 'sortOrder', 'updatedAt'
+      ])
+      && data.category in ['worship', 'sunday-school', 'fellowship']
+      && isStringBounds(data.role, 1, 140)
+      && isStringBounds(data.timeOrPlace, 1, 140)
+      && isStringBounds(data.thisWeek, 1, 200)
+      && isStringBounds(data.nextWeek, 1, 200)
+      && isStringBounds(data.note, 1, 300)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidWeekdayMinistry(data) {
+      return data.keys().hasAll([
+        'day', 'time', 'title', 'location', 'leader', 'description', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'day', 'time', 'title', 'location', 'leader', 'description', 'sortOrder', 'updatedAt'
+      ])
+      && isStringBounds(data.day, 1, 20)
+      && isStringBounds(data.time, 1, 60)
+      && isStringBounds(data.title, 1, 120)
+      && isStringBounds(data.location, 1, 160)
+      && isStringBounds(data.leader, 1, 120)
+      && isStringBounds(data.description, 1, 400)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+        'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
+      ]) && data.keys().hasOnly([
+        'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
+      ])
+      && data.category in ['特别聚会', '洗礼与课程', '社区关怀', '诗班与事奉']
+      && isStringBounds(data.date, 1, 80)
+      && isStringBounds(data.title, 1, 160)
+      && isStringBounds(data.summary, 1, 400)
+      && isStringBounds(data.time, 1, 100)
+      && isStringBounds(data.location, 1, 160)
+      && isStringBounds(data.contact, 1, 120)
+      && data.isFeatured is bool
+      && isValidStringList(data.details, 20)
+      && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
+      && data.updatedAt == request.time;
+    }
+
+    function isValidVisitorRequestCreate(data) {
+      return data.keys().hasAll(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
+      && data.keys().hasOnly(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
+      && isStringBounds(data.name, 1, 80)
+      && isStringBounds(data.contact, 5, 140)
+      && isStringBounds(data.intent, 1, 100)
+      && data.message is string && data.message.size() <= 1000
+      && data.status == 'pending'
+      && data.createdAt == request.time;
+    }
+
+    function isValidVisitorRequestUpdate(data) {
+      return data.keys().hasAll(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
+      && data.keys().hasOnly(['name', 'contact', 'intent', 'message', 'status', 'adminNote', 'createdAt'])
+      && isStringBounds(data.name, 1, 80)
+      && isStringBounds(data.contact, 5, 140)
+      && isStringBounds(data.intent, 1, 100)
+      && data.message is string && data.message.size() <= 1000
+      && data.status in ['pending', 'contacted', 'archived']
+      && (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 500))
+      && data.createdAt == existing().createdAt;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['email', 'displayName', 'addedAt'])
+      && data.keys().hasOnly(['email', 'displayName', 'addedAt'])
+      && isStringBounds(data.email, 3, 160)
+      && isStringBounds(data.displayName, 1, 80)
+      && data.addedAt == request.time;
+    }
+
+    // --- Collection Rules ---
+    match /church_sections/{sectionId} {
+      allow get: if isValidId(sectionId);
+      allow list: if true;
+      allow create: if isValidId(sectionId) && isAdmin() && (
+        (sectionId == 'info' && isValidChurchInfo(incoming())) ||
+        (sectionId == 'public_bundle' && isValidPublicBundle(incoming()))
+      );
+      allow update: if isValidId(sectionId) && isAdmin() && (
+        (sectionId == 'info' && isValidChurchInfo(incoming())) ||
+        (sectionId == 'public_bundle' && isValidPublicBundle(incoming()))
+      );
+      allow delete: if false;
+    }
+
+    match /pastors/{pastorId} {
+      allow get: if isValidId(pastorId);
+      allow list: if true;
+      allow create: if isValidId(pastorId) && isValidPastor(incoming()) && isAdmin();
+      allow update: if isValidId(pastorId) && isValidPastor(incoming()) && isAdmin();
+      allow delete: if isValidId(pastorId) && isAdmin();
+    }
+
+    match /coworkers/{coworkerId} {
+      allow get: if isValidId(coworkerId);
+      allow list: if true;
+      allow create: if isValidId(coworkerId) && isValidCoworker(incoming()) && isAdmin();
+      allow update: if isValidId(coworkerId) && isValidCoworker(incoming()) && isAdmin();
+      allow delete: if isValidId(coworkerId) && isAdmin();
+    }
+
+    match /worship_times/{slotId} {
+      allow get: if isValidId(slotId);
+      allow list: if true;
+      allow create: if isValidId(slotId) && isValidWorshipTime(incoming()) && isAdmin();
+      allow update: if isValidId(slotId) && isValidWorshipTime(incoming()) && isAdmin();
+      allow delete: if isValidId(slotId) && isAdmin();
+    }
+
+    match /liturgy_steps/{stepId} {
+      allow get: if isValidId(stepId);
+      allow list: if true;
+      allow create: if isValidId(stepId) && isValidLiturgyStep(incoming()) && isAdmin();
+      allow update: if isValidId(stepId) && isValidLiturgyStep(incoming()) && isAdmin();
+      allow delete: if isValidId(stepId) && isAdmin();
+    }
+
+    match /worship_songs/{songId} {
+      allow get: if isValidId(songId);
+      allow list: if true;
+      allow create: if isValidId(songId) && isValidWorshipSong(incoming()) && isAdmin();
+      allow update: if isValidId(songId) && isValidWorshipSong(incoming()) && isAdmin();
+      allow delete: if isValidId(songId) && isAdmin();
+    }
+
+    match /ministry_roster/{rosterId} {
+      allow get: if isValidId(rosterId);
+      allow list: if true;
+      allow create: if isValidId(rosterId) && isValidMinistryRoster(incoming()) && isAdmin();
+      allow update: if isValidId(rosterId) && isValidMinistryRoster(incoming()) && isAdmin();
+      allow delete: if isValidId(rosterId) && isAdmin();
+    }
+
+    match /weekday_ministries/{weekdayId} {
+      allow get: if isValidId(weekdayId);
+      allow list: if true;
+      allow create: if isValidId(weekdayId) && isValidWeekdayMinistry(incoming()) && isAdmin();
+      allow update: if isValidId(weekdayId) && isValidWeekdayMinistry(incoming()) && isAdmin();
+      allow delete: if isValidId(weekdayId) && isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId);
+      allow list: if true;
+      allow create: if isValidId(announcementId) && isValidAnnouncement(incoming()) && isAdmin();
+      allow update: if isValidId(announcementId) && isValidAnnouncement(incoming()) && isAdmin();
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    // PII Isolation: Only verified admins can read/update/delete visitor_requests;
+    // public visitors may create pending requests only.
+    match /visitor_requests/{requestId} {
+      allow get: if isValidId(requestId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(requestId) && isValidVisitorRequestCreate(incoming());
+      allow update: if isValidId(requestId)
+        && isValidVisitorRequestUpdate(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote'])
+        && isAdmin();
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+
+    // Admin RBAC table: strictly managed by verified admins only
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(adminUid) && isValidAdminUser(incoming()) && isAdmin();
+      allow update: if false;
+      allow delete: if isValidId(adminUid) && isAdmin();
+    }
+  }
+}

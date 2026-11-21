@@ -1,0 +1,71 @@
+import { useChurchData } from '../context/ChurchDataContext';
+
+interface FooterProps {
+  onOpenAdmin: () => void;
+}
+
+export function Footer({ onOpenAdmin }: FooterProps) {
+  const { churchInfo } = useChurchData();
+
+  return (
+    <footer className="bg-[#FAF8F4] border-t border-[#E5DFD3]">
+      <div className="max-w-[1200px] mx-auto px-6 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-[#E5DFD3]">
+          <div className="md:col-span-5">
+            <p className="font-editorial text-xl font-semibold text-[#1C1917] mb-2">
+              {churchInfo.name}
+            </p>
+            <p className="text-xs text-[#57534E] leading-relaxed max-w-sm">
+              {churchInfo.scriptureQuote} —— {churchInfo.scriptureRef}
+            </p>
+          </div>
+
+          <div className="md:col-span-3 space-y-2 text-xs text-[#57534E]">
+            <p className="font-medium text-[#1C1917] mb-2">聚会时间</p>
+            <p className="tabular-nums">主日崇拜：周日 09:30 – 11:15</p>
+            <p className="tabular-nums">主日学：周日 13:00 – 14:15</p>
+            <p className="tabular-nums">祷告会：周二 19:30 – 21:00</p>
+          </div>
+
+          <div className="md:col-span-4 space-y-2 text-xs text-[#57534E]">
+            <p className="font-medium text-[#1C1917] mb-2">堂址与联系</p>
+            <p>{churchInfo.address}</p>
+            <p className="tabular-nums">电话：{churchInfo.phone}</p>
+            <p>邮箱：{churchInfo.email}</p>
+          </div>
+        </div>
+
+        <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#78716C]">
+          <p>© 2026 {churchInfo.name} · {churchInfo.englishName}</p>
+          <nav aria-label="页脚快速导航" className="flex flex-wrap items-center gap-5">
+            <a href="#intro" className="hover:text-[#1C1917] transition-colors">
+              教会简介
+            </a>
+            <a href="#pastors" className="hover:text-[#1C1917] transition-colors">
+              牧者同工
+            </a>
+            <a href="#worship" className="hover:text-[#1C1917] transition-colors">
+              主日崇拜
+            </a>
+            <a href="#ministry" className="hover:text-[#1C1917] transition-colors">
+              事工岗位
+            </a>
+            <a href="#announcements" className="hover:text-[#1C1917] transition-colors">
+              聚会公告
+            </a>
+            <a href="#contact" className="hover:text-[#1C1917] transition-colors">
+              来访与联系
+            </a>
+            <button
+              type="button"
+              onClick={onOpenAdmin}
+              className="text-[#1E3A5F] hover:underline underline-offset-4 cursor-pointer font-medium"
+            >
+              后台管理
+            </button>
+          </nav>
+        </div>
+      </div>
+    </footer>
+  );
+}
