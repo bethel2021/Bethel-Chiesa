@@ -62,7 +62,7 @@ import {
 } from '../lib/firebase';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
-const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v2';
+const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
 const PUBLIC_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes local cache TTL
 
 export interface PublicBundleData {
@@ -111,7 +111,7 @@ interface ChurchDataContextValue {
   lastSyncedAt: number | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
-  seedDefaultContent: () => Promise<void>;
+  syncModifiedContentToCloud: () => Promise<void>;
   publishPublicBundle: () => Promise<void>;
   refreshPublicSnapshot: () => Promise<void>;
 
@@ -197,7 +197,19 @@ function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong[] {
     id: String(song.id || `song-${idx + 1}`),
     title: clampStr(song.title || '', 140),
     youtubeUrl: typeof song.youtubeUrl === 'string' ? song.youtubeUrl : '',
+    youtubeUrl2: typeof song.youtubeUrl2 === 'string' ? song.youtubeUrl2 : '',
     sortOrder: Number(song.sortOrder) || idx + 1,
+  }));
+}
+
+function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
+  return list.map((cw, idx) => ({
+    id: String(cw.id || `cw-${idx + 1}`),
+    name: clampStr(cw.name || '', 80),
+    title: clampStr(cw.title || '', 120),
+    responsibility: clampStr(cw.responsibility || '', 200),
+    ...(typeof cw.image === 'string' && cw.image.trim() ? { image: cw.image.trim() } : {}),
+    sortOrder: Number(cw.sortOrder) || idx + 1,
   }));
 }
 
@@ -268,7 +280,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     initialCache?.bundle.pastors?.length ? initialCache.bundle.pastors : PASTORS_TEAM
   );
   const [coworkers, setCoworkers] = useState<PulpitCoworker[]>(
-    initialCache?.bundle.coworkers?.length ? initialCache.bundle.coworkers : PULPIT_COWORKERS
+    initialCache?.bundle.coworkers?.length
+      ? normalizeCoworkers(initialCache.bundle.coworkers)
+      : PULPIT_COWORKERS
   );
   const [worshipTimes, setWorshipTimes] = useState<WorshipTimeSlot[]>(
     initialCache?.bundle.worshipTimes?.length
@@ -342,7 +356,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const applyBundleToState = useCallback((bundle: PublicBundleData) => {
     if (bundle.churchInfo) setChurchInfo({ ...CHURCH_INFO, ...bundle.churchInfo });
     if (bundle.pastors?.length) setPastors(bundle.pastors);
-    if (bundle.coworkers?.length) setCoworkers(bundle.coworkers);
+    if (bundle.coworkers?.length) setCoworkers(normalizeCoworkers(bundle.coworkers));
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
     if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
     if (bundle.worshipSongs?.length) setWorshipSongs(normalizeWorshipSongs(bundle.worshipSongs));
@@ -362,16 +376,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     fellowshipImage: sanitizeImageRef(info.fellowshipImage, 200000) || CHURCH_INFO.fellowshipImage,
     address: clampStr(info.address, 300),
     shortAddress: clampStr(info.shortAddress, 100),
-    phone: clampStr(info.phone, 100),
     pastoralPhone: clampStr(info.pastoralPhone, 100),
-    email: clampStr(info.email, 120),
-    wechatId: clampStr(info.wechatId, 100),
-    officeHours: clampStr(info.officeHours, 200),
     themeVerse: clampStr(info.themeVerse, 300),
     themeVerseRef: clampStr(info.themeVerseRef, 100),
     thisWeekLabel: clampStr(info.thisWeekLabel, 60),
     nextWeekLabel: clampStr(info.nextWeekLabel, 60),
-    transitGuide: info.transitGuide.slice(0, 10).map((s) => clampStr(s, 300)).filter(Boolean),
     introParagraphs: info.introParagraphs
       .slice(0, 10)
       .map((s) => clampStr(s, 1000))
@@ -399,7 +408,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       return {
         churchInfo: buildChurchInfoFields(snapshot.churchInfo),
         pastors: snapshot.pastors.slice(0, 30),
-        coworkers: snapshot.coworkers.slice(0, 50),
+        coworkers: normalizeCoworkers(snapshot.coworkers).slice(0, 50),
         worshipTimes: snapshot.worshipTimes.slice(0, 20),
         liturgySteps: snapshot.liturgySteps.slice(0, 40),
         worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
@@ -683,7 +692,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     };
 
     subscribeSorted<PastorProfile>('pastors', setPastors, PASTORS_TEAM);
-    subscribeSorted<PulpitCoworker>('coworkers', setCoworkers, PULPIT_COWORKERS);
+    subscribeSorted<PulpitCoworker>(
+      'coworkers',
+      (items) => setCoworkers(normalizeCoworkers(items)),
+      PULPIT_COWORKERS
+    );
     subscribeSorted<WorshipTimeSlot>('worship_times', setWorshipTimes, SUNDAY_WORSHIP_TIMES);
     subscribeSorted<LiturgyStep>('liturgy_steps', setLiturgySteps, [
       ...LITURGY_STANDARD,
@@ -771,138 +784,136 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     await loadSingleDocPublicBundle(true);
   }, [loadSingleDocPublicBundle]);
 
-  const seedDefaultContent = useCallback(async () => {
+  const syncModifiedContentToCloud = useCallback(async () => {
+    const current = latestStateRef.current;
     try {
-      const batch = writeBatch(db);
-      batch.set(doc(db, 'church_sections', 'info'), {
-        ...buildChurchInfoFields(CHURCH_INFO),
-        updatedAt: serverTimestamp(),
-      });
-
-      for (const p of PASTORS_TEAM) {
-        batch.set(doc(db, 'pastors', p.id), {
-          name: p.name,
-          role: p.role,
-          tenure: p.tenure,
-          image: p.image,
-          education: p.education,
-          ministryFocus: p.ministryFocus,
-          bio: p.bio,
-          sortOrder: p.sortOrder,
+      if (!hasCloudData) {
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'church_sections', 'info'), {
+          ...buildChurchInfoFields(current.churchInfo),
           updatedAt: serverTimestamp(),
         });
-      }
 
-      for (const cw of PULPIT_COWORKERS) {
-        batch.set(doc(db, 'coworkers', cw.id), {
-          name: cw.name,
-          title: cw.title,
-          responsibility: cw.responsibility,
-          sermonTopic: cw.sermonTopic,
-          sortOrder: cw.sortOrder,
+        for (const p of current.pastors) {
+          batch.set(doc(db, 'pastors', p.id), {
+            name: p.name,
+            role: p.role,
+            tenure: p.tenure,
+            image: p.image,
+            education: p.education,
+            ministryFocus: p.ministryFocus,
+            bio: p.bio,
+            sortOrder: p.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const cw of current.coworkers) {
+          batch.set(doc(db, 'coworkers', cw.id), {
+            name: cw.name,
+            title: cw.title,
+            responsibility: cw.responsibility,
+            ...(cw.image ? { image: cw.image } : {}),
+            sortOrder: cw.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const wt of current.worshipTimes) {
+          batch.set(doc(db, 'worship_times', wt.id), {
+            time: wt.time,
+            title: wt.title,
+            place: wt.place,
+            desc: wt.desc,
+            sortOrder: wt.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const ls of current.liturgySteps) {
+          batch.set(doc(db, 'liturgy_steps', ls.id), {
+            liturgyType: ls.liturgyType,
+            time: ls.time,
+            step: ls.step,
+            scriptureOrHymn: ls.scriptureOrHymn,
+            leader: ls.leader,
+            note: ls.note,
+            sortOrder: ls.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const song of current.worshipSongs) {
+          batch.set(doc(db, 'worship_songs', song.id), {
+            title: song.title,
+            youtubeUrl: song.youtubeUrl,
+            youtubeUrl2: song.youtubeUrl2 || '',
+            sortOrder: song.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const r of current.ministryRoster) {
+          batch.set(doc(db, 'ministry_roster', r.id), {
+            category: r.category,
+            role: r.role,
+            timeOrPlace: r.timeOrPlace,
+            thisWeek: r.thisWeek,
+            nextWeek: r.nextWeek,
+            note: r.note,
+            sortOrder: r.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const wm of current.weekdayMinistries) {
+          batch.set(doc(db, 'weekday_ministries', wm.id), {
+            day: wm.day,
+            time: wm.time,
+            title: wm.title,
+            location: wm.location,
+            leader: wm.leader,
+            description: wm.description,
+            sortOrder: wm.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        for (const ann of current.announcements) {
+          batch.set(doc(db, 'announcements', ann.id), {
+            category: ann.category,
+            date: ann.date,
+            title: ann.title,
+            summary: ann.summary,
+            time: ann.time,
+            location: ann.location,
+            contact: ann.contact,
+            isFeatured: ann.isFeatured,
+            details: ann.details,
+            sortOrder: ann.sortOrder,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        const bundle = buildPublicBundlePayload(current);
+        batch.set(doc(db, 'church_sections', 'public_bundle'), {
+          ...bundle,
           updatedAt: serverTimestamp(),
         });
+
+        await batch.commit();
+        const syncedAt = writeLocalBundleCache(bundle, true);
+        setHasCloudData(true);
+        setHasPublicBundle(true);
+        setLastSyncedAt(syncedAt);
+        return;
       }
 
-      for (const wt of SUNDAY_WORSHIP_TIMES) {
-        batch.set(doc(db, 'worship_times', wt.id), {
-          time: wt.time,
-          title: wt.title,
-          place: wt.place,
-          desc: wt.desc,
-          sortOrder: wt.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      for (const ls of [...LITURGY_STANDARD, ...LITURGY_COMMUNION]) {
-        batch.set(doc(db, 'liturgy_steps', ls.id), {
-          liturgyType: ls.liturgyType,
-          time: ls.time,
-          step: ls.step,
-          scriptureOrHymn: ls.scriptureOrHymn,
-          leader: ls.leader,
-          note: ls.note,
-          sortOrder: ls.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      for (const song of WORSHIP_SONGS) {
-        batch.set(doc(db, 'worship_songs', song.id), {
-          title: song.title,
-          youtubeUrl: song.youtubeUrl,
-          sortOrder: song.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      for (const r of SUNDAY_MINISTRY_ROSTER) {
-        batch.set(doc(db, 'ministry_roster', r.id), {
-          category: r.category,
-          role: r.role,
-          timeOrPlace: r.timeOrPlace,
-          thisWeek: r.thisWeek,
-          nextWeek: r.nextWeek,
-          note: r.note,
-          sortOrder: r.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      for (const wm of WEEKDAY_MINISTRIES) {
-        batch.set(doc(db, 'weekday_ministries', wm.id), {
-          day: wm.day,
-          time: wm.time,
-          title: wm.title,
-          location: wm.location,
-          leader: wm.leader,
-          description: wm.description,
-          sortOrder: wm.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      for (const ann of ANNOUNCEMENTS) {
-        batch.set(doc(db, 'announcements', ann.id), {
-          category: ann.category,
-          date: ann.date,
-          title: ann.title,
-          summary: ann.summary,
-          time: ann.time,
-          location: ann.location,
-          contact: ann.contact,
-          isFeatured: ann.isFeatured,
-          details: ann.details,
-          sortOrder: ann.sortOrder,
-          updatedAt: serverTimestamp(),
-        });
-      }
-
-      const bundle = buildPublicBundlePayload({
-        churchInfo: CHURCH_INFO,
-        pastors: PASTORS_TEAM,
-        coworkers: PULPIT_COWORKERS,
-        worshipTimes: SUNDAY_WORSHIP_TIMES,
-        liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
-        worshipSongs: WORSHIP_SONGS,
-        ministryRoster: SUNDAY_MINISTRY_ROSTER,
-        weekdayMinistries: WEEKDAY_MINISTRIES,
-        announcements: ANNOUNCEMENTS,
-      });
-      batch.set(doc(db, 'church_sections', 'public_bundle'), {
-        ...bundle,
-        updatedAt: serverTimestamp(),
-      });
-
-      await batch.commit();
-      const syncedAt = writeLocalBundleCache(bundle, true);
-      setHasPublicBundle(true);
-      setLastSyncedAt(syncedAt);
+      await publishBundleSnapshot(current);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'seedDefaultContent');
+      handleFirestoreError(error, OperationType.WRITE, 'syncModifiedContentToCloud');
     }
-  }, [buildPublicBundlePayload]);
+  }, [hasCloudData, buildPublicBundlePayload, publishBundleSnapshot]);
 
   const saveChurchInfo = useCallback(
     async (info: ChurchInfo) => {
@@ -981,7 +992,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         name: clampStr(item.name, 80),
         title: clampStr(item.title, 120),
         responsibility: clampStr(item.responsibility, 200),
-        sermonTopic: clampStr(item.sermonTopic, 200),
         image: cleanedImage,
         sortOrder: Number(item.sortOrder) || 0,
       };
@@ -1115,6 +1125,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         id,
         title: clampStr(item.title, 140),
         youtubeUrl: sanitizeYoutubeUrl(item.youtubeUrl),
+        youtubeUrl2: sanitizeYoutubeUrl(item.youtubeUrl2),
         sortOrder: Number(item.sortOrder) || 0,
       };
       try {
@@ -1381,7 +1392,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         lastSyncedAt,
         signInWithGoogle,
         signOutUser,
-        seedDefaultContent,
+        syncModifiedContentToCloud,
         publishPublicBundle,
         refreshPublicSnapshot,
         saveChurchInfo,

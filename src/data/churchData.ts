@@ -15,16 +15,11 @@ export interface ChurchInfo {
   fellowshipImage: string;
   address: string;
   shortAddress: string;
-  phone: string;
   pastoralPhone: string;
-  email: string;
-  wechatId: string;
-  officeHours: string;
   themeVerse: string;
   themeVerseRef: string;
   thisWeekLabel: string;
   nextWeekLabel: string;
-  transitGuide: string[];
   introParagraphs: string[];
   coreValues: CoreValueItem[];
 }
@@ -46,7 +41,6 @@ export interface PulpitCoworker {
   name: string;
   title: string;
   responsibility: string;
-  sermonTopic: string;
   image?: string;
   sortOrder: number;
 }
@@ -75,6 +69,7 @@ export interface WorshipSong {
   id: string;
   title: string;
   youtubeUrl: string;
+  youtubeUrl2?: string;
   sortOrder: number;
 }
 
@@ -149,23 +144,13 @@ export const CHURCH_INFO: ChurchInfo = {
   heroSubtitle: '每周主日 09:30 主堂崇拜 · 诚挚欢迎每一位寻求真理、渴望在基督里得享安息的朋友',
   heroImage: CHURCH_IMAGES.heroSanctuary,
   fellowshipImage: CHURCH_IMAGES.fellowshipIntro,
-  address: '上海市徐汇区衡山路 328 号伯特利堂（近地铁 1 号线衡山路站 2 号口）',
-  shortAddress: '徐汇区衡山路 328 号',
-  phone: '021-6438-2817',
-  pastoralPhone: '021-6438-2819（教牧关怀专线）',
-  email: 'office@bethelchurch.org.cn',
-  wechatId: 'BethelChurch_SH',
-  officeHours: '周二至周六 09:00 – 17:30 · 主日 08:00 – 16:30',
+  address: 'VIA ANTONIO STRADIVARI 19, PRATO',
+  shortAddress: 'VIA ANTONIO STRADIVARI 19, PRATO',
+  pastoralPhone: '021-6438-2819',
   themeVerse: '「你们要彼此相爱，像我爱你们一样，这就是我的命令。」',
   themeVerseRef: '约翰福音 15:12 · 伯特利教会年度主题经文',
   thisWeekLabel: '本周主日 · 11月15日',
   nextWeekLabel: '下周主日 · 11月22日',
-  transitGuide: [
-    '地铁 1 号线「衡山路站」2 号出口步行约 4 分钟即达教会正门。',
-    '地铁 10 号线「上海图书馆站」1 号出口向南步行约 8 分钟。',
-    '公交 15 路、49 路、93 路至「衡山路高安路站」下车步行约 150 米。',
-    '主日堂外设有少量无障碍及长者接送临时停靠位，建议绿色出行。',
-  ],
   introParagraphs: [
     '伯特利教会设立于 1998 年秋，是一间秉承使徒信经与宗教改革纯正信仰传统的基督教地方教会。「伯特利」（Bethel）意为「神的殿」，正如雅各在旷野梦中见天梯而发出的赞叹，我们盼望这间教会成为城市中人遇见神、得蒙赦罪与更新的生命驿站。',
     '二十余年来，教会始终坚持「以圣道为根基、以敬拜为核心、以团契为纽带、以宣教为使命」的牧养方向。无论你是初涉信仰的慕道朋友，或是多年同行主路的肢体，都能在真理的教导与弟兄姊妹真诚的守望中，经历从神而来的平安与力量。',
@@ -236,7 +221,6 @@ export const PULPIT_COWORKERS: PulpitCoworker[] = [
     name: '周以撒 传道',
     title: '全职传道 · 青年与校园事工',
     responsibility: '每月第二主日证道 · 周五青年团契查经',
-    sermonTopic: '《提摩太后书》：末世中的忠心呼召',
     sortOrder: 1,
   },
   {
@@ -244,7 +228,6 @@ export const PULPIT_COWORKERS: PulpitCoworker[] = [
     name: '许保罗 长老',
     title: '教会长老 · 宣教与探访事工',
     responsibility: '每月第四主日圣道分享 · 社区长者关怀',
-    sermonTopic: '《使徒行传》：直到地极的见证',
     sortOrder: 2,
   },
   {
@@ -252,7 +235,6 @@ export const PULPIT_COWORKERS: PulpitCoworker[] = [
     name: '张书亚 弟兄',
     title: '讲台见习传道 · 成人主日学教师',
     responsibility: '周间查经祷告会主讲 · 成人《罗马书》班',
-    sermonTopic: '《罗马书》1–8 章：因信称义的恩典',
     sortOrder: 3,
   },
   {
@@ -260,7 +242,6 @@ export const PULPIT_COWORKERS: PulpitCoworker[] = [
     name: '苏米利暗 姊妹',
     title: '圣乐执事 · 诗班指挥',
     responsibility: '主日敬拜曲目编排 · 周四诗班灵修与练唱',
-    sermonTopic: '以诗篇为祷告：圣乐中的敬虔与盼望',
     sortOrder: 4,
   },
 ];
@@ -431,24 +412,28 @@ export const WORSHIP_SONGS: WorshipSong[] = [
     id: 'song-1',
     title: '《圣哉三一》（Holy, Holy, Holy）',
     youtubeUrl: 'https://www.youtube.com/results?search_query=Holy+Holy+Holy+%E5%9C%A3%E5%93%89%E4%B8%89%E4%B8%80+%E8%B5%9E%E7%BE%8E%E8%AF%97',
+    youtubeUrl2: '',
     sortOrder: 1,
   },
   {
     id: 'song-2',
     title: '《奇异恩典》（Amazing Grace）',
     youtubeUrl: 'https://www.youtube.com/results?search_query=Amazing+Grace+%E5%A5%87%E5%BC%82%E6%81%A9%E5%85%B8+%E8%B5%9E%E7%BE%8E%E8%AF%97',
+    youtubeUrl2: '',
     sortOrder: 2,
   },
   {
     id: 'song-3',
     title: '《耶稣恩友》（What a Friend We Have in Jesus）',
     youtubeUrl: 'https://www.youtube.com/results?search_query=What+a+Friend+We+Have+in+Jesus+%E8%80%B6%E7%A8%A3%E6%81%A9%E5%8F%8B',
+    youtubeUrl2: '',
     sortOrder: 3,
   },
   {
     id: 'song-4',
     title: '《愿主赐福看顾你》（The Lord Bless You and Keep You）',
     youtubeUrl: 'https://www.youtube.com/results?search_query=The+Lord+Bless+You+and+Keep+You+%E6%84%BF%E4%B8%BB%E8%B5%90%E7%A6%8F%E7%9C%8B%E9%A1%BE%E4%BD%A0',
+    youtubeUrl2: '',
     sortOrder: 4,
   },
 ];
@@ -658,7 +643,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     summary: '下主日上午 09:30 将举行一年一度感恩节联合崇拜，诗班献唱感恩组曲，会后全堂共享感恩爱筵。',
     time: '11月22日（主日）09:30 – 13:30',
     location: '伯特利堂一楼大堂及餐厅',
-    contact: '办公室 021-6438-2817',
+    contact: '林恩典 牧师 / 迎新招待台',
     isFeatured: true,
     details: [
       '本次感恩节崇拜主题为「以感谢为祭献与神」（诗篇 50:14），林恩典牧师主讲感恩信息，并设会众见证分享时段。',

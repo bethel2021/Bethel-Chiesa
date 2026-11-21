@@ -78,12 +78,12 @@ export function HeroSection() {
             <span className="font-medium text-[#1C1917] tabular-nums">每周二晚 19:30 – 21:00</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-[#78716C]">堂址交通</span>
+            <span className="text-xs text-[#78716C]">教会堂址</span>
             <a
               href="#contact"
               className="font-medium text-[#1E3A5F] hover:underline underline-offset-4 truncate"
             >
-              {churchInfo.shortAddress} · 地铁 1 号线直达
+              {churchInfo.shortAddress}
             </a>
           </div>
         </div>

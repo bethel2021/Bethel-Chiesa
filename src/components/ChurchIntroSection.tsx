@@ -36,19 +36,14 @@ export function ChurchIntroSection() {
               ))}
             </div>
 
-            <figure className="mt-2">
-              <div className="aspect-[4/3] w-full overflow-hidden rounded-lg border border-[#E5DFD3] bg-[#F3EFE6]">
-                <SafeImage
-                  src={churchInfo.fellowshipImage}
-                  alt="主日崇拜后弟兄姊妹在伯特利教会交谊厅围坐读经与茶叙"
-                  fallbackLabel="伯特利教会肢体团契交流"
-                  className="w-full h-full object-cover object-center"
-                />
-              </div>
-              <figcaption className="mt-3 text-xs font-editorial italic text-[#78716C]">
-                图 1 · 每逢主日散会后，不同年龄的肢体与新朋友在一楼交谊厅围桌茶叙、分享生命见证。
-              </figcaption>
-            </figure>
+            <div className="mt-2 aspect-[4/3] w-full overflow-hidden rounded-lg border border-[#E5DFD3] bg-[#F3EFE6]">
+              <SafeImage
+                src={churchInfo.fellowshipImage}
+                alt="主日崇拜后弟兄姊妹在伯特利教会交谊厅围坐读经与茶叙"
+                fallbackLabel="伯特利教会肢体团契交流"
+                className="w-full h-full object-cover object-center"
+              />
+            </div>
           </div>
 
           {/* Right Column: Core Values List separated by hairline dividers */}

@@ -44,7 +44,7 @@ export function AdminInfoEditor() {
     <form onSubmit={handleSubmit} className="space-y-8">
       <AdminPanelHeader
         title="教会简介与基本信息"
-        description="编辑首屏主视觉、教会历史简介、四项核心异象、堂址联系方式及交通指引。"
+        description="编辑首屏主视觉、教会历史简介、四项核心异象、堂址及教牧联系电话。"
         action={
           <button
             type="submit"
@@ -330,10 +330,10 @@ export function AdminInfoEditor() {
         </div>
       </div>
 
-      {/* Block 3: Contact & Transit */}
+      {/* Block 3: Address & Pastoral Phone */}
       <div className="bg-white border border-[#E5DFD3] rounded-lg p-6 space-y-4">
         <h3 className="font-editorial text-lg font-semibold text-[#1C1917] pb-2 border-b border-[#EFEAE0]">
-          3. 联系方式、堂址与交通指引
+          3. 堂址与教牧联系电话
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -361,106 +361,16 @@ export function AdminInfoEditor() {
           </FieldLabel>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FieldLabel label="办公室电话">
-            <input
-              type="text"
-              required
-              maxLength={100}
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-          <FieldLabel label="教牧关怀电话">
-            <input
-              type="text"
-              required
-              maxLength={100}
-              value={form.pastoralPhone}
-              onChange={(e) => setForm({ ...form, pastoralPhone: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-          <FieldLabel label="办公开放时间">
-            <input
-              type="text"
-              required
-              maxLength={200}
-              value={form.officeHours}
-              onChange={(e) => setForm({ ...form, officeHours: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FieldLabel label="联系邮箱">
-            <input
-              type="email"
-              required
-              maxLength={120}
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-          <FieldLabel label="微信服务号">
-            <input
-              type="text"
-              required
-              maxLength={100}
-              value={form.wechatId}
-              onChange={(e) => setForm({ ...form, wechatId: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-        </div>
-
-        <div className="pt-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-[#292524]">公共交通路线指引</span>
-            <button
-              type="button"
-              onClick={() =>
-                form.transitGuide.length < 10 &&
-                setForm({ ...form, transitGuide: [...form.transitGuide, ''] })
-              }
-              className="inline-flex items-center gap-1 text-xs font-medium text-[#1E3A5F] hover:underline cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              添加路线
-            </button>
-          </div>
-          <div className="space-y-2">
-            {form.transitGuide.map((line, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  maxLength={300}
-                  value={line}
-                  onChange={(e) => {
-                    const next = [...form.transitGuide];
-                    next[idx] = e.target.value;
-                    setForm({ ...form, transitGuide: next });
-                  }}
-                  className={inputClass}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = form.transitGuide.filter((_, i) => i !== idx);
-                    setForm({ ...form, transitGuide: next });
-                  }}
-                  aria-label="删除路线"
-                  className="p-2 text-[#78716C] hover:text-[#9A3412] cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <FieldLabel label="联系电话">
+          <input
+            type="text"
+            required
+            maxLength={100}
+            value={form.pastoralPhone}
+            onChange={(e) => setForm({ ...form, pastoralPhone: e.target.value })}
+            className={inputClass}
+          />
+        </FieldLabel>
       </div>
 
       <div className="flex justify-end">

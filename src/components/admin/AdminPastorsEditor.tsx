@@ -33,7 +33,6 @@ const EMPTY_COWORKER: PulpitCoworker = {
   name: '',
   title: '',
   responsibility: '',
-  sermonTopic: '',
   image: '',
   sortOrder: 10,
 };
@@ -117,7 +116,7 @@ export function AdminPastorsEditor() {
     <div className="space-y-10">
       <AdminPanelHeader
         title="牧者及讲台同工管理"
-        description="管理牧师与长老图文介绍卡片，以及讲台轮值同工与近期证道焦点名录。"
+        description="统一管理牧师与长老图文介绍，以及讲台轮值同工名录。"
         action={
           <button
             type="button"
@@ -196,7 +195,7 @@ export function AdminPastorsEditor() {
       <div className="bg-white border border-[#E5DFD3] rounded-lg overflow-hidden">
         <div className="px-6 py-4 bg-[#F3EFE6]/70 border-b border-[#E5DFD3] flex items-center justify-between gap-4">
           <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">
-            讲台轮值同工与圣乐负责（{coworkers.length}）
+            讲台轮值同工（{coworkers.length}）
           </h3>
           <button
             type="button"
@@ -243,7 +242,7 @@ export function AdminPastorsEditor() {
                     <span className="text-xs font-normal text-[#78716C]">· {cw.title}</span>
                   </div>
                   <p className="text-xs text-[#57534E] truncate">
-                    {cw.responsibility} · 焦点：{cw.sermonTopic}
+                    {cw.responsibility}
                   </p>
                 </div>
               </div>
@@ -505,22 +504,6 @@ export function AdminPastorsEditor() {
                   setEditingCoworker({
                     ...editingCoworker,
                     responsibility: e.target.value,
-                  })
-                }
-                className={inputClass}
-              />
-            </FieldLabel>
-
-            <FieldLabel label="近期证道/查经焦点 *">
-              <input
-                type="text"
-                required
-                maxLength={200}
-                value={editingCoworker.sermonTopic}
-                onChange={(e) =>
-                  setEditingCoworker({
-                    ...editingCoworker,
-                    sermonTopic: e.target.value,
                   })
                 }
                 className={inputClass}

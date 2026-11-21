@@ -75,15 +75,13 @@ service cloud.firestore {
       return data.keys().hasAll([
         'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
         'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
-        'phone', 'pastoralPhone', 'email', 'wechatId', 'officeHours',
-        'themeVerse', 'themeVerseRef', 'thisWeekLabel', 'nextWeekLabel',
-        'transitGuide', 'introParagraphs', 'coreValues', 'updatedAt'
+        'pastoralPhone', 'themeVerse', 'themeVerseRef', 'thisWeekLabel',
+        'nextWeekLabel', 'introParagraphs', 'coreValues', 'updatedAt'
       ]) && data.keys().hasOnly([
         'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
         'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
-        'phone', 'pastoralPhone', 'email', 'wechatId', 'officeHours',
-        'themeVerse', 'themeVerseRef', 'thisWeekLabel', 'nextWeekLabel',
-        'transitGuide', 'introParagraphs', 'coreValues', 'updatedAt'
+        'pastoralPhone', 'themeVerse', 'themeVerseRef', 'thisWeekLabel',
+        'nextWeekLabel', 'introParagraphs', 'coreValues', 'updatedAt'
       ])
       && isStringBounds(data.name, 1, 100)
       && isStringBounds(data.englishName, 1, 100)
@@ -95,16 +93,11 @@ service cloud.firestore {
       && isValidImageRef(data.fellowshipImage, 1, 200000)
       && isStringBounds(data.address, 1, 300)
       && isStringBounds(data.shortAddress, 1, 100)
-      && isStringBounds(data.phone, 1, 100)
       && isStringBounds(data.pastoralPhone, 1, 100)
-      && isStringBounds(data.email, 1, 120)
-      && isStringBounds(data.wechatId, 1, 100)
-      && isStringBounds(data.officeHours, 1, 200)
       && isStringBounds(data.themeVerse, 1, 300)
       && isStringBounds(data.themeVerseRef, 1, 100)
       && isStringBounds(data.thisWeekLabel, 1, 60)
       && isStringBounds(data.nextWeekLabel, 1, 60)
-      && isValidStringList(data.transitGuide, 10)
       && isValidStringList(data.introParagraphs, 10)
       && isValidMapList(data.coreValues, 10)
       && data.updatedAt == request.time;
@@ -152,14 +145,13 @@ service cloud.firestore {
 
     function isValidCoworker(data) {
       return data.keys().hasAll([
-        'name', 'title', 'responsibility', 'sermonTopic', 'sortOrder', 'updatedAt'
+        'name', 'title', 'responsibility', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'name', 'title', 'responsibility', 'sermonTopic', 'image', 'sortOrder', 'updatedAt'
+        'name', 'title', 'responsibility', 'image', 'sortOrder', 'updatedAt'
       ])
       && isStringBounds(data.name, 1, 80)
       && isStringBounds(data.title, 1, 120)
       && isStringBounds(data.responsibility, 1, 200)
-      && isStringBounds(data.sermonTopic, 1, 200)
       && (!('image' in data) || isValidImageRef(data.image, 0, 60000))
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
@@ -199,10 +191,11 @@ service cloud.firestore {
       return data.keys().hasAll([
         'title', 'youtubeUrl', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'title', 'youtubeUrl', 'sortOrder', 'updatedAt'
+        'title', 'youtubeUrl', 'youtubeUrl2', 'sortOrder', 'updatedAt'
       ])
       && isStringBounds(data.title, 1, 140)
       && isValidYoutubeUrl(data.youtubeUrl)
+      && (!('youtubeUrl2' in data) || isValidYoutubeUrl(data.youtubeUrl2))
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
     }

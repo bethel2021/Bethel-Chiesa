@@ -55,8 +55,19 @@ npx wrangler pages deploy dist --project-name=bethel-church
 
 1. **`public/_headers`**：
    - 设置 `Cross-Origin-Opener-Policy: same-origin-allow-popups`，确保 Firebase Google 登录弹窗正常回调。
+   - 启用 `Strict-Transport-Security`、`X-Content-Type-Options: nosniff`、`Referrer-Policy` 与最小权限 `Permissions-Policy`。
    - 对 `/assets/*` 开启长期强缓存（`immutable`），对 `/index.html` 关闭强缓存确保发版即时生效。
 2. **`public/_redirects` & `/admin` 路由**：
    - 配置 `/* /index.html 200` SPA 回退规则，直接访问或刷新 `https://你的域名/admin` 可直接进入同工管理后台。
 3. **静态图片资产**：
    - `vite.config.ts` 构建时会自动将 `src/assets` 复制到 `dist/src/assets`，确保教会实景与牧者照片路径直接由 Cloudflare CDN 分发。
+
+---
+
+## 五、发布前安全检查清单
+
+1. **Firebase Authorized domains**：确保已将 `*.pages.dev` 与自定义正式域名添加到 Firebase Authentication 授权域名白名单，并移除不再使用的测试域名。
+2. **Firebase Web API Key 限制**：在 Google Cloud Console → **APIs & Services → Credentials** 中，为前端使用的 Firebase Browser API Key 添加 **HTTP referrers（网站来源）限制**（仅允许你的正式域名、`*.pages.dev` 与本地开发域名）。
+3. **Firestore 安全规则与访客隐私**：所有公开模块仅允许管理员（已验证邮箱）写入；`visitor_requests` 访客留言仅允许公开创建 `pending` 状态，严禁未授权用户读取或修改。
+4. **管理员权限核对**：在正式公布前，登录 `/admin` 检查「来访留言与权限」中的授权同工名录，并点击一次「同步修改内容到云端」以刷新公开快照。
+5. **Cloudflare 域名与 SSL**：在 Cloudflare DNS/SSL 设置中启用 **Full (strict)** SSL 模式与强制 HTTPS 重定向。

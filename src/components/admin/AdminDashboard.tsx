@@ -62,7 +62,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     lastSyncedAt,
     signInWithGoogle,
     signOutUser,
-    seedDefaultContent,
+    syncModifiedContentToCloud,
     publishPublicBundle,
     pastors,
     coworkers,
@@ -77,16 +77,15 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [seedStatus, setSeedStatus] = useState<{
+  const [syncStatus, setSyncStatus] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
   const autoPublishedRef = useRef(false);
 
-  // If an existing cloud database was seeded before single-doc snapshot support,
+  // If an existing cloud database was created before single-doc snapshot support,
   // wait briefly for all admin collection listeners to settle and auto-generate public_bundle once.
   useEffect(() => {
     if (!authReady || !isAdmin || cloudLoading || !hasCloudData || hasPublicBundle) {
@@ -100,48 +99,29 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
       try {
         await publishPublicBundle();
       } catch {
-        // Admin can manually click "生成 / 刷新公开快照" if needed
+        // Admin can manually click "同步修改内容到云端" if needed
       }
     }, 1500);
 
     return () => window.clearTimeout(timer);
   }, [authReady, isAdmin, cloudLoading, hasCloudData, hasPublicBundle, publishPublicBundle]);
 
-  const handleSeed = async () => {
-    setSeeding(true);
-    setSeedStatus(null);
+  const handleSyncToCloud = async () => {
+    setSyncing(true);
+    setSyncStatus(null);
     try {
-      await seedDefaultContent();
-      setSeedStatus({
+      await syncModifiedContentToCloud();
+      setSyncStatus({
         type: 'success',
-        message: '已将所有教会默认图文内容及访客端汇总快照同步至 Firestore 云端数据库，您现在可以自由编辑各模块。',
+        message: '已将修改内容同步到云端并刷新访客端公开快照（public_bundle），访客加载主页仅需 1 次读取。',
       });
     } catch (err) {
-      setSeedStatus({
+      setSyncStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '初始化数据库失败，请稍后重试。',
+        message: err instanceof Error ? err.message : '同步到云端失败，请稍后重试。',
       });
     } finally {
-      setSeeding(false);
-    }
-  };
-
-  const handlePublishBundle = async () => {
-    setPublishing(true);
-    setSeedStatus(null);
-    try {
-      await publishPublicBundle();
-      setSeedStatus({
-        type: 'success',
-        message: '已更新访客端公开汇总快照（public_bundle）并刷新本地缓存，访客加载主页仅需 1 次读取。',
-      });
-    } catch (err) {
-      setSeedStatus({
-        type: 'error',
-        message: err instanceof Error ? err.message : '生成公开快照失败，请稍后重试。',
-      });
-    } finally {
-      setPublishing(false);
+      setSyncing(false);
     }
   };
 
@@ -259,7 +239,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           </div>
 
           <p className="text-xs text-[#57534E] leading-relaxed">
-            请联系主管理员（chinarenzhian@gmail.com）在后台「来访留言与权限」中将上述 UID 添加至授权同工名录，或切换已授权的管理员账号登录。
+            请联系教会主管理员在后台「来访留言与权限」中将上述 UID 添加至授权同工名录，或切换已授权的管理员账号登录。
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -415,44 +395,35 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
             <div className="mb-6 bg-[#F3EFE6] border border-[#DFD8C8] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-[#1C1917]">
-                  尚未检测到云端初始化内容
+                  尚未检测到云端数据
                 </h2>
                 <p className="text-xs text-[#57534E] mt-1">
-                  点击右侧按钮可将当前主页的所有默认数据一次性写入 Firestore 数据库，之后即可跨设备持久化编辑与发布。
+                  点击右侧按钮可将当前主页内容与已修改数据同步写入 Firestore 云端数据库，以便跨设备持久化编辑与发布。
                 </p>
               </div>
               <button
                 type="button"
-                onClick={handleSeed}
-                disabled={seeding}
-                className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
+                onClick={handleSyncToCloud}
+                disabled={syncing}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
               >
-                {seeding ? '正在同步…' : '一键初始化云端数据'}
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? '正在同步…' : '同步修改内容到云端'}
               </button>
             </div>
           )}
 
-          <StatusBanner status={seedStatus} onClear={() => setSeedStatus(null)} />
+          <StatusBanner status={syncStatus} onClear={() => setSyncStatus(null)} />
 
           {activeTab === 'overview' && (
             <div className="space-y-8">
-              <div className="pb-5 border-b border-[#E5DFD3] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-editorial text-2xl font-semibold text-[#1C1917]">
-                    伯特利教会内容管理总览
-                  </h2>
-                  <p className="text-xs text-[#57534E] mt-1">
-                    选择下方任意模块即可立即修改主页展示内容，保存时将自动更新访客端单文档汇总快照。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSeed}
-                  disabled={seeding}
-                  className="px-4 py-2 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] bg-white hover:bg-[#F3EFE6] rounded-md whitespace-nowrap cursor-pointer"
-                >
-                  {seeding ? '正在同步…' : '重置 / 同步默认内容到云端'}
-                </button>
+              <div className="pb-5 border-b border-[#E5DFD3]">
+                <h2 className="font-editorial text-2xl font-semibold text-[#1C1917]">
+                  伯特利教会内容管理总览
+                </h2>
+                <p className="text-xs text-[#57534E] mt-1">
+                  选择下方任意模块即可立即修改主页展示内容，保存时将自动同步到云端并更新访客端单文档汇总快照。
+                </p>
               </div>
 
               <div className="bg-white border border-[#E5DFD3] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -471,12 +442,12 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                 </div>
                 <button
                   type="button"
-                  onClick={handlePublishBundle}
-                  disabled={publishing}
+                  onClick={handleSyncToCloud}
+                  disabled={syncing}
                   className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${publishing ? 'animate-spin' : ''}`} />
-                  {publishing ? '正在发布快照…' : '生成 / 刷新公开快照'}
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? '正在同步…' : '同步修改内容到云端'}
                 </button>
               </div>
 
@@ -486,7 +457,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     tab: 'info' as AdminTab,
                     label: '教会简介与联系',
                     count: hasCloudData ? '云端已就绪' : '使用默认模板',
-                    sub: '主视觉 · 异象 · 交通指引',
+                    sub: '主视觉 · 异象 · 堂址电话',
                   },
                   {
                     tab: 'pastors' as AdminTab,

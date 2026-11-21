@@ -30,8 +30,7 @@ export function Footer({ onOpenAdmin }: FooterProps) {
           <div className="md:col-span-4 space-y-2 text-xs text-[#57534E]">
             <p className="font-medium text-[#1C1917] mb-2">堂址与联系</p>
             <p>{churchInfo.address}</p>
-            <p className="tabular-nums">电话：{churchInfo.phone}</p>
-            <p>邮箱：{churchInfo.email}</p>
+            <p className="tabular-nums">联系电话：{churchInfo.pastoralPhone}</p>
           </div>
         </div>
 

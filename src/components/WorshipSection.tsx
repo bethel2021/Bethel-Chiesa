@@ -1,12 +1,50 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ExternalLink, PlayCircle } from 'lucide-react';
+import { AnimatePresence, motion, useInView, useReducedMotion, type Variants } from 'motion/react';
 import { useChurchData } from '../context/ChurchDataContext';
 
 export function WorshipSection() {
   const { worshipTimes, liturgySteps, worshipSongs } = useChurchData();
   const [liturgyType, setLiturgyType] = useState<'standard' | 'communion'>('standard');
+  const liturgyListRef = useRef<HTMLDivElement>(null);
+  const isLiturgyInView = useInView(liturgyListRef, {
+    once: true,
+    margin: '0px 0px -60px 0px',
+  });
+  const shouldReduceMotion = useReducedMotion();
 
   const steps = liturgySteps.filter((step) => step.liturgyType === liturgyType);
+
+  const listVariants: Variants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        duration: shouldReduceMotion ? 0.01 : 0.25,
+        staggerChildren: shouldReduceMotion ? 0 : 0.055,
+        delayChildren: shouldReduceMotion ? 0 : 0.04,
+      },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: shouldReduceMotion ? 0.01 : 0.16, ease: 'easeOut' },
+    },
+  };
+
+  const stepItemVariants: Variants = {
+    hidden: {
+      opacity: 0,
+      y: shouldReduceMotion ? 0 : 12,
+    },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: shouldReduceMotion ? 0.01 : 0.42,
+        ease: [0.22, 1, 0.36, 1],
+      },
+    },
+  };
 
   return (
     <section id="worship" className="py-20 md:py-24 border-b border-[#E5DFD3]">
@@ -95,31 +133,43 @@ export function WorshipSection() {
               </div>
             </div>
 
-            <div className="divide-y divide-[#EFEAE0]">
-              {steps.map((item) => (
-                <div
-                  key={item.id}
-                  className="py-4 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 items-start"
+            <div ref={liturgyListRef}>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={liturgyType}
+                  variants={listVariants}
+                  initial="hidden"
+                  animate={isLiturgyInView ? 'visible' : 'hidden'}
+                  exit="exit"
+                  className="divide-y divide-[#EFEAE0]"
                 >
-                  <div className="sm:col-span-2 font-mono text-sm font-medium text-[#1E3A5F] tabular-nums pt-0.5">
-                    {item.time}
-                  </div>
-                  <div className="sm:col-span-10">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-1">
-                      <h4 className="font-medium text-base text-[#1C1917]">
-                        {item.step}
-                      </h4>
-                      <span className="text-xs text-[#78716C]">{item.leader}</span>
-                    </div>
-                    <p className="text-xs font-medium text-[#8B5E34] mb-1">
-                      {item.scriptureOrHymn}
-                    </p>
-                    <p className="text-xs text-[#57534E] leading-relaxed">
-                      {item.note}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                  {steps.map((item) => (
+                    <motion.div
+                      key={item.id}
+                      variants={stepItemVariants}
+                      className="py-4 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 items-start"
+                    >
+                      <div className="sm:col-span-2 font-mono text-sm font-medium text-[#1E3A5F] tabular-nums pt-0.5">
+                        {item.time}
+                      </div>
+                      <div className="sm:col-span-10">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-1">
+                          <h4 className="font-medium text-base text-[#1C1917]">
+                            {item.step}
+                          </h4>
+                          <span className="text-xs text-[#78716C]">{item.leader}</span>
+                        </div>
+                        <p className="text-xs font-medium text-[#8B5E34] mb-1">
+                          {item.scriptureOrHymn}
+                        </p>
+                        <p className="text-xs text-[#57534E] leading-relaxed">
+                          {item.note}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
 
@@ -138,38 +188,56 @@ export function WorshipSection() {
             </div>
 
             <div className="divide-y divide-[#DFD8C8]">
-              {worshipSongs.map((song, idx) => (
-                <div
-                  key={song.id}
-                  className="py-5 first:pt-4 last:pb-2 flex flex-col gap-2"
-                >
-                  <div className="flex items-baseline gap-2.5">
-                    <span className="font-mono text-xs text-[#8B5E34] tabular-nums shrink-0">
-                      {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <h4 className="font-editorial text-lg font-semibold text-[#1C1917] leading-snug">
-                      {song.title}
-                    </h4>
-                  </div>
+              {worshipSongs.map((song, idx) => {
+                const links = [song.youtubeUrl, song.youtubeUrl2].filter(
+                  (url): url is string =>
+                    typeof url === 'string' &&
+                    /^https:\/\/([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\/.+$/.test(
+                      url.trim()
+                    )
+                );
+                return (
+                  <div
+                    key={song.id}
+                    className="py-5 first:pt-4 last:pb-2 flex flex-col gap-2"
+                  >
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="font-mono text-xs text-[#8B5E34] tabular-nums shrink-0">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <h4 className="font-editorial text-lg font-semibold text-[#1C1917] leading-snug">
+                        {song.title}
+                      </h4>
+                    </div>
 
-                  <div className="pl-6">
-                    {song.youtubeUrl ? (
-                      <a
-                        href={song.youtubeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A5F] hover:text-[#162C49] hover:underline underline-offset-4 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A5F] rounded-sm"
-                      >
-                        <PlayCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>在 YouTube 观看视频</span>
-                        <ExternalLink className="w-3 h-3 shrink-0 opacity-75" />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-[#78716C]">暂未添加 YouTube 链接</span>
-                    )}
+                    <div className="pl-6">
+                      {links.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                          {links.map((url, linkIdx) => (
+                            <a
+                              key={`${song.id}-yt-${linkIdx}`}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1E3A5F] hover:text-[#162C49] hover:underline underline-offset-4 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A5F] rounded-sm"
+                            >
+                              <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                {links.length > 1
+                                  ? `在 YouTube 观看视频 ${linkIdx + 1}`
+                                  : '在 YouTube 观看视频'}
+                              </span>
+                              <ExternalLink className="w-3 h-3 shrink-0 opacity-75" />
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#78716C]">暂未添加 YouTube 链接</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

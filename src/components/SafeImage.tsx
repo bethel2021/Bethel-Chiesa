@@ -8,6 +8,15 @@ interface SafeImageProps {
   fallbackLabel?: string;
 }
 
+function isSafeImageSrc(src: string): boolean {
+  const trimmed = String(src ?? '').trim();
+  if (!trimmed) return false;
+  return (
+    /^(https?:\/\/|\/).+$/.test(trimmed) ||
+    /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed)
+  );
+}
+
 export function SafeImage({ src, alt, className = '', fallbackLabel }: SafeImageProps) {
   const [hasError, setHasError] = useState(false);
 
@@ -15,7 +24,9 @@ export function SafeImage({ src, alt, className = '', fallbackLabel }: SafeImage
     setHasError(false);
   }, [src]);
 
-  if (hasError) {
+  const safeSrc = isSafeImageSrc(src) ? src.trim() : '';
+
+  if (hasError || !safeSrc) {
     return (
       <div
         role="img"
@@ -32,7 +43,7 @@ export function SafeImage({ src, alt, className = '', fallbackLabel }: SafeImage
 
   return (
     <img
-      src={src}
+      src={safeSrc}
       alt={alt}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}

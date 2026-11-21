@@ -84,7 +84,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       <div className="space-y-8">
         <AdminPanelHeader
           title="主日崇拜歌曲管理"
-          description="管理本周主日敬拜诗歌清单，仅需维护诗歌名字与对应的 YouTube 视频链接。"
+          description="管理本周主日敬拜诗歌清单，每首歌曲可维护诗歌名字及最多两条 YouTube 视频链接。"
           action={
             <button
               type="button"
@@ -93,6 +93,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                   id: '',
                   title: '',
                   youtubeUrl: '',
+                  youtubeUrl2: '',
                   sortOrder: worshipSongs.length + 1,
                 })
               }
@@ -107,57 +108,73 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
         <StatusBanner status={status} onClear={() => setStatus(null)} />
 
         <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
-          {worshipSongs.map((song) => (
-            <div
-              key={song.id}
-              className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-            >
-              <div className="space-y-1 min-w-0">
-                <div className="flex items-baseline gap-2.5">
-                  <span className="font-mono text-xs text-[#78716C] tabular-nums shrink-0">
-                    #{song.sortOrder}
-                  </span>
-                  <h3 className="font-editorial text-lg font-semibold text-[#1C1917] truncate">
-                    {song.title}
-                  </h3>
+          {worshipSongs.map((song) => {
+            const links = [song.youtubeUrl, song.youtubeUrl2].filter(
+              (url): url is string => Boolean(url && url.trim())
+            );
+            return (
+              <div
+                key={song.id}
+                className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="font-mono text-xs text-[#78716C] tabular-nums shrink-0">
+                      #{song.sortOrder}
+                    </span>
+                    <h3 className="font-editorial text-lg font-semibold text-[#1C1917] truncate">
+                      {song.title}
+                    </h3>
+                  </div>
+                  {links.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {links.map((url, idx) => (
+                        <a
+                          key={`${song.id}-link-${idx}`}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs text-[#1E3A5F] hover:underline truncate"
+                        >
+                          {links.length > 1 ? `链接 ${idx + 1}：` : ''}
+                          {url}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#78716C]">暂未设置 YouTube 视频链接</p>
+                  )}
                 </div>
-                {song.youtubeUrl ? (
-                  <a
-                    href={song.youtubeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-xs text-[#1E3A5F] hover:underline truncate"
-                  >
-                    {song.youtubeUrl}
-                  </a>
-                ) : (
-                  <p className="text-xs text-[#78716C]">暂未设置 YouTube 视频链接</p>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEditingSong(song)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  编辑
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await deleteWorshipSong(song.id);
-                    setStatus({ type: 'success', message: `已删除「${song.title}」。` });
-                  }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  删除
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingSong({
+                        ...song,
+                        youtubeUrl2: song.youtubeUrl2 ?? '',
+                      })
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await deleteWorshipSong(song.id);
+                      setStatus({ type: 'success', message: `已删除「${song.title}」。` });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    删除
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {editingSong && (
@@ -195,13 +212,29 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 />
               </FieldLabel>
 
-              <FieldLabel label="YouTube 视频链接" hint="支持 youtube.com 或 youtu.be 链接">
+              <FieldLabel label="YouTube 视频链接 1" hint="支持 youtube.com 或 youtu.be 链接">
                 <input
                   type="text"
                   maxLength={500}
                   value={editingSong.youtubeUrl}
                   onChange={(e) =>
                     setEditingSong({ ...editingSong, youtubeUrl: e.target.value })
+                  }
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className={inputClass}
+                />
+              </FieldLabel>
+
+              <FieldLabel
+                label="YouTube 视频链接 2（可选）"
+                hint="可用于添加第二条伴奏、合唱示范或不同版本链接"
+              >
+                <input
+                  type="text"
+                  maxLength={500}
+                  value={editingSong.youtubeUrl2 ?? ''}
+                  onChange={(e) =>
+                    setEditingSong({ ...editingSong, youtubeUrl2: e.target.value })
                   }
                   placeholder="https://www.youtube.com/watch?v=..."
                   className={inputClass}

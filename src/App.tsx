@@ -31,7 +31,9 @@ function BethelChurchApp() {
       setView(resolveInitialView());
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const openAdmin = () => {

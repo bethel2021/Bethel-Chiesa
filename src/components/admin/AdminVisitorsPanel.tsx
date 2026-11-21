@@ -151,11 +151,19 @@ export function AdminVisitorsPanel() {
                       value={req.status}
                       onChange={async (e) => {
                         const nextStatus = e.target.value as VisitorRequestItem['status'];
-                        await updateVisitorRequestStatus(req.id, nextStatus, noteVal);
-                        setStatusMsg({
-                          type: 'success',
-                          message: `已更新「${req.name}」跟进状态为${STATUS_LABELS[nextStatus]}。`,
-                        });
+                        setStatusMsg(null);
+                        try {
+                          await updateVisitorRequestStatus(req.id, nextStatus, noteVal);
+                          setStatusMsg({
+                            type: 'success',
+                            message: `已更新「${req.name}」跟进状态为${STATUS_LABELS[nextStatus]}。`,
+                          });
+                        } catch (err) {
+                          setStatusMsg({
+                            type: 'error',
+                            message: err instanceof Error ? err.message : '更新状态失败，请重试。',
+                          });
+                        }
                       }}
                       className="px-3 py-2 text-xs bg-white border border-[#D6CFC2] rounded-md text-[#1C1917]"
                     >
@@ -167,8 +175,16 @@ export function AdminVisitorsPanel() {
                     <button
                       type="button"
                       onClick={async () => {
-                        await updateVisitorRequestStatus(req.id, req.status, noteVal);
-                        setStatusMsg({ type: 'success', message: '跟进备注已保存。' });
+                        setStatusMsg(null);
+                        try {
+                          await updateVisitorRequestStatus(req.id, req.status, noteVal);
+                          setStatusMsg({ type: 'success', message: '跟进备注已保存。' });
+                        } catch (err) {
+                          setStatusMsg({
+                            type: 'error',
+                            message: err instanceof Error ? err.message : '保存备注失败，请重试。',
+                          });
+                        }
                       }}
                       className="px-3 py-2 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded-md cursor-pointer"
                     >
@@ -178,8 +194,16 @@ export function AdminVisitorsPanel() {
                     <button
                       type="button"
                       onClick={async () => {
-                        await deleteVisitorRequest(req.id);
-                        setStatusMsg({ type: 'success', message: '已删除该条来访记录。' });
+                        setStatusMsg(null);
+                        try {
+                          await deleteVisitorRequest(req.id);
+                          setStatusMsg({ type: 'success', message: '已删除该条来访记录。' });
+                        } catch (err) {
+                          setStatusMsg({
+                            type: 'error',
+                            message: err instanceof Error ? err.message : '删除记录失败，请重试。',
+                          });
+                        }
                       }}
                       aria-label="删除记录"
                       className="p-2 text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded-md cursor-pointer"

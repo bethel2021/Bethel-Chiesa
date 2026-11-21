@@ -15,16 +15,11 @@
         "fellowshipImage": { "type": "string", "minLength": 1, "maxLength": 200000 },
         "address": { "type": "string", "minLength": 1, "maxLength": 300 },
         "shortAddress": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "phone": { "type": "string", "minLength": 1, "maxLength": 100 },
         "pastoralPhone": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "email": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "wechatId": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "officeHours": { "type": "string", "minLength": 1, "maxLength": 200 },
         "themeVerse": { "type": "string", "minLength": 1, "maxLength": 300 },
         "themeVerseRef": { "type": "string", "minLength": 1, "maxLength": 100 },
         "thisWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
         "nextWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
-        "transitGuide": { "type": "array", "description": "Up to 10 transit instructions" },
         "introParagraphs": { "type": "array", "description": "Up to 10 intro paragraphs" },
         "coreValues": { "type": "array", "description": "Up to 10 core value items" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -40,16 +35,11 @@
         "fellowshipImage",
         "address",
         "shortAddress",
-        "phone",
         "pastoralPhone",
-        "email",
-        "wechatId",
-        "officeHours",
         "themeVerse",
         "themeVerseRef",
         "thisWeekLabel",
         "nextWeekLabel",
-        "transitGuide",
         "introParagraphs",
         "coreValues",
         "updatedAt"
@@ -80,12 +70,11 @@
         "name": { "type": "string", "minLength": 1, "maxLength": 80 },
         "title": { "type": "string", "minLength": 1, "maxLength": 120 },
         "responsibility": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "sermonTopic": { "type": "string", "minLength": 1, "maxLength": 200 },
         "image": { "type": "string", "maxLength": 60000 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "title", "responsibility", "sermonTopic", "sortOrder", "updatedAt"]
+      "required": ["name", "title", "responsibility", "sortOrder", "updatedAt"]
     },
     "WorshipTimeDoc": {
       "title": "WorshipTimeDoc",
@@ -119,11 +108,12 @@
     },
     "WorshipSongDoc": {
       "title": "WorshipSongDoc",
-      "description": "Sunday worship song title and YouTube video link",
+      "description": "Sunday worship song title and YouTube video links",
       "type": "object",
       "properties": {
         "title": { "type": "string", "minLength": 1, "maxLength": 140 },
         "youtubeUrl": { "type": "string", "maxLength": 500 },
+        "youtubeUrl2": { "type": "string", "maxLength": 500 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
