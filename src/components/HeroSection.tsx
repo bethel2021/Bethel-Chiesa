@@ -4,7 +4,7 @@ import { handleAnchorClick } from '../utils/scroll';
 import { SafeImage } from './SafeImage';
 
 export function HeroSection() {
-  const { churchInfo } = useChurchData();
+  const { churchInfo, cloudLoading } = useChurchData();
   const normalizedChurchName = churchInfo.name.trim();
   const splitNameMatch = normalizedChurchName.match(/^(基督教意大利)\s*(伯特利华人教会.*)$/);
 
@@ -16,6 +16,8 @@ export function HeroSection() {
           src={churchInfo.heroImage}
           alt={`${normalizedChurchName}主堂清晨阳光`}
           fallbackLabel={`${normalizedChurchName}主堂建筑内景`}
+          priority
+          defer={cloudLoading}
           className="w-full h-full object-cover object-center"
         />
 

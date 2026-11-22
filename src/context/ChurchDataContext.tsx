@@ -65,6 +65,7 @@ import {
   DATA_IMAGE_URI_REGEX,
   isMediaUri,
   persistLosslessImageIfNeeded,
+  preloadImageRef,
 } from '../lib/mediaStorage';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
@@ -293,6 +294,13 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const [churchInfo, setChurchInfo] = useState<ChurchInfo>(
     initialCache?.bundle.churchInfo ? { ...CHURCH_INFO, ...initialCache.bundle.churchInfo } : CHURCH_INFO
   );
+  const initialCachedHeroRef = useRef(initialCache?.bundle.churchInfo?.heroImage);
+
+  useEffect(() => {
+    if (initialCachedHeroRef.current) {
+      preloadImageRef(initialCachedHeroRef.current, 'high');
+    }
+  }, []);
   const [pastors, setPastors] = useState<PastorProfile[]>(
     initialCache?.bundle.pastors?.length ? initialCache.bundle.pastors : PASTORS_TEAM
   );
@@ -371,7 +379,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   ]);
 
   const applyBundleToState = useCallback((bundle: PublicBundleData) => {
-    if (bundle.churchInfo) setChurchInfo({ ...CHURCH_INFO, ...bundle.churchInfo });
+    if (bundle.churchInfo) {
+      const merged = { ...CHURCH_INFO, ...bundle.churchInfo };
+      preloadImageRef(merged.heroImage, 'high');
+      setChurchInfo(merged);
+    }
     if (bundle.pastors?.length) setPastors(bundle.pastors);
     if (bundle.coworkers?.length) setCoworkers(normalizeCoworkers(bundle.coworkers));
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);

@@ -2,7 +2,7 @@ import { useChurchData } from '../context/ChurchDataContext';
 import { SafeImage } from './SafeImage';
 
 export function ChurchIntroSection() {
-  const { churchInfo } = useChurchData();
+  const { churchInfo, cloudLoading } = useChurchData();
 
   return (
     <section id="intro" className="py-12 md:py-14 border-b border-[#E5DFD3]">
@@ -41,6 +41,7 @@ export function ChurchIntroSection() {
                 src={churchInfo.fellowshipImage}
                 alt="主日崇拜后弟兄姊妹在伯特利教会交谊厅围坐读经与茶叙"
                 fallbackLabel="伯特利教会肢体团契交流"
+                defer={cloudLoading}
                 className="w-full h-full object-cover object-center"
               />
             </div>

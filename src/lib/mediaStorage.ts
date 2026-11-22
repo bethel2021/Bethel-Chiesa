@@ -11,6 +11,7 @@ const CACHE_NAME = 'bethel-church-media-v1';
 
 const resolvedObjectUrls = new Map<string, string>();
 const inFlightResolutions = new Map<string, Promise<string>>();
+const preloadedExternalUrls = new Set<string>();
 
 export function isMediaUri(src: string): boolean {
   return MEDIA_URI_REGEX.test(src.trim());
@@ -20,7 +21,17 @@ export function getCachedMediaObjectUrl(mediaUri: string): string | null {
   return resolvedObjectUrls.get(mediaUri.trim()) ?? null;
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
+async function dataUrlToBlobFast(dataUrl: string): Promise<Blob> {
+  // Prefer browser's native off-thread data-URI decoder to avoid main-thread UI stalls on large photos
+  try {
+    const response = await fetch(dataUrl);
+    if (response.ok) {
+      return await response.blob();
+    }
+  } catch {
+    // Fallback to manual decode below
+  }
+
   const commaIdx = dataUrl.indexOf(',');
   if (commaIdx === -1) {
     throw new Error('无效的图片编码格式。');
@@ -127,7 +138,7 @@ export async function resolveMediaUri(mediaUri: string): Promise<string> {
       throw new Error('云端原图编码校验失败。');
     }
 
-    const blob = dataUrlToBlob(fullDataUrl);
+    const blob = await dataUrlToBlobFast(fullDataUrl);
     return putBlobInBrowserCache(normalized, blob);
   })();
 
@@ -136,6 +147,35 @@ export async function resolveMediaUri(mediaUri: string): Promise<string> {
     return await task;
   } finally {
     inFlightResolutions.delete(normalized);
+  }
+}
+
+export function preloadImageRef(src: string | undefined, priority: 'high' | 'low' = 'low'): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = String(src ?? '').trim();
+  if (!trimmed) return;
+
+  if (isMediaUri(trimmed)) {
+    void resolveMediaUri(trimmed).catch(() => {
+      // Handled gracefully when SafeImage renders
+    });
+    return;
+  }
+
+  if (/^(https?:\/\/|\/).+$/.test(trimmed) && !preloadedExternalUrls.has(trimmed)) {
+    preloadedExternalUrls.add(trimmed);
+    if (priority === 'high' && typeof document !== 'undefined' && document.head) {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.href = trimmed;
+      link.setAttribute('fetchpriority', 'high');
+      document.head.appendChild(link);
+    } else {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = trimmed;
+    }
   }
 }
 
@@ -185,7 +225,7 @@ export async function persistLosslessImageIfNeeded(
 
   const mediaUri = `media://${mediaId}/${chunks.length}`;
   try {
-    const blob = dataUrlToBlob(trimmed);
+    const blob = await dataUrlToBlobFast(trimmed);
     await putBlobInBrowserCache(mediaUri, blob);
   } catch {
     // Non-fatal: cache warm-up failure will lazily fetch on next render

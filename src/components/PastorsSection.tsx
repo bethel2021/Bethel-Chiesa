@@ -2,7 +2,7 @@ import { useChurchData } from '../context/ChurchDataContext';
 import { SafeImage } from './SafeImage';
 
 export function PastorsSection() {
-  const { pastors, coworkers } = useChurchData();
+  const { pastors, coworkers, cloudLoading } = useChurchData();
 
   const seniorPastor =
     pastors.find((p) => p.role.includes('主任牧师')) ?? pastors[0] ?? null;
@@ -40,6 +40,7 @@ export function PastorsSection() {
                       src={seniorPastor.image}
                       alt={`${seniorPastor.name}肖像`}
                       fallbackLabel={seniorPastor.name}
+                      defer={cloudLoading}
                       className="w-full h-full object-cover object-top"
                     />
                   </div>
@@ -90,6 +91,7 @@ export function PastorsSection() {
                           src={pastor.image}
                           alt={`${pastor.name}肖像`}
                           fallbackLabel={pastor.name}
+                          defer={cloudLoading}
                           className="w-full h-full object-cover object-top"
                         />
                       </div>
@@ -149,6 +151,7 @@ export function PastorsSection() {
                           src={worker.image}
                           alt={`${worker.name}头像`}
                           fallbackLabel={worker.name.slice(0, 1)}
+                          defer={cloudLoading}
                           className="w-full h-full object-cover object-top"
                         />
                       </div>
