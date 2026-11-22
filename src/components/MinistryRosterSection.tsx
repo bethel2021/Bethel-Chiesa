@@ -1,31 +1,36 @@
 import { useState } from 'react';
 import { useChurchData } from '../context/ChurchDataContext';
+import {
+  MINISTRY_CATEGORY_LABELS,
+  MINISTRY_CATEGORY_OPTIONS,
+  MINISTRY_CATEGORY_ORDER,
+  type MinistryRosterCategory,
+} from '../data/churchData';
 
-type RosterFilter = 'all' | 'worship' | 'sunday-school' | 'fellowship';
+type RosterFilter = 'all' | MinistryRosterCategory;
 type WeekMode = 'thisWeek' | 'nextWeek';
 
 const FILTER_TABS: { id: RosterFilter; label: string }[] = [
   { id: 'all', label: '全部事工岗位' },
-  { id: 'worship', label: '敬拜与后勤服事' },
-  { id: 'sunday-school', label: '儿童主日学' },
-  { id: 'fellowship', label: '主日及周末团契' },
+  ...MINISTRY_CATEGORY_OPTIONS,
 ];
-
-const CATEGORY_LABELS: Record<'worship' | 'sunday-school' | 'fellowship', string> = {
-  worship: '敬拜与后勤',
-  'sunday-school': '主日学',
-  fellowship: '团契聚会',
-};
 
 export function MinistryRosterSection() {
   const { churchInfo, ministryRoster, weekdayMinistries } = useChurchData();
   const [filter, setFilter] = useState<RosterFilter>('all');
   const [weekMode, setWeekMode] = useState<WeekMode>('thisWeek');
 
+  const sortedRoster = [...ministryRoster].sort((a, b) => {
+    const catDiff =
+      (MINISTRY_CATEGORY_ORDER[a.category] ?? 99) -
+      (MINISTRY_CATEGORY_ORDER[b.category] ?? 99);
+    return catDiff !== 0 ? catDiff : a.sortOrder - b.sortOrder;
+  });
+
   const filteredRoster =
     filter === 'all'
-      ? ministryRoster
-      : ministryRoster.filter((item) => item.category === filter);
+      ? sortedRoster
+      : sortedRoster.filter((item) => item.category === filter);
 
   return (
     <section id="ministry" className="py-12 md:py-14 bg-[#F3EFE6]/55 border-b border-[#E5DFD3]">
@@ -93,43 +98,41 @@ export function MinistryRosterSection() {
         {/* Clean Institutional Roster Table */}
         <div className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg overflow-hidden mb-10">
           <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-[#EFEAE0]/70 border-b border-[#E5DFD3] text-xs font-medium text-[#57534E]">
-            <div className="col-span-2">事工分类</div>
-            <div className="col-span-3">岗位 / 课程名称</div>
-            <div className="col-span-2">时间与地点</div>
-            <div className="col-span-3">
+            <div className="col-span-3">事工分类</div>
+            <div className="col-span-4">岗位 / 课程名称</div>
+            <div className="col-span-5">
               {weekMode === 'thisWeek'
                 ? `本周值班同工（${churchInfo.thisWeekLabel}）`
                 : `下周值班同工（${churchInfo.nextWeekLabel}）`}
             </div>
-            <div className="col-span-2">备忘说明</div>
           </div>
 
           <div className="divide-y divide-[#EFEAE0]">
-            {filteredRoster.map((item) => {
-              const assignee = weekMode === 'thisWeek' ? item.thisWeek : item.nextWeek;
-              return (
-                <div
-                  key={item.id}
-                  className="px-6 py-4 grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 items-baseline text-sm hover:bg-[#F3EFE6]/45 transition-colors"
-                >
-                  <div className="md:col-span-2 text-xs text-[#78716C]">
-                    {CATEGORY_LABELS[item.category]}
+            {filteredRoster.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-[#78716C]">
+                当前分类暂无排班记录。
+              </div>
+            ) : (
+              filteredRoster.map((item) => {
+                const assignee = weekMode === 'thisWeek' ? item.thisWeek : item.nextWeek;
+                return (
+                  <div
+                    key={item.id}
+                    className="px-6 py-4 grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 items-baseline text-sm hover:bg-[#F3EFE6]/45 transition-colors"
+                  >
+                    <div className="md:col-span-3 text-xs text-[#78716C]">
+                      {MINISTRY_CATEGORY_LABELS[item.category] ?? '讲台与敬拜'}
+                    </div>
+                    <div className="md:col-span-4 font-medium text-[#1C1917]">
+                      {item.role}
+                    </div>
+                    <div className="md:col-span-5 font-medium text-[#1E3A5F]">
+                      {assignee}
+                    </div>
                   </div>
-                  <div className="md:col-span-3 font-medium text-[#1C1917]">
-                    {item.role}
-                  </div>
-                  <div className="md:col-span-2 text-xs text-[#57534E] tabular-nums">
-                    {item.timeOrPlace}
-                  </div>
-                  <div className="md:col-span-3 font-medium text-[#1E3A5F]">
-                    {assignee}
-                  </div>
-                  <div className="md:col-span-2 text-xs text-[#78716C] leading-relaxed">
-                    {item.note}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 

@@ -141,10 +141,10 @@ export function PastorsSection() {
                 {coworkers.map((worker) => (
                   <div
                     key={worker.id}
-                    className="py-4 last:pb-0 flex items-start gap-3.5"
+                    className="py-4 last:pb-0 flex items-center gap-3.5"
                   >
                     {worker.image ? (
-                      <div className="w-10 h-10 rounded-full overflow-hidden border border-[#E5DFD3] bg-[#EFEAE0] shrink-0 mt-0.5">
+                      <div className="w-10 h-10 rounded-full overflow-hidden border border-[#E5DFD3] bg-[#EFEAE0] shrink-0">
                         <SafeImage
                           src={worker.image}
                           alt={`${worker.name}头像`}
@@ -155,7 +155,7 @@ export function PastorsSection() {
                     ) : (
                       <div
                         aria-hidden="true"
-                        className="w-10 h-10 rounded-full border border-[#DFD8C8] bg-[#FAF8F4] flex items-center justify-center font-editorial text-sm font-semibold text-[#1E3A5F] shrink-0 mt-0.5"
+                        className="w-10 h-10 rounded-full border border-[#DFD8C8] bg-[#FAF8F4] flex items-center justify-center font-editorial text-sm font-semibold text-[#1E3A5F] shrink-0"
                       >
                         {worker.name.slice(0, 1)}
                       </div>
@@ -166,9 +166,6 @@ export function PastorsSection() {
                       </p>
                       <p className="text-xs text-[#78716C] leading-snug">
                         {worker.title}
-                      </p>
-                      <p className="text-xs text-[#292524] leading-relaxed pt-0.5">
-                        {worker.responsibility}
                       </p>
                     </div>
                   </div>

@@ -34,6 +34,7 @@ import {
   CHURCH_INFO,
   LITURGY_COMMUNION,
   LITURGY_STANDARD,
+  normalizeMinistryCategory,
   PASTORS_TEAM,
   PULPIT_COWORKERS,
   SUNDAY_MINISTRY_ROSTER,
@@ -207,9 +208,19 @@ function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
     id: String(cw.id || `cw-${idx + 1}`),
     name: clampStr(cw.name || '', 80),
     title: clampStr(cw.title || '', 120),
-    responsibility: clampStr(cw.responsibility || '', 200),
     ...(typeof cw.image === 'string' && cw.image.trim() ? { image: cw.image.trim() } : {}),
     sortOrder: Number(cw.sortOrder) || idx + 1,
+  }));
+}
+
+function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
+  return list.map((item, idx) => ({
+    id: String(item.id || `roster-${idx + 1}`),
+    category: normalizeMinistryCategory(item.category),
+    role: clampStr(item.role || '', 140),
+    thisWeek: clampStr(item.thisWeek || '', 200),
+    nextWeek: clampStr(item.nextWeek || '', 200),
+    sortOrder: Number(item.sortOrder) || idx + 1,
   }));
 }
 
@@ -299,7 +310,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   );
   const [ministryRoster, setMinistryRoster] = useState<MinistryRosterItem[]>(
     initialCache?.bundle.ministryRoster?.length
-      ? initialCache.bundle.ministryRoster
+      ? normalizeMinistryRoster(initialCache.bundle.ministryRoster)
       : SUNDAY_MINISTRY_ROSTER
   );
   const [weekdayMinistries, setWeekdayMinistries] = useState<WeekdayMinistry[]>(
@@ -360,7 +371,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
     if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
     if (bundle.worshipSongs?.length) setWorshipSongs(normalizeWorshipSongs(bundle.worshipSongs));
-    if (bundle.ministryRoster?.length) setMinistryRoster(bundle.ministryRoster);
+    if (bundle.ministryRoster?.length) {
+      setMinistryRoster(normalizeMinistryRoster(bundle.ministryRoster));
+    }
     if (bundle.weekdayMinistries?.length) setWeekdayMinistries(bundle.weekdayMinistries);
     if (bundle.announcements?.length) setAnnouncements(bundle.announcements);
   }, []);
@@ -411,7 +424,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         worshipTimes: snapshot.worshipTimes.slice(0, 20),
         liturgySteps: snapshot.liturgySteps.slice(0, 40),
         worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
-        ministryRoster: snapshot.ministryRoster.slice(0, 80),
+        ministryRoster: normalizeMinistryRoster(snapshot.ministryRoster).slice(0, 80),
         weekdayMinistries: snapshot.weekdayMinistries.slice(0, 30),
         announcements: snapshot.announcements.slice(0, 50),
         version,
@@ -522,7 +535,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             worshipTimes: worshipTimesList,
             liturgySteps: liturgyList,
             worshipSongs: songsList,
-            ministryRoster: rosterList,
+            ministryRoster: normalizeMinistryRoster(rosterList),
             weekdayMinistries: weekdayList,
             announcements: annList,
             version: Date.now(),
@@ -708,7 +721,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     );
     subscribeSorted<MinistryRosterItem>(
       'ministry_roster',
-      setMinistryRoster,
+      (items) => setMinistryRoster(normalizeMinistryRoster(items)),
       SUNDAY_MINISTRY_ROSTER
     );
     subscribeSorted<WeekdayMinistry>(
@@ -807,11 +820,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        for (const cw of current.coworkers) {
+        for (const cw of normalizeCoworkers(current.coworkers)) {
           batch.set(doc(db, 'coworkers', cw.id), {
             name: cw.name,
             title: cw.title,
-            responsibility: cw.responsibility,
             ...(cw.image ? { image: cw.image } : {}),
             sortOrder: cw.sortOrder,
             updatedAt: serverTimestamp(),
@@ -852,14 +864,12 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        for (const r of current.ministryRoster) {
+        for (const r of normalizeMinistryRoster(current.ministryRoster)) {
           batch.set(doc(db, 'ministry_roster', r.id), {
             category: r.category,
             role: r.role,
-            timeOrPlace: r.timeOrPlace,
             thisWeek: r.thisWeek,
             nextWeek: r.nextWeek,
-            note: r.note,
             sortOrder: r.sortOrder,
             updatedAt: serverTimestamp(),
           });
@@ -990,7 +1000,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         id,
         name: clampStr(item.name, 80),
         title: clampStr(item.title, 120),
-        responsibility: clampStr(item.responsibility, 200),
         image: cleanedImage,
         sortOrder: Number(item.sortOrder) || 0,
       };
@@ -1165,12 +1174,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const path = `ministry_roster/${id}`;
       const cleaned: MinistryRosterItem = {
         id,
-        category: item.category,
+        category: normalizeMinistryCategory(item.category),
         role: clampStr(item.role, 140),
-        timeOrPlace: clampStr(item.timeOrPlace, 140),
         thisWeek: clampStr(item.thisWeek, 200),
         nextWeek: clampStr(item.nextWeek, 200),
-        note: clampStr(item.note, 300),
         sortOrder: Number(item.sortOrder) || 0,
       };
       try {

@@ -144,13 +144,12 @@ service cloud.firestore {
 
     function isValidCoworker(data) {
       return data.keys().hasAll([
-        'name', 'title', 'responsibility', 'sortOrder', 'updatedAt'
+        'name', 'title', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'name', 'title', 'responsibility', 'image', 'sortOrder', 'updatedAt'
+        'name', 'title', 'image', 'sortOrder', 'updatedAt'
       ])
       && isStringBounds(data.name, 1, 80)
       && isStringBounds(data.title, 1, 120)
-      && isStringBounds(data.responsibility, 1, 200)
       && (!('image' in data) || isValidImageRef(data.image, 0, 60000))
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
@@ -201,16 +200,21 @@ service cloud.firestore {
 
     function isValidMinistryRoster(data) {
       return data.keys().hasAll([
-        'category', 'role', 'timeOrPlace', 'thisWeek', 'nextWeek', 'note', 'sortOrder', 'updatedAt'
+        'category', 'role', 'thisWeek', 'nextWeek', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'category', 'role', 'timeOrPlace', 'thisWeek', 'nextWeek', 'note', 'sortOrder', 'updatedAt'
+        'category', 'role', 'thisWeek', 'nextWeek', 'sortOrder', 'updatedAt'
       ])
-      && data.category in ['worship', 'sunday-school', 'fellowship']
+      && data.category in [
+        'worship',
+        'sunday-school-fellowship',
+        'prayer-bible',
+        'media-tech',
+        'hospitality-logistics',
+        'outreach'
+      ]
       && isStringBounds(data.role, 1, 140)
-      && isStringBounds(data.timeOrPlace, 1, 140)
       && isStringBounds(data.thisWeek, 1, 200)
       && isStringBounds(data.nextWeek, 1, 200)
-      && isStringBounds(data.note, 1, 300)
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
     }

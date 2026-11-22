@@ -32,7 +32,6 @@ const EMPTY_COWORKER: PulpitCoworker = {
   id: '',
   name: '',
   title: '',
-  responsibility: '',
   image: '',
   sortOrder: 10,
 };
@@ -241,9 +240,6 @@ export function AdminPastorsEditor() {
                     <span>{cw.name}</span>
                     <span className="text-xs font-normal text-[#78716C]">· {cw.title}</span>
                   </div>
-                  <p className="text-xs text-[#57534E] truncate">
-                    {cw.responsibility}
-                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -489,22 +485,6 @@ export function AdminPastorsEditor() {
                 value={editingCoworker.title}
                 onChange={(e) =>
                   setEditingCoworker({ ...editingCoworker, title: e.target.value })
-                }
-                className={inputClass}
-              />
-            </FieldLabel>
-
-            <FieldLabel label="主要轮值职责 *">
-              <input
-                type="text"
-                required
-                maxLength={200}
-                value={editingCoworker.responsibility}
-                onChange={(e) =>
-                  setEditingCoworker({
-                    ...editingCoworker,
-                    responsibility: e.target.value,
-                  })
                 }
                 className={inputClass}
               />

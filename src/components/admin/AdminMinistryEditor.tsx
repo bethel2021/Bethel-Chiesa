@@ -1,7 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
-import type { MinistryRosterItem, WeekdayMinistry } from '../../data/churchData';
+import {
+  MINISTRY_CATEGORY_LABELS,
+  MINISTRY_CATEGORY_OPTIONS,
+  MINISTRY_CATEGORY_ORDER,
+  type MinistryRosterCategory,
+  type MinistryRosterItem,
+  type WeekdayMinistry,
+} from '../../data/churchData';
 import {
   AdminPanelHeader,
   FieldLabel,
@@ -9,12 +16,6 @@ import {
   StatusBanner,
   textareaClass,
 } from './AdminSharedUI';
-
-const CATEGORY_LABELS: Record<MinistryRosterItem['category'], string> = {
-  worship: '敬拜与后勤',
-  'sunday-school': '主日学',
-  fellowship: '团契聚会',
-};
 
 export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
   const {
@@ -36,7 +37,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
   const [thisWeekLabel, setThisWeekLabel] = useState(churchInfo.thisWeekLabel);
   const [nextWeekLabel, setNextWeekLabel] = useState(churchInfo.nextWeekLabel);
 
-  const [filterCat, setFilterCat] = useState<'all' | MinistryRosterItem['category']>('all');
+  const [filterCat, setFilterCat] = useState<'all' | MinistryRosterCategory>('all');
   const [editingRoster, setEditingRoster] = useState<MinistryRosterItem | null>(null);
   const [editingWeekday, setEditingWeekday] = useState<WeekdayMinistry | null>(null);
 
@@ -295,16 +296,23 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     );
   }
 
+  const sortedRoster = [...ministryRoster].sort((a, b) => {
+    const catDiff =
+      (MINISTRY_CATEGORY_ORDER[a.category] ?? 99) -
+      (MINISTRY_CATEGORY_ORDER[b.category] ?? 99);
+    return catDiff !== 0 ? catDiff : a.sortOrder - b.sortOrder;
+  });
+
   const visibleRoster =
     filterCat === 'all'
-      ? ministryRoster
-      : ministryRoster.filter((item) => item.category === filterCat);
+      ? sortedRoster
+      : sortedRoster.filter((item) => item.category === filterCat);
 
   return (
     <div className="space-y-8">
       <AdminPanelHeader
-        title="主日事工岗位安排（含主日学及团契）"
-        description="管理主日敬拜服事、儿童主日学及团契轮值表，并可每周更新轮值日期标题。"
+        title="主日事工岗位安排（含主日学与团契）"
+        description="管理讲台与敬拜、祷告与读经、音画影音技术、接待与后勤、主日学与团契及外派事工轮值表，并可每周更新轮值日期标题。"
         action={
           <button
             type="button"
@@ -313,10 +321,8 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 id: '',
                 category: filterCat === 'all' ? 'worship' : filterCat,
                 role: '',
-                timeOrPlace: '',
                 thisWeek: '',
                 nextWeek: '',
-                note: '',
                 sortOrder: ministryRoster.length + 1,
               })
             }
@@ -373,13 +379,11 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       {/* Category Tabs */}
       <div className="flex flex-wrap gap-1.5">
         {(
-          [
-            ['all', '全部岗位'],
-            ['worship', '敬拜与后勤'],
-            ['sunday-school', '儿童主日学'],
-            ['fellowship', '主日及周末团契'],
-          ] as const
-        ).map(([id, label]) => (
+          [{ id: 'all', label: '全部岗位' }, ...MINISTRY_CATEGORY_OPTIONS] as {
+            id: 'all' | MinistryRosterCategory;
+            label: string;
+          }[]
+        ).map(({ id, label }) => (
           <button
             key={id}
             type="button"
@@ -397,48 +401,51 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
 
       {/* Roster Table */}
       <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
-        {visibleRoster.map((item) => (
-          <div
-            key={item.id}
-            className="px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-          >
-            <div className="space-y-1 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
-                <span className="font-mono tabular-nums">#{item.sortOrder}</span>
-                <span>{CATEGORY_LABELS[item.category]}</span>
-                <span>·</span>
-                <span className="tabular-nums">{item.timeOrPlace}</span>
-              </div>
-              <h3 className="text-sm font-semibold text-[#1C1917]">{item.role}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                <p className="text-[#1E3A5F]">本周：{item.thisWeek}</p>
-                <p className="text-[#57534E]">下周：{item.nextWeek}</p>
-              </div>
-              <p className="text-xs text-[#78716C]">备注：{item.note}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setEditingRoster(item)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                编辑
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  await deleteMinistryRoster(item.id);
-                  setStatus({ type: 'success', message: `已删除「${item.role}」。` });
-                }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                删除
-              </button>
-            </div>
+        {visibleRoster.length === 0 ? (
+          <div className="px-6 py-8 text-center text-xs text-[#78716C]">
+            当前分类暂无岗位记录，点击右上角“新增岗位 / 班级”添加。
           </div>
-        ))}
+        ) : (
+          visibleRoster.map((item) => (
+            <div
+              key={item.id}
+              className="px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+            >
+              <div className="space-y-1 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
+                  <span className="font-mono tabular-nums">#{item.sortOrder}</span>
+                  <span>{MINISTRY_CATEGORY_LABELS[item.category] ?? '讲台与敬拜'}</span>
+                </div>
+                <h3 className="text-sm font-semibold text-[#1C1917]">{item.role}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                  <p className="text-[#1E3A5F]">本周：{item.thisWeek}</p>
+                  <p className="text-[#57534E]">下周：{item.nextWeek}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingRoster(item)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  编辑
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await deleteMinistryRoster(item.id);
+                    setStatus({ type: 'success', message: `已删除「${item.role}」。` });
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  删除
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {editingRoster && (
@@ -471,14 +478,16 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                   onChange={(e) =>
                     setEditingRoster({
                       ...editingRoster,
-                      category: e.target.value as MinistryRosterItem['category'],
+                      category: e.target.value as MinistryRosterCategory,
                     })
                   }
                   className={inputClass}
                 >
-                  <option value="worship">敬拜与后勤服事</option>
-                  <option value="sunday-school">儿童主日学</option>
-                  <option value="fellowship">主日及周末团契</option>
+                  {MINISTRY_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </FieldLabel>
               <FieldLabel label="排序权重">
@@ -509,19 +518,6 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               />
             </FieldLabel>
 
-            <FieldLabel label="时间与地点 *">
-              <input
-                type="text"
-                required
-                maxLength={140}
-                value={editingRoster.timeOrPlace}
-                onChange={(e) =>
-                  setEditingRoster({ ...editingRoster, timeOrPlace: e.target.value })
-                }
-                className={inputClass}
-              />
-            </FieldLabel>
-
             <FieldLabel label={`本周值班同工（${thisWeekLabel}） *`}>
               <input
                 type="text"
@@ -540,17 +536,6 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 maxLength={200}
                 value={editingRoster.nextWeek}
                 onChange={(e) => setEditingRoster({ ...editingRoster, nextWeek: e.target.value })}
-                className={inputClass}
-              />
-            </FieldLabel>
-
-            <FieldLabel label="备忘说明 *">
-              <input
-                type="text"
-                required
-                maxLength={300}
-                value={editingRoster.note}
-                onChange={(e) => setEditingRoster({ ...editingRoster, note: e.target.value })}
                 className={inputClass}
               />
             </FieldLabel>

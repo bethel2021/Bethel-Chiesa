@@ -67,12 +67,11 @@
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 80 },
         "title": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "responsibility": { "type": "string", "minLength": 1, "maxLength": 200 },
         "image": { "type": "string", "maxLength": 60000 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "title", "responsibility", "sortOrder", "updatedAt"]
+      "required": ["name", "title", "sortOrder", "updatedAt"]
     },
     "WorshipTimeDoc": {
       "title": "WorshipTimeDoc",
@@ -119,19 +118,27 @@
     },
     "MinistryRosterDoc": {
       "title": "MinistryRosterDoc",
-      "description": "Sunday ministry duty, Sunday school class, or fellowship assignment",
+      "description": "Sunday ministry duty, Sunday school class, fellowship, tech, hospitality, or outreach assignment",
       "type": "object",
       "properties": {
-        "category": { "type": "string", "enum": ["worship", "sunday-school", "fellowship"] },
+        "category": {
+          "type": "string",
+          "enum": [
+            "worship",
+            "sunday-school-fellowship",
+            "prayer-bible",
+            "media-tech",
+            "hospitality-logistics",
+            "outreach"
+          ]
+        },
         "role": { "type": "string", "minLength": 1, "maxLength": 140 },
-        "timeOrPlace": { "type": "string", "minLength": 1, "maxLength": 140 },
         "thisWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
         "nextWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "note": { "type": "string", "minLength": 1, "maxLength": 300 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["category", "role", "timeOrPlace", "thisWeek", "nextWeek", "note", "sortOrder", "updatedAt"]
+      "required": ["category", "role", "thisWeek", "nextWeek", "sortOrder", "updatedAt"]
     },
     "WeekdayMinistryDoc": {
       "title": "WeekdayMinistryDoc",
