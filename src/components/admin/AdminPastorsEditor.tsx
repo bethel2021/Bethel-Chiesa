@@ -357,10 +357,7 @@ export function AdminPastorsEditor() {
                   : CHURCH_IMAGES.pastorLin
               }
               previewAspect="portrait"
-              maxWidth={600}
-              maxHeight={800}
-              maxChars={110000}
-              hint="建议 3:4 竖版人像（自动压缩至 80 KB 内）"
+              hint="建议 3:4 竖版人像（支持原图无损直传）"
               required
             />
 
@@ -498,10 +495,7 @@ export function AdminPastorsEditor() {
               }
               allowClear
               previewAspect="square"
-              maxWidth={360}
-              maxHeight={360}
-              maxChars={55000}
-              hint="建议正方形半身照；留空则显示姓氏首字徽章"
+              hint="建议正方形半身照（支持原图无损直传）；留空则显示姓氏首字徽章"
             />
 
             <div className="pt-3 border-t border-[#E5DFD3] flex justify-end gap-3">

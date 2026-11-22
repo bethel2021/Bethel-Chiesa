@@ -10,8 +10,8 @@
         "scriptureQuote": { "type": "string", "minLength": 1, "maxLength": 400 },
         "scriptureRef": { "type": "string", "minLength": 1, "maxLength": 100 },
         "heroSubtitle": { "type": "string", "minLength": 1, "maxLength": 400 },
-        "heroImage": { "type": "string", "minLength": 1, "maxLength": 200000 },
-        "fellowshipImage": { "type": "string", "minLength": 1, "maxLength": 200000 },
+        "heroImage": { "type": "string", "minLength": 1, "maxLength": 480000 },
+        "fellowshipImage": { "type": "string", "minLength": 1, "maxLength": 240000 },
         "address": { "type": "string", "minLength": 1, "maxLength": 300 },
         "shortAddress": { "type": "string", "minLength": 1, "maxLength": 100 },
         "pastoralPhone": { "type": "string", "minLength": 1, "maxLength": 100 },
@@ -231,6 +231,19 @@
         "addedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "displayName", "addedAt"]
+    },
+    "MediaChunkDoc": {
+      "title": "MediaChunkDoc",
+      "description": "Lossless original image chunk payload (<= 750 KB per document)",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "chunkIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "data": { "type": "string", "minLength": 1, "maxLength": 750000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mediaId", "chunkIndex", "totalChunks", "data", "updatedAt"]
     }
   },
   "firestore": {
@@ -277,6 +290,10 @@
     "/admins/{adminUid}": {
       "schema": { "$ref": "#/entities/AdminUserDoc" },
       "description": "Authorized admin UIDs"
+    },
+    "/media_chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/MediaChunkDoc" },
+      "description": "Chunked lossless original image documents addressed by deterministic mediaId__index ID"
     }
   }
 }

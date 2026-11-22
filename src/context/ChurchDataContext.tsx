@@ -61,6 +61,11 @@ import {
   handleFirestoreError,
   OperationType,
 } from '../lib/firebase';
+import {
+  DATA_IMAGE_URI_REGEX,
+  isMediaUri,
+  persistLosslessImageIfNeeded,
+} from '../lib/mediaStorage';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
 const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
@@ -162,12 +167,13 @@ function sanitizeImageRef(val: string | undefined, maxLen: number): string {
   const trimmed = String(val ?? '').trim();
   if (!trimmed) return '';
   const isSafeUrlOrPath = /^(https?:\/\/|\/).+$/.test(trimmed);
-  const isSafeDataUri = /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed);
-  if (!isSafeUrlOrPath && !isSafeDataUri) {
-    throw new Error('图片地址格式无效：请上传 JPG/PNG/WebP 图片，或填写以 https:// 或 / 开头的有效路径。');
+  const isSafeMediaRef = isMediaUri(trimmed);
+  const isSafeDataUri = DATA_IMAGE_URI_REGEX.test(trimmed);
+  if (!isSafeUrlOrPath && !isSafeMediaRef && !isSafeDataUri) {
+    throw new Error('图片地址格式无效：请上传 JPG/PNG/WebP 原图，或填写以 https:// 或 / 开头的有效路径。');
   }
   if (trimmed.length > maxLen) {
-    throw new Error('图片压缩后体积仍超过单字段限制，请换用更小的图片或填写外链图片地址。');
+    throw new Error('图片地址长度超出单字段限制，请重新上传或填写外链图片地址。');
   }
   return trimmed;
 }
@@ -384,8 +390,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     scriptureQuote: clampStr(info.scriptureQuote, 400),
     scriptureRef: clampStr(info.scriptureRef, 100),
     heroSubtitle: clampStr(info.heroSubtitle, 400),
-    heroImage: sanitizeImageRef(info.heroImage, 200000) || CHURCH_INFO.heroImage,
-    fellowshipImage: sanitizeImageRef(info.fellowshipImage, 200000) || CHURCH_INFO.fellowshipImage,
+    heroImage: sanitizeImageRef(info.heroImage, 480000) || CHURCH_INFO.heroImage,
+    fellowshipImage: sanitizeImageRef(info.fellowshipImage, 240000) || CHURCH_INFO.fellowshipImage,
     address: clampStr(info.address, 300),
     shortAddress: clampStr(info.shortAddress, 100),
     pastoralPhone: clampStr(info.pastoralPhone, 100),
@@ -800,13 +806,40 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     const current = latestStateRef.current;
     try {
       if (!hasCloudData) {
+        const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
+          persistLosslessImageIfNeeded(current.churchInfo.heroImage, 180000),
+          persistLosslessImageIfNeeded(current.churchInfo.fellowshipImage, 180000),
+        ]);
+        const resolvedPastors = await Promise.all(
+          current.pastors.map(async (p) => ({
+            ...p,
+            image: (await persistLosslessImageIfNeeded(p.image, 100000)) || PASTORS_TEAM[0].image,
+          }))
+        );
+        const resolvedCoworkers = await Promise.all(
+          normalizeCoworkers(current.coworkers).map(async (cw) => ({
+            ...cw,
+            ...(cw.image ? { image: await persistLosslessImageIfNeeded(cw.image, 50000) } : {}),
+          }))
+        );
+        const normalizedSnapshot = {
+          ...current,
+          churchInfo: {
+            ...current.churchInfo,
+            heroImage: resolvedHeroImage || CHURCH_INFO.heroImage,
+            fellowshipImage: resolvedFellowshipImage || CHURCH_INFO.fellowshipImage,
+          },
+          pastors: resolvedPastors,
+          coworkers: resolvedCoworkers,
+        };
+
         const batch = writeBatch(db);
         batch.set(doc(db, 'church_sections', 'info'), {
-          ...buildChurchInfoFields(current.churchInfo),
+          ...buildChurchInfoFields(normalizedSnapshot.churchInfo),
           updatedAt: serverTimestamp(),
         });
 
-        for (const p of current.pastors) {
+        for (const p of normalizedSnapshot.pastors) {
           batch.set(doc(db, 'pastors', p.id), {
             name: p.name,
             role: p.role,
@@ -820,7 +853,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        for (const cw of normalizeCoworkers(current.coworkers)) {
+        for (const cw of normalizedSnapshot.coworkers) {
           batch.set(doc(db, 'coworkers', cw.id), {
             name: cw.name,
             title: cw.title,
@@ -904,7 +937,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        const bundle = buildPublicBundlePayload(current);
+        const bundle = buildPublicBundlePayload(normalizedSnapshot);
         batch.set(doc(db, 'church_sections', 'public_bundle'), {
           ...bundle,
           updatedAt: serverTimestamp(),
@@ -927,8 +960,16 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const saveChurchInfo = useCallback(
     async (info: ChurchInfo) => {
       const path = 'church_sections/info';
-      const cleaned = buildChurchInfoFields(info);
       try {
+        const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
+          persistLosslessImageIfNeeded(info.heroImage, 180000),
+          persistLosslessImageIfNeeded(info.fellowshipImage, 180000),
+        ]);
+        const cleaned = buildChurchInfoFields({
+          ...info,
+          heroImage: resolvedHeroImage,
+          fellowshipImage: resolvedFellowshipImage,
+        });
         await setDoc(doc(db, 'church_sections', 'info'), {
           ...cleaned,
           updatedAt: serverTimestamp(),
@@ -948,18 +989,19 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: PastorProfile) => {
       const id = item.id || makeDocId('pastor');
       const path = `pastors/${id}`;
-      const cleaned: PastorProfile = {
-        id,
-        name: clampStr(item.name, 80),
-        role: clampStr(item.role, 120),
-        tenure: clampStr(item.tenure, 60),
-        image: sanitizeImageRef(item.image, 120000) || PASTORS_TEAM[0].image,
-        education: clampStr(item.education, 200),
-        ministryFocus: clampStr(item.ministryFocus, 200),
-        bio: clampStr(item.bio, 1200),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
       try {
+        const resolvedImage = await persistLosslessImageIfNeeded(item.image, 100000);
+        const cleaned: PastorProfile = {
+          id,
+          name: clampStr(item.name, 80),
+          role: clampStr(item.role, 120),
+          tenure: clampStr(item.tenure, 60),
+          image: sanitizeImageRef(resolvedImage, 120000) || PASTORS_TEAM[0].image,
+          education: clampStr(item.education, 200),
+          ministryFocus: clampStr(item.ministryFocus, 200),
+          bio: clampStr(item.bio, 1200),
+          sortOrder: Number(item.sortOrder) || 0,
+        };
         const { id: _ignored, ...docBody } = cleaned;
         await setDoc(doc(db, 'pastors', id), {
           ...docBody,
@@ -995,15 +1037,18 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: PulpitCoworker) => {
       const id = item.id || makeDocId('cw');
       const path = `coworkers/${id}`;
-      const cleanedImage = sanitizeImageRef(item.image, 60000);
-      const cleaned: PulpitCoworker = {
-        id,
-        name: clampStr(item.name, 80),
-        title: clampStr(item.title, 120),
-        image: cleanedImage,
-        sortOrder: Number(item.sortOrder) || 0,
-      };
       try {
+        const resolvedImage = item.image
+          ? await persistLosslessImageIfNeeded(item.image, 50000)
+          : '';
+        const cleanedImage = sanitizeImageRef(resolvedImage, 60000);
+        const cleaned: PulpitCoworker = {
+          id,
+          name: clampStr(item.name, 80),
+          title: clampStr(item.title, 120),
+          image: cleanedImage,
+          sortOrder: Number(item.sortOrder) || 0,
+        };
         const { id: _ignored, ...docBody } = cleaned;
         await setDoc(doc(db, 'coworkers', id), {
           ...docBody,

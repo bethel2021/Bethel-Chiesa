@@ -1,7 +1,10 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Link2, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { DATA_IMAGE_URI_REGEX, isMediaUri } from '../../lib/mediaStorage';
 import { SafeImage } from '../SafeImage';
 import { inputClass } from './AdminSharedUI';
+
+const MAX_ORIGINAL_IMAGE_BYTES = 12 * 1024 * 1024; // 12 MB original lossless file limit
 
 interface ImageFieldControlProps {
   label: string;
@@ -10,71 +13,73 @@ interface ImageFieldControlProps {
   defaultValue?: string;
   allowClear?: boolean;
   previewAspect?: 'landscape' | 'portrait' | 'square';
-  maxWidth: number;
-  maxHeight: number;
-  maxChars: number;
   hint?: string;
   required?: boolean;
 }
 
-async function compressImageFile(
-  file: File,
-  maxWidth: number,
-  maxHeight: number,
-  maxChars: number
-): Promise<string> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('请选择 JPG、PNG 或 WebP 格式的图片文件。');
+interface OriginalImageResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function readOriginalImageFile(file: File): Promise<OriginalImageResult> {
+  const allowedMimes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+  const normalizedMime = file.type.toLowerCase();
+  if (!allowedMimes.has(normalizedMime)) {
+    throw new Error('请选择 JPG、PNG 或 WebP 格式的原图文件。');
+  }
+  if (file.size > MAX_ORIGINAL_IMAGE_BYTES) {
+    throw new Error('原图文件超过 12 MB 上限，请选用 12 MB 以内的原图或填写外链网址。');
   }
 
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('无法读取该图片文件，请尝试其他图片。'));
-      el.src = objectUrl;
-    });
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
 
-    const ratio = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
-    let width = Math.max(1, Math.round(img.naturalWidth * ratio));
-    let height = Math.max(1, Math.round(img.naturalHeight * ratio));
+    img.onload = () => {
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      URL.revokeObjectURL(objectUrl);
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('浏览器不支持图片画布压缩，请改用外链图片地址。');
-    }
-
-    const renderCandidate = (w: number, h: number, mime: 'image/webp' | 'image/jpeg', q: number) => {
-      canvas.width = w;
-      canvas.height = h;
-      ctx.fillStyle = '#FAF8F4';
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      return canvas.toDataURL(mime, q);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('无法读取图片文件内容，请重试。'));
+          return;
+        }
+        // Normalize data:image/jpg -> data:image/jpeg if needed; base64 payload stays identical
+        const rawResult = reader.result.replace(/^data:image\/jpg;base64,/, 'data:image/jpeg;base64,');
+        if (!DATA_IMAGE_URI_REGEX.test(rawResult)) {
+          reject(new Error('图片编码格式不支持，请上传标准 JPG、PNG 或 WebP 原图。'));
+          return;
+        }
+        resolve({
+          dataUrl: rawResult,
+          width,
+          height,
+          bytes: file.size,
+        });
+      };
+      reader.onerror = () => reject(new Error('读取原图文件失败，请重试。'));
+      reader.readAsDataURL(file);
     };
 
-    const probeWebp = renderCandidate(Math.min(width, 32), Math.min(height, 32), 'image/webp', 0.8);
-    const mime: 'image/webp' | 'image/jpeg' = probeWebp.startsWith('data:image/webp')
-      ? 'image/webp'
-      : 'image/jpeg';
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('无法解析该图片文件，请确认文件未损坏。'));
+    };
 
-    for (let scaleStep = 0; scaleStep < 4; scaleStep += 1) {
-      for (const q of [0.84, 0.74, 0.64, 0.54, 0.44]) {
-        const candidate = renderCandidate(width, height, mime, q);
-        if (candidate.length <= maxChars) {
-          return candidate;
-        }
-      }
-      width = Math.max(120, Math.round(width * 0.75));
-      height = Math.max(120, Math.round(height * 0.75));
-    }
-
-    throw new Error('图片分辨率或细节过高，压缩后仍超出限额，请换一张图片或使用图片外链。');
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+    img.src = objectUrl;
+  });
 }
 
 export function ImageFieldControl({
@@ -84,19 +89,23 @@ export function ImageFieldControl({
   defaultValue,
   allowClear = false,
   previewAspect = 'landscape',
-  maxWidth,
-  maxHeight,
-  maxChars,
   hint,
   required = false,
 }: ImageFieldControlProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [compressing, setCompressing] = useState(false);
+  const [reading, setReading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [forceUrlMode, setForceUrlMode] = useState(false);
+  const [uploadMeta, setUploadMeta] = useState<{
+    width: number;
+    height: number;
+    bytes: number;
+  } | null>(null);
 
   const isDataUri = value.startsWith('data:image/');
-  const approxKb = isDataUri ? Math.max(1, Math.round((value.length * 0.75) / 1024)) : 0;
+  const isCloudMedia = isMediaUri(value);
+  const isUploadedBinary = isDataUri || isCloudMedia;
+  const approxBytes = isDataUri ? Math.round(value.length * 0.75) : 0;
 
   const previewFrameClass =
     previewAspect === 'portrait'
@@ -111,15 +120,20 @@ export function ImageFieldControl({
     if (!file) return;
 
     setErrorMsg('');
-    setCompressing(true);
+    setReading(true);
     try {
-      const dataUrl = await compressImageFile(file, maxWidth, maxHeight, maxChars);
+      const result = await readOriginalImageFile(file);
       setForceUrlMode(false);
-      onChange(dataUrl);
+      setUploadMeta({
+        width: result.width,
+        height: result.height,
+        bytes: result.bytes,
+      });
+      onChange(result.dataUrl);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : '图片处理失败，请重试。');
+      setErrorMsg(err instanceof Error ? err.message : '原图读取失败，请重试。');
     } finally {
-      setCompressing(false);
+      setReading(false);
     }
   };
 
@@ -163,14 +177,14 @@ export function ImageFieldControl({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={compressing}
+              disabled={reading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
-              {compressing ? '压缩处理中…' : '本地上传图片'}
+              {reading ? '读取原图中…' : '上传原图（无损直传）'}
             </button>
 
-            {isDataUri && !forceUrlMode && (
+            {isUploadedBinary && !forceUrlMode && (
               <button
                 type="button"
                 onClick={() => setForceUrlMode(true)}
@@ -187,6 +201,7 @@ export function ImageFieldControl({
                 onClick={() => {
                   setErrorMsg('');
                   setForceUrlMode(false);
+                  setUploadMeta(null);
                   onChange(defaultValue);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#57534E] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
@@ -202,6 +217,7 @@ export function ImageFieldControl({
                 onClick={() => {
                   setErrorMsg('');
                   setForceUrlMode(false);
+                  setUploadMeta(null);
                   onChange('');
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#9A3412] bg-white border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
@@ -212,18 +228,23 @@ export function ImageFieldControl({
             )}
           </div>
 
-          {isDataUri && !forceUrlMode ? (
+          {isUploadedBinary && !forceUrlMode ? (
             <p className="text-xs text-[#14532D] bg-[#EEF5F0] border border-[#B7D4C0] rounded px-3 py-1.5 tabular-nums">
-              已选择本地上传图片（自动优化压缩约 {approxKb} KB），保存后立即同步到主页。
+              {isCloudMedia
+                ? '已保存云端无损原图，主页与后台均按原始分辨率清晰展示。'
+                : uploadMeta
+                ? `已选择原图（${uploadMeta.width}×${uploadMeta.height}，${formatFileSize(uploadMeta.bytes)} · 零压缩无损直传），请点击保存同步到主页。`
+                : `已选择原图（约 ${formatFileSize(approxBytes)} · 无损直传），请点击保存同步到主页。`}
             </p>
           ) : (
             <input
               type="text"
-              required={required && !isDataUri}
+              required={required && !isUploadedBinary}
               maxLength={500}
-              value={isDataUri ? '' : value}
+              value={isUploadedBinary ? '' : value}
               onChange={(e) => {
                 setErrorMsg('');
+                setUploadMeta(null);
                 onChange(e.target.value);
               }}
               placeholder="支持填写 https://... 外链图片或 /src/assets/images/... 本地路径"

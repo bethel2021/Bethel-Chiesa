@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Church } from 'lucide-react';
+import {
+  DATA_IMAGE_URI_REGEX,
+  getCachedMediaObjectUrl,
+  isMediaUri,
+  resolveMediaUri,
+} from '../lib/mediaStorage';
 
 interface SafeImageProps {
   src: string;
@@ -8,25 +14,63 @@ interface SafeImageProps {
   fallbackLabel?: string;
 }
 
-function isSafeImageSrc(src: string): boolean {
+function isSafeDirectImageSrc(src: string): boolean {
   const trimmed = String(src ?? '').trim();
   if (!trimmed) return false;
-  return (
-    /^(https?:\/\/|\/).+$/.test(trimmed) ||
-    /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed)
-  );
+  return /^(https?:\/\/|\/).+$/.test(trimmed) || DATA_IMAGE_URI_REGEX.test(trimmed);
 }
 
 export function SafeImage({ src, alt, className = '', fallbackLabel }: SafeImageProps) {
+  const trimmed = String(src ?? '').trim();
+  const mediaRef = isMediaUri(trimmed) ? trimmed : '';
+  const directSrc = !mediaRef && isSafeDirectImageSrc(trimmed) ? trimmed : '';
+
+  const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string>(() =>
+    mediaRef ? getCachedMediaObjectUrl(mediaRef) || '' : ''
+  );
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     setHasError(false);
-  }, [src]);
 
-  const safeSrc = isSafeImageSrc(src) ? src.trim() : '';
+    if (!mediaRef) {
+      setResolvedMediaUrl('');
+      return;
+    }
 
-  if (hasError || !safeSrc) {
+    const cached = getCachedMediaObjectUrl(mediaRef);
+    if (cached) {
+      setResolvedMediaUrl(cached);
+      return;
+    }
+
+    let cancelled = false;
+    setResolvedMediaUrl('');
+
+    resolveMediaUri(mediaRef)
+      .then((objectUrl) => {
+        if (!cancelled) {
+          setResolvedMediaUrl(objectUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHasError(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaRef, directSrc]);
+
+  const effectiveSrc = mediaRef ? resolvedMediaUrl : directSrc;
+
+  if (mediaRef && !effectiveSrc && !hasError) {
+    return <div aria-label={alt} className={`bg-[#1C1917]/20 animate-pulse ${className}`} />;
+  }
+
+  if (hasError || !effectiveSrc) {
     return (
       <div
         role="img"
@@ -43,7 +87,7 @@ export function SafeImage({ src, alt, className = '', fallbackLabel }: SafeImage
 
   return (
     <img
-      src={safeSrc}
+      src={effectiveSrc}
       alt={alt}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}

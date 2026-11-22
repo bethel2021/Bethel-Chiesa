@@ -57,6 +57,7 @@ service cloud.firestore {
         && (
           val == '' ||
           val.matches('^(https?://|/).+$') ||
+          val.matches('^media://[a-zA-Z0-9_\\-]+/[1-9][0-9]?$') ||
           val.matches('^data:image/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$')
         );
     }
@@ -88,8 +89,8 @@ service cloud.firestore {
       && isStringBounds(data.scriptureQuote, 1, 400)
       && isStringBounds(data.scriptureRef, 1, 100)
       && isStringBounds(data.heroSubtitle, 1, 400)
-      && isValidImageRef(data.heroImage, 1, 200000)
-      && isValidImageRef(data.fellowshipImage, 1, 200000)
+      && isValidImageRef(data.heroImage, 1, 480000)
+      && isValidImageRef(data.fellowshipImage, 1, 240000)
       && isStringBounds(data.address, 1, 300)
       && isStringBounds(data.shortAddress, 1, 100)
       && isStringBounds(data.pastoralPhone, 1, 100)
@@ -285,6 +286,16 @@ service cloud.firestore {
       && data.addedAt == request.time;
     }
 
+    function isValidMediaChunk(data) {
+      return data.keys().hasAll(['mediaId', 'chunkIndex', 'totalChunks', 'data', 'updatedAt'])
+      && data.keys().hasOnly(['mediaId', 'chunkIndex', 'totalChunks', 'data', 'updatedAt'])
+      && isValidId(data.mediaId)
+      && data.chunkIndex is number && data.chunkIndex >= 0 && data.chunkIndex < 30
+      && data.totalChunks is number && data.totalChunks >= 1 && data.totalChunks <= 30
+      && isStringBounds(data.data, 1, 750000)
+      && data.updatedAt == request.time;
+    }
+
     // --- Collection Rules ---
     match /church_sections/{sectionId} {
       allow get: if isValidId(sectionId);
@@ -384,6 +395,15 @@ service cloud.firestore {
       allow create: if isValidId(adminUid) && isValidAdminUser(incoming()) && isAdmin();
       allow update: if false;
       allow delete: if isValidId(adminUid) && isAdmin();
+    }
+
+    // Lossless original image chunks: direct get by known ID only, list disabled, admin-only write
+    match /media_chunks/{chunkId} {
+      allow get: if isValidId(chunkId);
+      allow list: if false;
+      allow create: if isValidId(chunkId) && isValidMediaChunk(incoming()) && isAdmin();
+      allow update: if isValidId(chunkId) && isValidMediaChunk(incoming()) && isAdmin();
+      allow delete: if isValidId(chunkId) && isAdmin();
     }
   }
 }

@@ -130,10 +130,7 @@ export function AdminInfoEditor() {
             onChange={(nextUrl) => setForm({ ...form, heroImage: nextUrl })}
             defaultValue={CHURCH_IMAGES.heroSanctuary}
             previewAspect="landscape"
-            maxWidth={1280}
-            maxHeight={720}
-            maxChars={180000}
-            hint="建议横向大图（自动压缩优化至 135 KB 内），或填写外链网址"
+            hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
             required
           />
           <ImageFieldControl
@@ -142,10 +139,7 @@ export function AdminInfoEditor() {
             onChange={(nextUrl) => setForm({ ...form, fellowshipImage: nextUrl })}
             defaultValue={CHURCH_IMAGES.fellowshipIntro}
             previewAspect="landscape"
-            maxWidth={1000}
-            maxHeight={750}
-            maxChars={180000}
-            hint="建议 4:3 横图（自动压缩优化），或填写外链网址"
+            hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
             required
           />
         </div>

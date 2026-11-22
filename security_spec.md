@@ -1,9 +1,9 @@
 # Bethel Church CMS Security Specification
 
 ## 1. Data Invariants
-1. Public CMS collections (`church_sections`, `pastors`, `coworkers`, `worship_times`, `liturgy_steps`, `worship_songs`, `ministry_roster`, `weekday_ministries`, `announcements`) are publicly readable (`get` and `list`) so visitors can browse the church homepage without signing in.
-2. Only verified admins (`isAdmin()`, defined as `email_verified == true && (email == 'chinarenzhian@gmail.com' || exists(/databases/$(database)/documents/admins/$(request.auth.uid)))`) can create, update, or delete any CMS document.
-3. All CMS writes must pass strict `isValid*` schema validation (required keys, `hasOnly` allowlist, string length bounds, bounded list sizes, valid enums, and `updatedAt == request.time`). Image references allow only safe relative/HTTP(S) paths or bounded JPEG/PNG/WebP base64 data URIs (SVG/script URIs are rejected).
+1. Public CMS collections (`church_sections`, `pastors`, `coworkers`, `worship_times`, `liturgy_steps`, `worship_songs`, `ministry_roster`, `weekday_ministries`, `announcements`) are publicly readable (`get` and `list`) so visitors can browse the church homepage without signing in. `media_chunks` allows public `get` by deterministic chunk ID only (`list` is disabled).
+2. Only verified admins (`isAdmin()`, defined as `email_verified == true && (email == 'chinarenzhian@gmail.com' || exists(/databases/$(database)/documents/admins/$(request.auth.uid)))`) can create, update, or delete any CMS or `media_chunks` document.
+3. All CMS writes must pass strict `isValid*` schema validation (required keys, `hasOnly` allowlist, string length bounds, bounded list sizes, valid enums, and `updatedAt == request.time`). Image references allow only safe relative/HTTP(S) paths, `media://<id>/<chunks>` chunk references, or bounded JPEG/PNG/WebP base64 data URIs (SVG/script URIs are rejected).
 4. `visitor_requests` contains visitor PII (name, phone/email, message). Public visitors may `create` a request only with `status == 'pending'`, no `adminNote`, and `createdAt == request.time`. Public users and non-admin signed-in users CANNOT `get`, `list`, `update`, or `delete` any `visitor_requests` document.
 5. `admins` collection is readable and writable exclusively by verified admins (`isAdmin()`). Unauthenticated or non-admin users cannot escalate privileges or enumerate admin accounts.
 
