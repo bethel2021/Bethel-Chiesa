@@ -11,9 +11,9 @@
 在 Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → 连接你的 Git 仓库（或本地使用 Wrangler 上传）：
 
 - **Framework preset**：`Vite`（或 `None`）
-- **Build command**：`npm run build`
+- **Build command**：`npm run build`（⚠️ **必填**：仓库中的 `wrangler.toml` 仅声明输出目录 `dist`，Cloudflare Pages 不会从 `wrangler.toml` 读取构建命令；若此处留空，会出现 `No build command specified` / `Output directory "dist" not found` 错误）
 - **Build output directory**：`dist`
-- **Node.js version（环境变量）**：`NODE_VERSION = 22`（推荐）
+- **Node.js version**：仓库根目录已内置 `.node-version`（`22`），Cloudflare Pages 会自动选用 Node 22（也可在环境变量中手动指定 `NODE_VERSION = 22`）
 
 如使用命令行直接发布：
 ```bash
