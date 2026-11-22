@@ -7,7 +7,7 @@ type WeekMode = 'thisWeek' | 'nextWeek';
 const FILTER_TABS: { id: RosterFilter; label: string }[] = [
   { id: 'all', label: '全部事工岗位' },
   { id: 'worship', label: '敬拜与后勤服事' },
-  { id: 'sunday-school', label: '分龄主日学' },
+  { id: 'sunday-school', label: '儿童主日学' },
   { id: 'fellowship', label: '主日及周末团契' },
 ];
 
@@ -28,10 +28,10 @@ export function MinistryRosterSection() {
       : ministryRoster.filter((item) => item.category === filter);
 
   return (
-    <section id="ministry" className="py-20 md:py-24 bg-[#F3EFE6]/55 border-b border-[#E5DFD3]">
+    <section id="ministry" className="py-12 md:py-14 bg-[#F3EFE6]/55 border-b border-[#E5DFD3]">
       <div className="max-w-[1200px] mx-auto px-6">
         {/* Part 1: Sunday Ministry Roster */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-10">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-7">
           <div className="max-w-2xl">
             <p className="text-xs tracking-widest text-[#78716C] mb-2">
               04. 肢体服事与周间聚会
@@ -91,7 +91,7 @@ export function MinistryRosterSection() {
         </div>
 
         {/* Clean Institutional Roster Table */}
-        <div className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg overflow-hidden mb-20">
+        <div className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg overflow-hidden mb-10">
           <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-[#EFEAE0]/70 border-b border-[#E5DFD3] text-xs font-medium text-[#57534E]">
             <div className="col-span-2">事工分类</div>
             <div className="col-span-3">岗位 / 课程名称</div>
@@ -134,8 +134,8 @@ export function MinistryRosterSection() {
         </div>
 
         {/* Part 2: Weekday Ministries */}
-        <div className="pt-4">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+        <div className="pt-2">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-7">
             <div className="max-w-2xl">
               <p className="text-xs tracking-widest text-[#78716C] mb-2">
                 05. 平日牧养与社区守望

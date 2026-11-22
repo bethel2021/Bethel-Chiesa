@@ -73,18 +73,17 @@ service cloud.firestore {
     // --- Entity Validation Blueprints ---
     function isValidChurchInfo(data) {
       return data.keys().hasAll([
-        'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
+        'name', 'founded', 'scriptureQuote', 'scriptureRef',
         'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
         'pastoralPhone', 'themeVerse', 'themeVerseRef', 'thisWeekLabel',
         'nextWeekLabel', 'introParagraphs', 'coreValues', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'name', 'englishName', 'founded', 'scriptureQuote', 'scriptureRef',
+        'name', 'founded', 'scriptureQuote', 'scriptureRef',
         'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
         'pastoralPhone', 'themeVerse', 'themeVerseRef', 'thisWeekLabel',
         'nextWeekLabel', 'introParagraphs', 'coreValues', 'updatedAt'
       ])
       && isStringBounds(data.name, 1, 100)
-      && isStringBounds(data.englishName, 1, 100)
       && isStringBounds(data.founded, 1, 100)
       && isStringBounds(data.scriptureQuote, 1, 400)
       && isStringBounds(data.scriptureRef, 1, 100)

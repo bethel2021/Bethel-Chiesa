@@ -1,4 +1,5 @@
 import { useChurchData } from '../context/ChurchDataContext';
+import { handleAnchorClick } from '../utils/scroll';
 
 interface FooterProps {
   onOpenAdmin: () => void;
@@ -9,8 +10,8 @@ export function Footer({ onOpenAdmin }: FooterProps) {
 
   return (
     <footer className="bg-[#FAF8F4] border-t border-[#E5DFD3]">
-      <div className="max-w-[1200px] mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-[#E5DFD3]">
+      <div className="max-w-[1200px] mx-auto px-6 py-8 md:py-10">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-7 border-b border-[#E5DFD3]">
           <div className="md:col-span-5">
             <p className="font-editorial text-xl font-semibold text-[#1C1917] mb-2">
               {churchInfo.name}
@@ -35,25 +36,49 @@ export function Footer({ onOpenAdmin }: FooterProps) {
         </div>
 
         <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#78716C]">
-          <p>© 2026 {churchInfo.name} · {churchInfo.englishName}</p>
+          <p>© 2026 {churchInfo.name}</p>
           <nav aria-label="页脚快速导航" className="flex flex-wrap items-center gap-5">
-            <a href="#intro" className="hover:text-[#1C1917] transition-colors">
+            <a
+              href="#intro"
+              onClick={(e) => handleAnchorClick(e, '#intro')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
               教会简介
             </a>
-            <a href="#pastors" className="hover:text-[#1C1917] transition-colors">
+            <a
+              href="#pastors"
+              onClick={(e) => handleAnchorClick(e, '#pastors')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
               牧者同工
             </a>
-            <a href="#worship" className="hover:text-[#1C1917] transition-colors">
+            <a
+              href="#worship"
+              onClick={(e) => handleAnchorClick(e, '#worship')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
               主日崇拜
             </a>
-            <a href="#ministry" className="hover:text-[#1C1917] transition-colors">
+            <a
+              href="#ministry"
+              onClick={(e) => handleAnchorClick(e, '#ministry')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
               事工岗位
             </a>
-            <a href="#announcements" className="hover:text-[#1C1917] transition-colors">
+            <a
+              href="#announcements"
+              onClick={(e) => handleAnchorClick(e, '#announcements')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
               聚会公告
             </a>
-            <a href="#contact" className="hover:text-[#1C1917] transition-colors">
-              来访与联系
+            <a
+              href="#contact"
+              onClick={(e) => handleAnchorClick(e, '#contact')}
+              className="hover:text-[#1C1917] transition-colors"
+            >
+              联系方式
             </a>
             <button
               type="button"

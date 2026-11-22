@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowUpRight, X } from 'lucide-react';
 import { useChurchData } from '../context/ChurchDataContext';
 import type { AnnouncementItem } from '../data/churchData';
+import { handleAnchorClick } from '../utils/scroll';
 
 type CategoryFilter = '全部' | AnnouncementItem['category'];
 
@@ -31,10 +32,10 @@ export function AnnouncementsSection() {
   const remainingItems = visibleAnnouncements.filter((item) => item.id !== featuredItem?.id);
 
   return (
-    <section id="announcements" className="py-20 md:py-24 border-b border-[#E5DFD3]">
+    <section id="announcements" className="py-12 md:py-14 border-b border-[#E5DFD3]">
       <div className="max-w-[1200px] mx-auto px-6">
         {/* Section Header + Category Filter */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-10">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-7">
           <div className="max-w-2xl">
             <p className="text-xs tracking-widest text-[#78716C] mb-2">
               06. 近期动态与家事报道
@@ -206,7 +207,7 @@ export function AnnouncementsSection() {
             <div className="pt-4 border-t border-[#E5DFD3] flex items-center justify-end gap-3">
               <a
                 href="#contact"
-                onClick={() => setActiveAnnouncement(null)}
+                onClick={(e) => handleAnchorClick(e, '#contact', () => setActiveAnnouncement(null))}
                 className="px-4 py-2 text-xs font-medium text-[#1E3A5F] border border-[#1E3A5F]/30 hover:bg-[#1E3A5F]/5 rounded-md transition-colors whitespace-nowrap"
               >
                 前往来访登记咨询

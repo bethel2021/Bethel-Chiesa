@@ -5,10 +5,10 @@ export function ChurchIntroSection() {
   const { churchInfo } = useChurchData();
 
   return (
-    <section id="intro" className="py-20 md:py-24 border-b border-[#E5DFD3]">
+    <section id="intro" className="py-12 md:py-14 border-b border-[#E5DFD3]">
       <div className="max-w-[1200px] mx-auto px-6">
         {/* Section Header */}
-        <div className="max-w-2xl mb-12">
+        <div className="max-w-2xl mb-7 md:mb-8">
           <p className="text-xs tracking-widest text-[#78716C] mb-2">
             01. 认识我们 · {churchInfo.founded}
           </p>

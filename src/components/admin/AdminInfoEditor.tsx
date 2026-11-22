@@ -64,24 +64,14 @@ export function AdminInfoEditor() {
           1. 教会名称与首屏主视觉
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FieldLabel label="教会中文名称">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FieldLabel label="教会名称">
             <input
               type="text"
               required
               maxLength={100}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className={inputClass}
-            />
-          </FieldLabel>
-          <FieldLabel label="英文名称">
-            <input
-              type="text"
-              required
-              maxLength={100}
-              value={form.englishName}
-              onChange={(e) => setForm({ ...form, englishName: e.target.value })}
               className={inputClass}
             />
           </FieldLabel>

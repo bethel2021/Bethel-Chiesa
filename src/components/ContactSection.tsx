@@ -57,9 +57,9 @@ export function ContactSection() {
   });
 
   return (
-    <section id="contact" className="py-20 md:py-24 bg-[#F3EFE6]/55">
+    <section id="contact" className="py-12 md:py-14 bg-[#F3EFE6]/55">
       <div className="max-w-[1200px] mx-auto px-6">
-        <div className="max-w-2xl mb-12">
+        <div className="max-w-2xl mb-7 md:mb-8">
           <p className="text-xs tracking-widest text-[#78716C] mb-2">
             07. 欢迎来到神的殿
           </p>

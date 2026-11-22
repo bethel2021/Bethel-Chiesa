@@ -6,7 +6,6 @@ export interface CoreValueItem {
 
 export interface ChurchInfo {
   name: string;
-  englishName: string;
   founded: string;
   scriptureQuote: string;
   scriptureRef: string;
@@ -137,7 +136,6 @@ export const CHURCH_IMAGES = {
 
 export const CHURCH_INFO: ChurchInfo = {
   name: '伯特利教会',
-  englishName: 'Bethel Church',
   founded: '始建于 1998 年',
   scriptureQuote: '「这地方何等可畏！这不是别的，乃是神的殿，也是天的门。」',
   scriptureRef: '创世记 28:17',
@@ -169,7 +167,7 @@ export const CHURCH_INFO: ChurchInfo = {
     {
       index: '03',
       title: '团契相爱',
-      description: '借着分龄主日学、家庭小组与爱筵交通，在日常光阴中彼此扶持、担代重担。',
+      description: '借着儿童主日学、家庭小组与爱筵交通，在日常光阴中彼此扶持、担代重担。',
     },
     {
       index: '04',
@@ -274,7 +272,7 @@ export const SUNDAY_WORSHIP_TIMES: WorshipTimeSlot[] = [
   {
     id: 'wt-4',
     time: '13:00 – 14:15',
-    title: '分龄主日学与下午团契',
+    title: '儿童主日学与下午团契',
     place: '二、三楼各教室',
     desc: '成人研经、慕道班、青少年及儿童分龄课程',
     sortOrder: 4,

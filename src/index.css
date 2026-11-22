@@ -9,7 +9,7 @@
 @layer base {
   html {
     font-family: var(--font-sans);
-    scroll-padding-top: 5.5rem;
+    scroll-padding-top: 65px;
   }
 
   h1, h2, h3, .font-editorial {

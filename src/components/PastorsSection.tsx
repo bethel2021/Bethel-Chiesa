@@ -11,10 +11,10 @@ export function PastorsSection() {
     : [];
 
   return (
-    <section id="pastors" className="py-20 md:py-24 bg-[#F3EFE6]/55 border-b border-[#E5DFD3]">
+    <section id="pastors" className="py-12 md:py-14 bg-[#F3EFE6]/55 border-b border-[#E5DFD3]">
       <div className="max-w-[1200px] mx-auto px-6">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-7 md:mb-8">
           <div className="max-w-2xl">
             <p className="text-xs tracking-widest text-[#78716C] mb-2">
               02. 牧养与讲台团队

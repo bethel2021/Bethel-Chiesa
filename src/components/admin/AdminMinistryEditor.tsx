@@ -304,7 +304,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     <div className="space-y-8">
       <AdminPanelHeader
         title="主日事工岗位安排（含主日学及团契）"
-        description="管理主日敬拜服事、分龄主日学及团契轮值表，并可每周更新轮值日期标题。"
+        description="管理主日敬拜服事、儿童主日学及团契轮值表，并可每周更新轮值日期标题。"
         action={
           <button
             type="button"
@@ -376,7 +376,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
           [
             ['all', '全部岗位'],
             ['worship', '敬拜与后勤'],
-            ['sunday-school', '分龄主日学'],
+            ['sunday-school', '儿童主日学'],
             ['fellowship', '主日及周末团契'],
           ] as const
         ).map(([id, label]) => (
@@ -477,7 +477,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                   className={inputClass}
                 >
                   <option value="worship">敬拜与后勤服事</option>
-                  <option value="sunday-school">分龄主日学</option>
+                  <option value="sunday-school">儿童主日学</option>
                   <option value="fellowship">主日及周末团契</option>
                 </select>
               </FieldLabel>

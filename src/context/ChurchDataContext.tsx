@@ -367,7 +367,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const buildChurchInfoFields = (info: ChurchInfo) => ({
     name: clampStr(info.name, 100),
-    englishName: clampStr(info.englishName, 100),
     founded: clampStr(info.founded, 100),
     scriptureQuote: clampStr(info.scriptureQuote, 400),
     scriptureRef: clampStr(info.scriptureRef, 100),

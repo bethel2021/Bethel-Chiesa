@@ -1,6 +1,7 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useChurchData } from '../context/ChurchDataContext';
+import { getStickyHeaderHeight, handleAnchorClick } from '../utils/scroll';
 
 const NAV_LINKS = [
   { id: 'intro', label: '教会简介', href: '#intro' },
@@ -20,8 +21,6 @@ const TRACKED_SECTIONS = [
   'contact',
 ];
 
-const HEADER_OFFSET = 64;
-
 interface NavbarProps {
   onOpenAdmin: () => void;
 }
@@ -30,30 +29,47 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
   const { churchInfo } = useChurchData();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>('top');
+  const headerRef = useRef<HTMLElement | null>(null);
+  const scrollLockRef = useRef<{ targetId: string; until: number } | null>(null);
 
   useEffect(() => {
     let ticking = false;
 
     const updateActiveSection = () => {
       ticking = false;
-      const scrollPosition = window.scrollY + HEADER_OFFSET + 80;
-      const docHeight = document.documentElement.scrollHeight;
-      const winBottom = window.scrollY + window.innerHeight;
-
-      if (winBottom >= docHeight - 32) {
-        setActiveSection('contact');
+      const now = Date.now();
+      const lock = scrollLockRef.current;
+      if (lock && now < lock.until) {
         return;
       }
+
+      const headerHeight = headerRef.current
+        ? Math.round(headerRef.current.getBoundingClientRect().height)
+        : getStickyHeaderHeight();
+      const triggerY = headerHeight + 36;
+      const docHeight = document.documentElement.scrollHeight;
+      const winBottom = window.scrollY + window.innerHeight;
 
       let current = 'top';
       for (const id of TRACKED_SECTIONS) {
         const el = document.getElementById(id);
         if (!el) continue;
-        const top = el.offsetTop;
-        if (scrollPosition >= top) {
+        if (el.getBoundingClientRect().top <= triggerY) {
           current = id;
         }
       }
+
+      if (winBottom >= docHeight - 16) {
+        const contactEl = document.getElementById('contact');
+        const announcementsEl = document.getElementById('announcements');
+        const contactTop = contactEl?.getBoundingClientRect().top ?? Infinity;
+        const announcementsTop = announcementsEl?.getBoundingClientRect().top ?? -Infinity;
+
+        if (contactTop <= triggerY + 120 || announcementsTop < headerHeight - 20) {
+          current = 'contact';
+        }
+      }
+
       setActiveSection(current);
     };
 
@@ -74,40 +90,53 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileOpen(false);
+      }
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [mobileOpen]);
+
   const handleNavClick = (e: MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (!href.startsWith('#')) return;
-    const targetId = href.slice(1);
-    const targetEl = document.getElementById(targetId);
-    if (!targetEl) return;
-
-    e.preventDefault();
-    setMobileOpen(false);
-    setActiveSection(targetId);
-
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const targetTop =
-      targetId === 'top'
-        ? 0
-        : Math.max(0, targetEl.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET);
-
-    window.scrollTo({
-      top: targetTop,
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    handleAnchorClick(e, href, (targetId) => {
+      setMobileOpen(false);
+      setActiveSection(targetId);
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      scrollLockRef.current = {
+        targetId,
+        until: Date.now() + (prefersReducedMotion ? 50 : 750),
+      };
     });
-
-    if (window.location.hash !== href) {
-      window.history.replaceState(null, '', href);
-    }
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-[#FAF8F4]/95 backdrop-blur-sm border-b border-[#E5DFD3]">
-      <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between gap-8">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 bg-[#FAF8F4]/95 backdrop-blur-sm border-b border-[#E5DFD3]"
+    >
+      <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between gap-4 sm:gap-8">
         {/* Zone 1: Single text element wordmark */}
         <a
           href="#top"
           onClick={(e) => handleNavClick(e, '#top')}
-          className="font-editorial text-xl font-semibold tracking-tight text-[#1C1917] whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A5F] rounded-sm"
+          className="font-editorial text-lg sm:text-xl font-semibold tracking-tight text-[#1C1917] truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A5F] rounded-sm"
         >
           {churchInfo.name}
         </a>
@@ -159,9 +188,9 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
         </div>
       </div>
 
-      {/* Mobile navigation drawer */}
+      {/* Mobile navigation drawer (out-of-flow overlay so opening/closing never shifts page scroll targets) */}
       {mobileOpen && (
-        <div className="md:hidden bg-[#FAF8F4] border-b border-[#E5DFD3] px-6 py-4 space-y-2">
+        <div className="md:hidden absolute left-0 right-0 top-full bg-[#FAF8F4] border-b border-[#E5DFD3] px-6 py-4 space-y-2 shadow-lg max-h-[calc(100vh-4rem)] overflow-y-auto">
           <nav aria-label="移动端导航" className="flex flex-col space-y-1">
             {NAV_LINKS.map((link) => {
               const isActive = activeSection === link.id;
@@ -190,7 +219,7 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
                   : 'font-medium text-[#1C1917] hover:text-[#1E3A5F]'
               }`}
             >
-              来访与联系
+              联系方式
             </a>
           </nav>
           <div className="pt-2">

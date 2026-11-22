@@ -6,7 +6,6 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "englishName": { "type": "string", "minLength": 1, "maxLength": 100 },
         "founded": { "type": "string", "minLength": 1, "maxLength": 100 },
         "scriptureQuote": { "type": "string", "minLength": 1, "maxLength": 400 },
         "scriptureRef": { "type": "string", "minLength": 1, "maxLength": 100 },
@@ -26,7 +25,6 @@
       },
       "required": [
         "name",
-        "englishName",
         "founded",
         "scriptureQuote",
         "scriptureRef",
