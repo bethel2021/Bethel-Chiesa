@@ -21,10 +21,16 @@ export function HeroSection() {
           className="w-full h-full object-cover object-center"
         />
 
-        {/* Measured Contrast Scrim */}
+        {/* Subtle Frosted Privacy Veil (10% warm mist without darkening) */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-t from-[#141210]/85 via-[#141210]/45 to-[#141210]/20"
+          className="absolute inset-0 bg-[#FAF8F4]/10 backdrop-blur-[3px]"
+        />
+
+        {/* Measured Bottom Contrast Scrim for Text Readability */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-t from-[#141210]/80 via-[#141210]/35 to-transparent"
         />
 
         <div className="absolute inset-0 flex items-end">
