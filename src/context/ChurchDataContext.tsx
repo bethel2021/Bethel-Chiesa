@@ -32,9 +32,11 @@ import {
 import {
   ANNOUNCEMENTS,
   CHURCH_INFO,
+  isLegacySeededWeekdayMinistries,
   LITURGY_COMMUNION,
   LITURGY_STANDARD,
   normalizeMinistryCategory,
+  normalizeWeekdayMinistries,
   PASTORS_TEAM,
   PULPIT_COWORKERS,
   SUNDAY_MINISTRY_ROSTER,
@@ -249,6 +251,38 @@ function makeDocId(prefix: string): string {
   return `${prefix}-${Date.now()}-${randomPart}`;
 }
 
+function cleanWeekdayMinistry(item: Partial<WeekdayMinistry>, fallbackSort = 0): WeekdayMinistry {
+  const location = clampStr(item.location ?? '', 160);
+  const leader = clampStr(item.leader ?? '', 120);
+  const description = clampStr(item.description ?? '', 400);
+  const parsedSort = Number(item.sortOrder);
+  const sortOrder = Number.isFinite(parsedSort)
+    ? Math.min(1000, Math.max(0, parsedSort))
+    : fallbackSort;
+
+  return {
+    id: String(item.id || makeDocId('wm')),
+    day: clampStr(item.day ?? '', 20),
+    time: clampStr(item.time ?? '', 60),
+    title: clampStr(item.title ?? '', 120),
+    ...(location ? { location } : {}),
+    ...(leader ? { leader } : {}),
+    ...(description ? { description } : {}),
+    sortOrder,
+  };
+}
+
+function toWeekdayFirestoreBody(item: WeekdayMinistry): Record<string, unknown> {
+  const { id: _ignored, location, leader, description, ...required } = item;
+  return {
+    ...required,
+    ...(location ? { location } : {}),
+    ...(leader ? { leader } : {}),
+    ...(description ? { description } : {}),
+    updatedAt: serverTimestamp(),
+  };
+}
+
 function readLocalBundleCache(): CachedBundleEnvelope | null {
   try {
     const raw = window.localStorage.getItem(PUBLIC_CACHE_KEY);
@@ -325,6 +359,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const earlyPrefetchBundleRef = useRef<PublicBundleData | null>(initialEarlyBundle);
   const publicBootStartedRef = useRef(false);
   const wasAdminRef = useRef(false);
+  const legacyCloudWeekdayIdsRef = useRef<string[]>([]);
 
   const activeTheme: SiteThemeId = normalizeSiteTheme(churchInfo.siteTheme);
 
@@ -367,7 +402,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       : SUNDAY_MINISTRY_ROSTER
   );
   const [weekdayMinistries, setWeekdayMinistries] = useState<WeekdayMinistry[]>(
-    initialBundle?.weekdayMinistries?.length ? initialBundle.weekdayMinistries : WEEKDAY_MINISTRIES
+    initialBundle?.weekdayMinistries?.length
+      ? normalizeWeekdayMinistries(initialBundle.weekdayMinistries)
+      : WEEKDAY_MINISTRIES
   );
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
     initialBundle?.announcements?.length ? initialBundle.announcements : ANNOUNCEMENTS
@@ -431,7 +468,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     if (bundle.ministryRoster?.length) {
       setMinistryRoster(normalizeMinistryRoster(bundle.ministryRoster));
     }
-    if (bundle.weekdayMinistries?.length) setWeekdayMinistries(bundle.weekdayMinistries);
+    if (bundle.weekdayMinistries?.length) {
+      setWeekdayMinistries(normalizeWeekdayMinistries(bundle.weekdayMinistries));
+    }
     if (bundle.announcements?.length) setAnnouncements(bundle.announcements);
   }, []);
 
@@ -483,7 +522,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         liturgySteps: snapshot.liturgySteps.slice(0, 40),
         worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
         ministryRoster: normalizeMinistryRoster(snapshot.ministryRoster).slice(0, 80),
-        weekdayMinistries: snapshot.weekdayMinistries.slice(0, 30),
+        weekdayMinistries: normalizeWeekdayMinistries(snapshot.weekdayMinistries)
+          .slice(0, 30)
+          .map((wm, idx) => cleanWeekdayMinistry(wm, idx + 1)),
         announcements: snapshot.announcements.slice(0, 50),
         version,
       };
@@ -609,7 +650,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             liturgySteps: liturgyList,
             worshipSongs: songsList,
             ministryRoster: normalizeMinistryRoster(rosterList),
-            weekdayMinistries: weekdayList,
+            weekdayMinistries: normalizeWeekdayMinistries(weekdayList),
             announcements: annList,
             version: Date.now(),
           };
@@ -704,6 +745,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     if (!authReady) return;
 
     if (!isAdmin) {
+      legacyCloudWeekdayIdsRef.current = [];
       setVisitorRequests([]);
       setAdminUsers([]);
       if (wasAdminRef.current) {
@@ -821,7 +863,15 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     );
     subscribeSorted<WeekdayMinistry>(
       'weekday_ministries',
-      setWeekdayMinistries,
+      (items) => {
+        if (isLegacySeededWeekdayMinistries(items)) {
+          legacyCloudWeekdayIdsRef.current = items.map((item) => item.id);
+          setWeekdayMinistries(WEEKDAY_MINISTRIES);
+        } else {
+          legacyCloudWeekdayIdsRef.current = [];
+          setWeekdayMinistries(normalizeWeekdayMinistries(items));
+        }
+      },
       WEEKDAY_MINISTRIES
     );
     subscribeSorted<AnnouncementItem>('announcements', setAnnouncements, ANNOUNCEMENTS);
@@ -964,11 +1014,12 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         }
 
         for (const ls of current.liturgySteps) {
+          const cleanRef = clampStr(ls.scriptureOrHymn ?? '', 200);
           batch.set(doc(db, 'liturgy_steps', ls.id), {
             liturgyType: ls.liturgyType,
             time: ls.time,
             step: ls.step,
-            scriptureOrHymn: ls.scriptureOrHymn,
+            ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
             leader: ls.leader,
             note: ls.note,
             sortOrder: ls.sortOrder,
@@ -997,17 +1048,12 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        for (const wm of current.weekdayMinistries) {
-          batch.set(doc(db, 'weekday_ministries', wm.id), {
-            day: wm.day,
-            time: wm.time,
-            title: wm.title,
-            location: wm.location,
-            leader: wm.leader,
-            description: wm.description,
-            sortOrder: wm.sortOrder,
-            updatedAt: serverTimestamp(),
-          });
+        for (const [idx, wm] of normalizeWeekdayMinistries(current.weekdayMinistries).entries()) {
+          const cleanedWm = cleanWeekdayMinistry(wm, idx + 1);
+          batch.set(
+            doc(db, 'weekday_ministries', cleanedWm.id),
+            toWeekdayFirestoreBody(cleanedWm)
+          );
         }
 
         for (const ann of current.announcements) {
@@ -1234,7 +1280,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         liturgyType: item.liturgyType,
         time: clampStr(item.time, 40),
         step: clampStr(item.step, 120),
-        scriptureOrHymn: clampStr(item.scriptureOrHymn, 200),
         leader: clampStr(item.leader, 100),
         note: clampStr(item.note, 500),
         sortOrder: Number(item.sortOrder) || 0,
@@ -1362,25 +1407,35 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: WeekdayMinistry) => {
       const id = item.id || makeDocId('wm');
       const path = `weekday_ministries/${id}`;
-      const cleaned: WeekdayMinistry = {
-        id,
-        day: clampStr(item.day, 20),
-        time: clampStr(item.time, 60),
-        title: clampStr(item.title, 120),
-        location: clampStr(item.location, 160),
-        leader: clampStr(item.leader, 120),
-        description: clampStr(item.description, 400),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
+      const cleaned = cleanWeekdayMinistry({ ...item, id }, 0);
       try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'weekday_ministries', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
+        const legacyIds = legacyCloudWeekdayIdsRef.current;
+        let nextList: WeekdayMinistry[];
+        if (legacyIds.length > 0) {
+          const baseList = latestStateRef.current.weekdayMinistries.map((wm, idx) =>
+            cleanWeekdayMinistry(wm, idx + 1)
+          );
+          nextList = upsertSorted(baseList, cleaned);
+          const nextIdSet = new Set(nextList.map((wm) => wm.id));
+          const batch = writeBatch(db);
+          for (const legacyId of legacyIds) {
+            if (!nextIdSet.has(legacyId)) {
+              batch.delete(doc(db, 'weekday_ministries', legacyId));
+            }
+          }
+          for (const wm of nextList) {
+            batch.set(doc(db, 'weekday_ministries', wm.id), toWeekdayFirestoreBody(wm));
+          }
+          await batch.commit();
+          legacyCloudWeekdayIdsRef.current = [];
+        } else {
+          await setDoc(doc(db, 'weekday_ministries', id), toWeekdayFirestoreBody(cleaned));
+          nextList = upsertSorted(latestStateRef.current.weekdayMinistries, cleaned);
+        }
+        setWeekdayMinistries(nextList);
         await publishBundleSnapshot({
           ...latestStateRef.current,
-          weekdayMinistries: upsertSorted(latestStateRef.current.weekdayMinistries, cleaned),
+          weekdayMinistries: nextList,
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, path);
@@ -1392,10 +1447,33 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const deleteWeekdayMinistry = useCallback(
     async (id: string) => {
       try {
-        await deleteDoc(doc(db, 'weekday_ministries', id));
+        const legacyIds = legacyCloudWeekdayIdsRef.current;
+        let nextList: WeekdayMinistry[];
+        if (legacyIds.length > 0) {
+          const baseList = latestStateRef.current.weekdayMinistries.map((wm, idx) =>
+            cleanWeekdayMinistry(wm, idx + 1)
+          );
+          nextList = removeById(baseList, id);
+          const nextIdSet = new Set(nextList.map((wm) => wm.id));
+          const batch = writeBatch(db);
+          for (const legacyId of legacyIds) {
+            if (!nextIdSet.has(legacyId)) {
+              batch.delete(doc(db, 'weekday_ministries', legacyId));
+            }
+          }
+          for (const wm of nextList) {
+            batch.set(doc(db, 'weekday_ministries', wm.id), toWeekdayFirestoreBody(wm));
+          }
+          await batch.commit();
+          legacyCloudWeekdayIdsRef.current = [];
+        } else {
+          await deleteDoc(doc(db, 'weekday_ministries', id));
+          nextList = removeById(latestStateRef.current.weekdayMinistries, id);
+        }
+        setWeekdayMinistries(nextList);
         await publishBundleSnapshot({
           ...latestStateRef.current,
-          weekdayMinistries: removeById(latestStateRef.current.weekdayMinistries, id),
+          weekdayMinistries: nextList,
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.DELETE, `weekday_ministries/${id}`);

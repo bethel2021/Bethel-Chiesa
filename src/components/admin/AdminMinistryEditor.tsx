@@ -94,14 +94,14 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       <div className="space-y-8">
         <AdminPanelHeader
           title="周间事工管理"
-          description="编辑周二至周六各聚会小组、祷告会、诗班排练与社区探访安排。"
+          description="编辑守望祷告、乐队排练、诗班学习、查经聚会、敬拜练习及迦南诗班等聚会安排。"
           action={
             <button
               type="button"
               onClick={() =>
                 setEditingWeekday({
                   id: '',
-                  day: '周二',
+                  day: '',
                   time: '',
                   title: '',
                   location: '',
@@ -127,20 +127,36 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-[#1C1917]">
-                  <span className="text-[#1E3A5F]">{wm.day}</span>
-                  <span className="font-mono text-xs text-[#57534E] tabular-nums">{wm.time}</span>
+                <div className="flex flex-wrap items-baseline gap-3 text-sm font-semibold text-[#1C1917]">
+                  <span className="font-mono text-xs text-[#78716C] tabular-nums">
+                    #{wm.sortOrder}
+                  </span>
                   <span>{wm.title}</span>
+                  <span className="font-mono text-xs font-medium text-[#1E3A5F] tabular-nums">
+                    {wm.day}
+                    {wm.time}
+                  </span>
                 </div>
-                <p className="text-xs text-[#57534E]">
-                  地点：{wm.location} · 负责：{wm.leader}
-                </p>
-                <p className="text-xs text-[#78716C]">{wm.description}</p>
+                {(wm.location || wm.leader) && (
+                  <p className="text-xs text-[#57534E]">
+                    {[wm.location ? `地点：${wm.location}` : '', wm.leader ? `负责：${wm.leader}` : '']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
+                {wm.description && <p className="text-xs text-[#78716C]">{wm.description}</p>}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setEditingWeekday(wm)}
+                  onClick={() =>
+                    setEditingWeekday({
+                      ...wm,
+                      location: wm.location ?? '',
+                      leader: wm.leader ?? '',
+                      description: wm.description ?? '',
+                    })
+                  }
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -184,18 +200,32 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <FieldLabel label="聚会名称 *">
+                <input
+                  type="text"
+                  required
+                  maxLength={120}
+                  value={editingWeekday.title}
+                  onChange={(e) =>
+                    setEditingWeekday({ ...editingWeekday, title: e.target.value })
+                  }
+                  placeholder="例如：守望祷告"
+                  className={inputClass}
+                />
+              </FieldLabel>
               <div className="grid grid-cols-3 gap-4">
-                <FieldLabel label="星期 *">
+                <FieldLabel label="日期 / 周期 *" hint="如：一三五、周五">
                   <input
                     type="text"
                     required
                     maxLength={20}
                     value={editingWeekday.day}
                     onChange={(e) => setEditingWeekday({ ...editingWeekday, day: e.target.value })}
+                    placeholder="例如：一三五"
                     className={inputClass}
                   />
                 </FieldLabel>
-                <FieldLabel label="时间段 *">
+                <FieldLabel label="时间段 *" hint="如：上午9:00-10:30">
                   <input
                     type="text"
                     required
@@ -204,6 +234,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                     onChange={(e) =>
                       setEditingWeekday({ ...editingWeekday, time: e.target.value })
                     }
+                    placeholder="例如：上午9:00-10:30"
                     className={inputClass}
                   />
                 </FieldLabel>
@@ -223,37 +254,23 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                   />
                 </FieldLabel>
               </div>
-              <FieldLabel label="聚会名称 *">
-                <input
-                  type="text"
-                  required
-                  maxLength={120}
-                  value={editingWeekday.title}
-                  onChange={(e) =>
-                    setEditingWeekday({ ...editingWeekday, title: e.target.value })
-                  }
-                  className={inputClass}
-                />
-              </FieldLabel>
               <div className="grid grid-cols-2 gap-4">
-                <FieldLabel label="聚会地点 *">
+                <FieldLabel label="聚会地点（可选）">
                   <input
                     type="text"
-                    required
                     maxLength={160}
-                    value={editingWeekday.location}
+                    value={editingWeekday.location ?? ''}
                     onChange={(e) =>
                       setEditingWeekday({ ...editingWeekday, location: e.target.value })
                     }
                     className={inputClass}
                   />
                 </FieldLabel>
-                <FieldLabel label="负责同工 *">
+                <FieldLabel label="负责同工（可选）">
                   <input
                     type="text"
-                    required
                     maxLength={120}
-                    value={editingWeekday.leader}
+                    value={editingWeekday.leader ?? ''}
                     onChange={(e) =>
                       setEditingWeekday({ ...editingWeekday, leader: e.target.value })
                     }
@@ -261,12 +278,11 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                   />
                 </FieldLabel>
               </div>
-              <FieldLabel label="事工简介 *">
+              <FieldLabel label="事工简介（可选）">
                 <textarea
-                  rows={3}
-                  required
+                  rows={2}
                   maxLength={400}
-                  value={editingWeekday.description}
+                  value={editingWeekday.description ?? ''}
                   onChange={(e) =>
                     setEditingWeekday({ ...editingWeekday, description: e.target.value })
                   }
@@ -312,7 +328,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     <div className="space-y-8">
       <AdminPanelHeader
         title="主日事工岗位安排（含主日学与团契）"
-        description="管理讲台与敬拜、祷告与读经、音画影音技术、接待与后勤、主日学与团契及外派事工轮值表，并可每周更新轮值日期标题。"
+        description="管理讲台与敬拜、祷告献诗读经、音画影音技术、接待与后勤、主日学与团契及外派事工轮值表，并可每周更新轮值日期标题。"
         action={
           <button
             type="button"
@@ -518,7 +534,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               />
             </FieldLabel>
 
-            <FieldLabel label={`本周值班同工（${thisWeekLabel}） *`}>
+            <FieldLabel label={`本周服事人员（${thisWeekLabel}） *`}>
               <input
                 type="text"
                 required
@@ -529,7 +545,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               />
             </FieldLabel>
 
-            <FieldLabel label={`下周值班同工（${nextWeekLabel}） *`}>
+            <FieldLabel label={`下周服事人员（${nextWeekLabel}） *`}>
               <input
                 type="text"
                 required

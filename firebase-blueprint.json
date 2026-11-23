@@ -96,13 +96,13 @@
         "liturgyType": { "type": "string", "enum": ["standard", "communion"] },
         "time": { "type": "string", "minLength": 1, "maxLength": 40 },
         "step": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "scriptureOrHymn": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "scriptureOrHymn": { "type": "string", "maxLength": 200 },
         "leader": { "type": "string", "minLength": 1, "maxLength": 100 },
         "note": { "type": "string", "minLength": 1, "maxLength": 500 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["liturgyType", "time", "step", "scriptureOrHymn", "leader", "note", "sortOrder", "updatedAt"]
+      "required": ["liturgyType", "time", "step", "leader", "note", "sortOrder", "updatedAt"]
     },
     "WorshipSongDoc": {
       "title": "WorshipSongDoc",
@@ -143,19 +143,19 @@
     },
     "WeekdayMinistryDoc": {
       "title": "WeekdayMinistryDoc",
-      "description": "Tuesday to Saturday weekday ministry schedule",
+      "description": "Weekday ministry schedule",
       "type": "object",
       "properties": {
         "day": { "type": "string", "minLength": 1, "maxLength": 20 },
         "time": { "type": "string", "minLength": 1, "maxLength": 60 },
         "title": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "location": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "leader": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "description": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "location": { "type": "string", "maxLength": 160 },
+        "leader": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 400 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["day", "time", "title", "location", "leader", "description", "sortOrder", "updatedAt"]
+      "required": ["day", "time", "title", "sortOrder", "updatedAt"]
     },
     "AnnouncementDoc": {
       "title": "AnnouncementDoc",

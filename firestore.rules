@@ -173,14 +173,14 @@ service cloud.firestore {
 
     function isValidLiturgyStep(data) {
       return data.keys().hasAll([
-        'liturgyType', 'time', 'step', 'scriptureOrHymn', 'leader', 'note', 'sortOrder', 'updatedAt'
+        'liturgyType', 'time', 'step', 'leader', 'note', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
         'liturgyType', 'time', 'step', 'scriptureOrHymn', 'leader', 'note', 'sortOrder', 'updatedAt'
       ])
       && data.liturgyType in ['standard', 'communion']
       && isStringBounds(data.time, 1, 40)
       && isStringBounds(data.step, 1, 120)
-      && isStringBounds(data.scriptureOrHymn, 1, 200)
+      && (!('scriptureOrHymn' in data) || isStringBounds(data.scriptureOrHymn, 0, 200))
       && isStringBounds(data.leader, 1, 100)
       && isStringBounds(data.note, 1, 500)
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
@@ -223,16 +223,16 @@ service cloud.firestore {
 
     function isValidWeekdayMinistry(data) {
       return data.keys().hasAll([
-        'day', 'time', 'title', 'location', 'leader', 'description', 'sortOrder', 'updatedAt'
+        'day', 'time', 'title', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
         'day', 'time', 'title', 'location', 'leader', 'description', 'sortOrder', 'updatedAt'
       ])
       && isStringBounds(data.day, 1, 20)
       && isStringBounds(data.time, 1, 60)
       && isStringBounds(data.title, 1, 120)
-      && isStringBounds(data.location, 1, 160)
-      && isStringBounds(data.leader, 1, 120)
-      && isStringBounds(data.description, 1, 400)
+      && (!('location' in data) || isStringBounds(data.location, 0, 160))
+      && (!('leader' in data) || isStringBounds(data.leader, 0, 120))
+      && (!('description' in data) || isStringBounds(data.description, 0, 400))
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
     }

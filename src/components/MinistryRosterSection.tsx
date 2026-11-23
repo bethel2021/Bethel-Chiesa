@@ -102,11 +102,11 @@ export function MinistryRosterSection() {
         <div className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg overflow-hidden mb-10">
           <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3.5 bg-[var(--theme-surface-alt)]/70 border-b border-[var(--theme-border)] text-xs font-medium text-[var(--theme-ink-muted)]">
             <div className="col-span-3">事工分类</div>
-            <div className="col-span-4">岗位 / 课程名称</div>
+            <div className="col-span-4">事工岗位</div>
             <div className="col-span-5">
               {weekMode === 'thisWeek'
-                ? `本周值班同工（${churchInfo.thisWeekLabel}）`
-                : `下周值班同工（${churchInfo.nextWeekLabel}）`}
+                ? `服事人员（${churchInfo.thisWeekLabel}）`
+                : `服事人员（${churchInfo.nextWeekLabel}）`}
             </div>
           </div>
 
@@ -144,47 +144,31 @@ export function MinistryRosterSection() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-7">
             <div className="max-w-2xl">
               <p className="text-xs tracking-widest text-[var(--theme-ink-subtle)] mb-2">
-                05. 平日牧养与社区守望
+                05. 平日牧养与守望
               </p>
               <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] tracking-tight">
                 周间事工安排
               </h3>
             </div>
             <p className="text-sm text-[var(--theme-ink-muted)] max-w-md">
-              除主日崇拜外，教会于周二至周六持续开展查经祷告、诗班排练、小组查经与社区长者探访。
+              除主日崇拜外，教会周间持续开展守望祷告、乐队排练、诗班学习与查经聚会等服事。
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
             {weekdayMinistries.map((wm) => (
-              <article
+              <div
                 key={wm.id}
-                className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg p-5 flex flex-col justify-between"
+                className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg px-5 py-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 hover:bg-[var(--theme-surface)]/45 transition-colors"
               >
-                <div>
-                  <div className="flex items-baseline justify-between gap-2 pb-3 mb-3 border-b border-[var(--theme-surface-alt)]">
-                    <span className="font-editorial text-xl font-semibold text-[var(--theme-accent)]">
-                      {wm.day}
-                    </span>
-                    <span className="font-mono text-xs text-[var(--theme-ink-muted)] tabular-nums">
-                      {wm.time}
-                    </span>
-                  </div>
-
-                  <h4 className="font-editorial text-base font-semibold text-[var(--theme-ink)] mb-2">
-                    {wm.title}
-                  </h4>
-
-                  <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed mb-4">
-                    {wm.description}
-                  </p>
-                </div>
-
-                <div className="pt-3 border-t border-[var(--theme-surface-alt)] space-y-1 text-xs text-[var(--theme-ink-subtle)]">
-                  <p>地点：{wm.location}</p>
-                  <p>负责：{wm.leader}</p>
-                </div>
-              </article>
+                <h4 className="font-editorial text-lg font-semibold text-[var(--theme-ink)]">
+                  {wm.title}
+                </h4>
+                <span className="font-mono text-sm font-medium text-[var(--theme-accent)] tabular-nums">
+                  {wm.day}
+                  {wm.time}
+                </span>
+              </div>
             ))}
           </div>
         </div>

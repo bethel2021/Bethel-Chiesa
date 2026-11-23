@@ -159,9 +159,6 @@ export function WorshipSection() {
                           </h4>
                           <span className="text-xs text-[var(--theme-ink-subtle)]">{item.leader}</span>
                         </div>
-                        <p className="text-xs font-medium text-[var(--theme-gold)] mb-1">
-                          {item.scriptureOrHymn}
-                        </p>
                         <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed">
                           {item.note}
                         </p>

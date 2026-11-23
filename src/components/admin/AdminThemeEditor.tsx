@@ -53,7 +53,7 @@ export function AdminThemeEditor() {
   return (
     <div className="space-y-6">
       <AdminPanelHeader
-        title="主题样式"
+        title="主题样式选择"
         description="在「经典」、「圣诞节」、「复活节」、「感恩节」四种预设风格中一键切换，保存后立即同步更新 Firestore 配置，全站所有版块结构保持不变。"
         action={
           currentTheme !== 'classic' ? (

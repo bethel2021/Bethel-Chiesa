@@ -60,7 +60,7 @@ export interface LiturgyStep {
   liturgyType: 'standard' | 'communion';
   time: string;
   step: string;
-  scriptureOrHymn: string;
+  scriptureOrHymn?: string;
   leader: string;
   note: string;
   sortOrder: number;
@@ -84,7 +84,7 @@ export type MinistryRosterCategory =
 
 export const MINISTRY_CATEGORY_OPTIONS: { id: MinistryRosterCategory; label: string }[] = [
   { id: 'worship', label: '讲台与敬拜' },
-  { id: 'prayer-bible', label: '祷告与读经' },
+  { id: 'prayer-bible', label: '祷告献诗读经' },
   { id: 'media-tech', label: '音画影音技术' },
   { id: 'hospitality-logistics', label: '接待与后勤' },
   { id: 'sunday-school-fellowship', label: '主日学与团契' },
@@ -102,7 +102,7 @@ export const MINISTRY_CATEGORY_ORDER: Record<MinistryRosterCategory, number> = {
 
 export const MINISTRY_CATEGORY_LABELS: Record<MinistryRosterCategory, string> = {
   worship: '讲台与敬拜',
-  'prayer-bible': '祷告与读经',
+  'prayer-bible': '祷告献诗读经',
   'media-tech': '音画影音技术',
   'hospitality-logistics': '接待与后勤',
   'sunday-school-fellowship': '主日学与团契',
@@ -140,9 +140,9 @@ export interface WeekdayMinistry {
   day: string;
   time: string;
   title: string;
-  location: string;
-  leader: string;
-  description: string;
+  location?: string;
+  leader?: string;
+  description?: string;
   sortOrder: number;
 }
 
@@ -626,56 +626,68 @@ export const SUNDAY_MINISTRY_ROSTER: MinistryRosterItem[] = [
 
 export const WEEKDAY_MINISTRIES: WeekdayMinistry[] = [
   {
-    id: 'wm-tue',
-    day: '周二',
-    time: '19:30 – 21:00',
-    title: '全教会查经祷告会',
-    location: '一楼大堂（同步开启线上会议）',
-    leader: '林恩典 牧师 / 张书亚 弟兄',
-    description: '目前查考《诗篇》卷三，查经后分小组为教会守望、肢体疾苦及普世宣教同心祷告。',
+    id: 'wm-prayer',
+    day: '一三五',
+    time: '上午9:00-10:30',
+    title: '守望祷告',
     sortOrder: 1,
   },
   {
-    id: 'wm-wed',
-    day: '周三',
-    time: '19:30 – 21:00',
-    title: '姊妹守望祷告会 · 弟兄读书会',
-    location: '二楼 201 室 / 203 室',
-    leader: '陈雅惠 牧师 / 许保罗 长老',
-    description: '姊妹专心为家庭、儿女与教会复兴代求；弟兄共读《属灵领袖》并互相劝勉。',
+    id: 'wm-band',
+    day: '二四日',
+    time: '上午8:00-10:00',
+    title: '乐队排练',
     sortOrder: 2,
   },
   {
-    id: 'wm-thu',
-    day: '周四',
-    time: '19:30 – 21:15',
-    title: '伯特利圣诗班与敬拜团排练',
-    location: '一楼大堂诗班席',
-    leader: '苏米利暗 执事',
-    description: '灵修祷告、视唱练耳及排练当月主日献诗与节期圣乐曲目，欢迎有音乐恩赐肢体加入试音。',
+    id: 'wm-choir-study',
+    day: '周五',
+    time: '晚上20:00-22:00',
+    title: '诗班学习',
     sortOrder: 3,
   },
   {
-    id: 'wm-fri',
-    day: '周五',
-    time: '19:00 – 21:00',
-    title: '校园团契 & 社区家庭查经小组',
-    location: '三楼青年厅及徐汇/静安各家庭聚会点',
-    leader: '周以撒 传道及各小组长',
-    description: '就近在社区家庭中分享晚餐、查考主日信息延伸问题，建立彼此照应的属灵家人关系。',
+    id: 'wm-bible',
+    day: '周六',
+    time: '晚上20:00-21:00',
+    title: '查经聚会',
     sortOrder: 4,
   },
   {
-    id: 'wm-sat',
+    id: 'wm-worship-practice',
     day: '周六',
-    time: '09:30 – 12:00',
-    title: '社区长者探访与慈惠关怀行动',
-    location: '教会集合出发 · 周边街道社区',
-    leader: '许保罗 长老 · 慈惠执事会',
-    description: '每月一、三周周六探访独居高龄长者及患病肢体，送去生活关怀与圣经安慰祷告。',
+    time: '晚上21:00-22:30',
+    title: '敬拜练习',
     sortOrder: 5,
   },
+  {
+    id: 'wm-canaan-choir',
+    day: '二四周主日',
+    time: '17:00-18:00',
+    title: '迦南诗班',
+    sortOrder: 6,
+  },
 ];
+
+const LEGACY_WEEKDAY_SEED_SIGNATURES: Record<string, string> = {
+  'wm-tue': '全教会查经祷告会',
+  'wm-wed': '姊妹守望祷告会 · 弟兄读书会',
+  'wm-thu': '伯特利圣诗班与敬拜团排练',
+  'wm-fri': '校园团契 & 社区家庭查经小组',
+  'wm-sat': '社区长者探访与慈惠关怀行动',
+};
+
+export function isLegacySeededWeekdayMinistries(list: WeekdayMinistry[]): boolean {
+  if (list.length !== 5) return false;
+  return list.every((item) => LEGACY_WEEKDAY_SEED_SIGNATURES[item.id] === item.title);
+}
+
+export function normalizeWeekdayMinistries(list: WeekdayMinistry[]): WeekdayMinistry[] {
+  if (isLegacySeededWeekdayMinistries(list)) {
+    return WEEKDAY_MINISTRIES;
+  }
+  return list;
+}
 
 export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {

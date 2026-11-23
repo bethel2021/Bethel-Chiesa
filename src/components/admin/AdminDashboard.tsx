@@ -45,7 +45,6 @@ const SIDEBAR_ITEMS: {
   icon: typeof FileText;
 }[] = [
   { id: 'overview', label: '后台总览与同步', icon: Database },
-  { id: 'theme', label: '主题样式', icon: Palette },
   { id: 'info', label: '教会简介与联系', icon: FileText },
   { id: 'pastors', label: '牧者及讲台同工', icon: Users },
   { id: 'worship', label: '主日时间与流程', icon: BookOpen },
@@ -54,6 +53,7 @@ const SIDEBAR_ITEMS: {
   { id: 'weekday', label: '周间事工安排', icon: CalendarDays },
   { id: 'announcements', label: '最新聚会公告', icon: Bell },
   { id: 'visitors', label: '来访留言与权限', icon: ShieldCheck },
+  { id: 'theme', label: '主题样式选择', icon: Palette },
 ];
 
 export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
@@ -463,12 +463,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
                   {
-                    tab: 'theme' as AdminTab,
-                    label: '主题样式',
-                    count: `当前：${currentThemeName}`,
-                    sub: '经典 · 圣诞节 · 复活节 · 感恩节',
-                  },
-                  {
                     tab: 'info' as AdminTab,
                     label: '教会简介与联系',
                     count: hasCloudData ? '云端已就绪' : '使用默认模板',
@@ -502,7 +496,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     tab: 'weekday' as AdminTab,
                     label: '周间事工安排',
                     count: `${weekdayMinistries.length} 项聚会`,
-                    sub: '周二至周六常规聚会',
+                    sub: '祷告 · 排练 · 诗班 · 查经',
                   },
                   {
                     tab: 'announcements' as AdminTab,
@@ -515,6 +509,12 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     label: '来访与代祷留言',
                     count: `${visitorRequests.length} 条记录`,
                     sub: '待跟进与权限分配',
+                  },
+                  {
+                    tab: 'theme' as AdminTab,
+                    label: '主题样式选择',
+                    count: `当前：${currentThemeName}`,
+                    sub: '经典 · 圣诞节 · 复活节 · 感恩节',
                   },
                 ].map((card) => (
                   <button

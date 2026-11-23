@@ -397,7 +397,6 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 liturgyType: liturgyFilter,
                 time: '',
                 step: '',
-                scriptureOrHymn: '',
                 leader: '',
                 note: '',
                 sortOrder: filteredSteps.length + 1,
@@ -424,7 +423,6 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                   <span>{step.step}</span>
                   <span className="text-xs font-normal text-[#78716C]">· {step.leader}</span>
                 </div>
-                <p className="text-xs text-[#8B5E34]">{step.scriptureOrHymn}</p>
                 <p className="text-xs text-[#57534E]">{step.note}</p>
               </div>
 
@@ -635,18 +633,6 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 />
               </FieldLabel>
             </div>
-            <FieldLabel label="经文、讲题或诗歌 *">
-              <input
-                type="text"
-                required
-                maxLength={200}
-                value={editingStep.scriptureOrHymn}
-                onChange={(e) =>
-                  setEditingStep({ ...editingStep, scriptureOrHymn: e.target.value })
-                }
-                className={inputClass}
-              />
-            </FieldLabel>
             <FieldLabel label="礼仪说明 *">
               <textarea
                 rows={3}
