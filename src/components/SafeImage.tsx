@@ -142,7 +142,7 @@ export function SafeImage({
       src={effectiveSrc}
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}
-      decoding="async"
+      decoding={priority ? 'sync' : 'async'}
       fetchPriority={priority ? 'high' : 'low'}
       referrerPolicy="no-referrer"
       onError={() => setHasError(true)}

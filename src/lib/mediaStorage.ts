@@ -1,4 +1,5 @@
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { consumeEarlyHeroMediaChunks } from './earlyPrefetch';
 import { db } from './firebase';
 
 export const MEDIA_URI_REGEX = /^media:\/\/([a-zA-Z0-9_-]+)\/([1-9][0-9]?)$/;
@@ -60,17 +61,20 @@ async function putBlobInBrowserCache(mediaUri: string, blob: Blob): Promise<stri
   resolvedObjectUrls.set(mediaUri, objectUrl);
 
   if (typeof window !== 'undefined' && 'caches' in window) {
-    try {
-      const match = mediaUri.match(MEDIA_URI_REGEX);
-      if (match) {
-        const cache = await window.caches.open(CACHE_NAME);
-        await cache.put(
-          `https://bethel-media.local/${match[1]}/${match[2]}`,
-          new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } })
-        );
-      }
-    } catch {
-      // Ignore Cache API storage quota/private mode failures
+    const match = mediaUri.match(MEDIA_URI_REGEX);
+    if (match) {
+      // Persist to Cache API asynchronously without blocking immediate image display
+      void window.caches
+        .open(CACHE_NAME)
+        .then((cache) =>
+          cache.put(
+            `https://bethel-media.local/${match[1]}/${match[2]}`,
+            new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } })
+          )
+        )
+        .catch(() => {
+          // Ignore Cache API storage quota/private mode failures
+        });
     }
   }
 
@@ -114,23 +118,27 @@ export async function resolveMediaUri(mediaUri: string): Promise<string> {
       }
     }
 
-    const chunkSnaps = await Promise.all(
-      Array.from({ length: totalChunks }, (_, idx) =>
-        getDoc(doc(db, 'media_chunks', `${mediaId}__${idx}`))
-      )
-    );
+    let parts = await consumeEarlyHeroMediaChunks(normalized);
 
-    const parts: string[] = [];
-    for (let i = 0; i < totalChunks; i += 1) {
-      const snap = chunkSnaps[i];
-      if (!snap.exists()) {
-        throw new Error('部分云端原图分片缺失。');
+    if (!parts || parts.length !== totalChunks) {
+      const chunkSnaps = await Promise.all(
+        Array.from({ length: totalChunks }, (_, idx) =>
+          getDoc(doc(db, 'media_chunks', `${mediaId}__${idx}`))
+        )
+      );
+
+      parts = [];
+      for (let i = 0; i < totalChunks; i += 1) {
+        const snap = chunkSnaps[i];
+        if (!snap.exists()) {
+          throw new Error('部分云端原图分片缺失。');
+        }
+        const chunkData = snap.data()?.data;
+        if (typeof chunkData !== 'string' || !chunkData) {
+          throw new Error('云端原图数据格式无效。');
+        }
+        parts.push(chunkData);
       }
-      const chunkData = snap.data()?.data;
-      if (typeof chunkData !== 'string' || !chunkData) {
-        throw new Error('云端原图数据格式无效。');
-      }
-      parts.push(chunkData);
     }
 
     const fullDataUrl = parts.join('');

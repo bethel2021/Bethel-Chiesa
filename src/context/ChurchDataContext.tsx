@@ -72,6 +72,10 @@ import {
   normalizeSiteTheme,
   type SiteThemeId,
 } from '../data/themes';
+import {
+  awaitEarlyPrefetchedBundle,
+  getEarlyPrefetchedBundleSnapshot,
+} from '../lib/earlyPrefetch';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
 const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
@@ -286,30 +290,41 @@ function removeById<T extends { id: string }>(list: T[], id: string): T[] {
 
 export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const initialCache = typeof window !== 'undefined' ? readLocalBundleCache() : null;
+  const earlySnapshot =
+    !initialCache && typeof window !== 'undefined' ? getEarlyPrefetchedBundleSnapshot() : null;
+  const initialEarlyBundle = earlySnapshot?.status === 'ok' ? earlySnapshot.bundle : null;
+  const initialBundle = initialCache?.bundle ?? initialEarlyBundle;
 
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [cloudLoading, setCloudLoading] = useState(!initialCache);
-  const [hasCloudData, setHasCloudData] = useState(Boolean(initialCache?.hasCloudBundle));
-  const [hasPublicBundle, setHasPublicBundle] = useState(Boolean(initialCache?.hasCloudBundle));
+  const [cloudLoading, setCloudLoading] = useState(!initialCache && !initialEarlyBundle);
+  const [hasCloudData, setHasCloudData] = useState(
+    Boolean(initialCache?.hasCloudBundle || initialEarlyBundle)
+  );
+  const [hasPublicBundle, setHasPublicBundle] = useState(
+    Boolean(initialCache?.hasCloudBundle || initialEarlyBundle)
+  );
   const [dataSource, setDataSource] = useState<DataSourceMode>(
-    initialCache ? 'local-cache' : 'default'
+    initialCache ? 'local-cache' : initialEarlyBundle ? 'cloud-bundle' : 'default'
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(
     initialCache ? initialCache.cachedAt : null
   );
 
   const [churchInfo, setChurchInfo] = useState<ChurchInfo>(
-    initialCache?.bundle.churchInfo
+    initialBundle?.churchInfo
       ? {
           ...CHURCH_INFO,
-          ...initialCache.bundle.churchInfo,
-          siteTheme: normalizeSiteTheme(initialCache.bundle.churchInfo.siteTheme),
+          ...initialBundle.churchInfo,
+          siteTheme: normalizeSiteTheme(initialBundle.churchInfo.siteTheme),
         }
       : CHURCH_INFO
   );
-  const initialCachedHeroRef = useRef(initialCache?.bundle.churchInfo?.heroImage);
+  const initialCachedHeroRef = useRef(initialBundle?.churchInfo?.heroImage);
+  const earlyPrefetchBundleRef = useRef<PublicBundleData | null>(initialEarlyBundle);
+  const publicBootStartedRef = useRef(false);
+  const wasAdminRef = useRef(false);
 
   const activeTheme: SiteThemeId = normalizeSiteTheme(churchInfo.siteTheme);
 
@@ -324,41 +339,38 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       preloadImageRef(initialCachedHeroRef.current, 'high');
     }
   }, []);
+
   const [pastors, setPastors] = useState<PastorProfile[]>(
-    initialCache?.bundle.pastors?.length ? initialCache.bundle.pastors : PASTORS_TEAM
+    initialBundle?.pastors?.length ? initialBundle.pastors : PASTORS_TEAM
   );
   const [coworkers, setCoworkers] = useState<PulpitCoworker[]>(
-    initialCache?.bundle.coworkers?.length
-      ? normalizeCoworkers(initialCache.bundle.coworkers)
+    initialBundle?.coworkers?.length
+      ? normalizeCoworkers(initialBundle.coworkers)
       : PULPIT_COWORKERS
   );
   const [worshipTimes, setWorshipTimes] = useState<WorshipTimeSlot[]>(
-    initialCache?.bundle.worshipTimes?.length
-      ? initialCache.bundle.worshipTimes
-      : SUNDAY_WORSHIP_TIMES
+    initialBundle?.worshipTimes?.length ? initialBundle.worshipTimes : SUNDAY_WORSHIP_TIMES
   );
   const [liturgySteps, setLiturgySteps] = useState<LiturgyStep[]>(
-    initialCache?.bundle.liturgySteps?.length
-      ? initialCache.bundle.liturgySteps
+    initialBundle?.liturgySteps?.length
+      ? initialBundle.liturgySteps
       : [...LITURGY_STANDARD, ...LITURGY_COMMUNION]
   );
   const [worshipSongs, setWorshipSongs] = useState<WorshipSong[]>(
-    initialCache?.bundle.worshipSongs?.length ? initialCache.bundle.worshipSongs : WORSHIP_SONGS
+    initialBundle?.worshipSongs?.length
+      ? normalizeWorshipSongs(initialBundle.worshipSongs)
+      : WORSHIP_SONGS
   );
   const [ministryRoster, setMinistryRoster] = useState<MinistryRosterItem[]>(
-    initialCache?.bundle.ministryRoster?.length
-      ? normalizeMinistryRoster(initialCache.bundle.ministryRoster)
+    initialBundle?.ministryRoster?.length
+      ? normalizeMinistryRoster(initialBundle.ministryRoster)
       : SUNDAY_MINISTRY_ROSTER
   );
   const [weekdayMinistries, setWeekdayMinistries] = useState<WeekdayMinistry[]>(
-    initialCache?.bundle.weekdayMinistries?.length
-      ? initialCache.bundle.weekdayMinistries
-      : WEEKDAY_MINISTRIES
+    initialBundle?.weekdayMinistries?.length ? initialBundle.weekdayMinistries : WEEKDAY_MINISTRIES
   );
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
-    initialCache?.bundle.announcements?.length
-      ? initialCache.bundle.announcements
-      : ANNOUNCEMENTS
+    initialBundle?.announcements?.length ? initialBundle.announcements : ANNOUNCEMENTS
   );
 
   const [visitorRequests, setVisitorRequests] = useState<VisitorRequestItem[]>([]);
@@ -403,7 +415,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const applyBundleToState = useCallback((bundle: PublicBundleData) => {
     if (bundle.churchInfo) {
-      const merged = { ...CHURCH_INFO, ...bundle.churchInfo };
+      const merged: ChurchInfo = {
+        ...CHURCH_INFO,
+        ...bundle.churchInfo,
+        siteTheme: normalizeSiteTheme(bundle.churchInfo.siteTheme),
+      };
       preloadImageRef(merged.heroImage, 'high');
       setChurchInfo(merged);
     }
@@ -522,10 +538,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
       setCloudLoading(true);
       try {
-        // 1-Read public snapshot fetch (also validates Firestore server connection)
-        const bundleSnap = await fetchPublicBundleFromServer();
-        if (bundleSnap.exists()) {
-          const data = bundleSnap.data() as PublicBundleData;
+        // Consume <head> Firestore REST prefetch if available (avoids waiting for Auth + WebChannel)
+        const earlyResult = !forceRefresh ? await awaitEarlyPrefetchedBundle() : null;
+        if (earlyResult?.status === 'ok') {
+          const data = earlyResult.bundle;
           applyBundleToState(data);
           const syncedAt = writeLocalBundleCache(data, true);
           setHasCloudData(true);
@@ -533,6 +549,21 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           setDataSource('cloud-bundle');
           setLastSyncedAt(syncedAt);
           return;
+        }
+
+        if (earlyResult?.status !== 'not-found') {
+          // 1-Read public snapshot fetch (also validates Firestore server connection)
+          const bundleSnap = await fetchPublicBundleFromServer();
+          if (bundleSnap.exists()) {
+            const data = bundleSnap.data() as PublicBundleData;
+            applyBundleToState(data);
+            const syncedAt = writeLocalBundleCache(data, true);
+            setHasCloudData(true);
+            setHasPublicBundle(true);
+            setDataSource('cloud-bundle');
+            setLastSyncedAt(syncedAt);
+            return;
+          }
         }
 
         // Backward compatibility: if public_bundle doesn't exist yet, check if legacy 'info' exists
@@ -654,17 +685,35 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, []);
 
-  // Visitor Mode (1-read snapshot + 10m local cache) vs Admin Mode (live multi-collection sync)
+  // Visitor Mode boot: immediately load or apply public snapshot without waiting for Firebase Auth
+  useEffect(() => {
+    if (publicBootStartedRef.current) return;
+    publicBootStartedRef.current = true;
+
+    if (earlyPrefetchBundleRef.current) {
+      const syncedAt = writeLocalBundleCache(earlyPrefetchBundleRef.current, true);
+      setLastSyncedAt(syncedAt);
+      return;
+    }
+
+    void loadSingleDocPublicBundle(false);
+  }, [loadSingleDocPublicBundle]);
+
+  // Admin Mode (live multi-collection sync after Auth & RBAC verification)
   useEffect(() => {
     if (!authReady) return;
 
     if (!isAdmin) {
       setVisitorRequests([]);
       setAdminUsers([]);
-      void loadSingleDocPublicBundle(false);
+      if (wasAdminRef.current) {
+        wasAdminRef.current = false;
+        void loadSingleDocPublicBundle(false);
+      }
       return;
     }
 
+    wasAdminRef.current = true;
     // Admin Mode: attach real-time listeners across source collections + PII collections
     setDataSource('admin-live');
     const unsubs: (() => void)[] = [];
@@ -675,7 +724,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         (snap) => {
           if (snap.exists()) {
             const data = snap.data() as ChurchInfo;
-            setChurchInfo({ ...CHURCH_INFO, ...data });
+            setChurchInfo({
+              ...CHURCH_INFO,
+              ...data,
+              siteTheme: normalizeSiteTheme(data.siteTheme),
+            });
             setHasCloudData(true);
           } else {
             setHasCloudData(false);

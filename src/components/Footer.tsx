@@ -23,8 +23,8 @@ export function Footer({ onOpenAdmin }: FooterProps) {
 
           <div className="md:col-span-3 space-y-2 text-xs text-[var(--theme-ink-muted)]">
             <p className="font-medium text-[var(--theme-ink)] mb-2">聚会时间</p>
-            <p className="tabular-nums">主日崇拜：周日 09:30 – 11:15</p>
-            <p className="tabular-nums">主日学：周日 13:00 – 14:15</p>
+            <p className="tabular-nums">主日崇拜：每周日14:30-16:30</p>
+            <p className="tabular-nums">儿童主日学：每周日14:30-16:30</p>
             <p className="tabular-nums">祷告会：周二 19:30 – 21:00</p>
           </div>
 

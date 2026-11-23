@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
-import { AdminDashboard } from './components/admin/AdminDashboard';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnnouncementsSection } from './components/AnnouncementsSection';
 import { ChurchIntroSection } from './components/ChurchIntroSection';
 import { ContactSection } from './components/ContactSection';
@@ -15,6 +14,10 @@ import { Navbar } from './components/Navbar';
 import { PastorsSection } from './components/PastorsSection';
 import { WorshipSection } from './components/WorshipSection';
 import { ChurchDataProvider } from './context/ChurchDataContext';
+
+const AdminDashboard = lazy(() =>
+  import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
 
 function resolveInitialView(): 'public' | 'admin' {
   if (typeof window === 'undefined') return 'public';
@@ -53,7 +56,17 @@ function BethelChurchApp() {
   };
 
   if (view === 'admin') {
-    return <AdminDashboard onBackToSite={openPublic} />;
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-[#FAF8F4] flex items-center justify-center p-6">
+            <div className="text-sm text-[#57534E]">正在载入管理后台…</div>
+          </div>
+        }
+      >
+        <AdminDashboard onBackToSite={openPublic} />
+      </Suspense>
+    );
   }
 
   return (

@@ -31,25 +31,25 @@ export function HeroSection() {
           style={{ backgroundColor: 'var(--theme-hero-mist)' }}
         />
 
-        {/* Measured Bottom Contrast Scrim for Text Readability */}
+        {/* Measured Bottom Contrast Scrim + Localized Text-Zone Backdrop for High Readability */}
         <div
           aria-hidden="true"
           className="absolute inset-0"
           style={{
             backgroundImage:
-              'linear-gradient(to top, var(--theme-hero-scrim-from), var(--theme-hero-scrim-via), transparent)',
+              'linear-gradient(to top, var(--theme-hero-scrim-from) 0%, var(--theme-hero-scrim-mid) 38%, var(--theme-hero-scrim-via) 68%, transparent 100%), radial-gradient(ellipse 75% 65% at 22% 86%, rgba(10, 9, 8, 0.45), transparent 72%)',
           }}
         />
 
         <div className="absolute inset-0 flex items-end">
           <div className="max-w-[1200px] w-full mx-auto px-6 pb-12 md:pb-16">
-            <div className="max-w-2xl text-white">
-              <p className="text-xs md:text-sm tracking-widest text-[#E5DFD3] mb-3 font-medium flex items-center gap-1.5">
+            <div className="max-w-2xl text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.65)]">
+              <p className="text-xs md:text-sm tracking-widest text-white mb-3 font-medium flex items-center gap-1.5">
                 {activeTheme === 'christmas' && (
                   <svg
                     aria-hidden="true"
                     viewBox="0 0 24 24"
-                    className="w-3.5 h-3.5 text-[#E9C46A] shrink-0"
+                    className="w-3.5 h-3.5 text-[#F4D58D] shrink-0 drop-shadow-xs"
                     fill="currentColor"
                   >
                     <path d="M12 1.5l2.15 7.35L21.5 11l-7.35 2.15L12 20.5l-2.15-7.35L2.5 11l7.35-2.15L12 1.5z" />
@@ -60,7 +60,7 @@ export function HeroSection() {
                 </span>
               </p>
 
-              <h1 className="font-editorial text-[2rem] min-[360px]:text-4xl sm:text-5xl md:text-[3.5rem] font-semibold leading-[1.25] sm:leading-[1.15] tracking-tight text-white mb-4">
+              <h1 className="font-editorial text-[2rem] min-[360px]:text-4xl sm:text-5xl md:text-[3.5rem] font-semibold leading-[1.25] sm:leading-[1.15] tracking-tight text-white mb-4 [text-shadow:0_2px_14px_rgba(0,0,0,0.65)]">
                 {splitNameMatch ? (
                   <>
                     <span className="block sm:inline">{splitNameMatch[1]}</span>
@@ -71,12 +71,14 @@ export function HeroSection() {
                 )}
               </h1>
 
-              <p className="font-editorial text-base sm:text-lg text-[#F3EFE6] leading-relaxed mb-3">
+              <p className="font-editorial text-base sm:text-lg text-white font-medium leading-relaxed mb-3">
                 {churchInfo.scriptureQuote}
-                <span className="text-sm text-[#D6CFC2] ml-2">—— {churchInfo.scriptureRef}</span>
+                <span className="text-sm text-white/90 font-normal ml-2">
+                  —— {churchInfo.scriptureRef}
+                </span>
               </p>
 
-              <p className="text-sm sm:text-base text-[#E5DFD3]/90 leading-relaxed mb-7 max-w-xl">
+              <p className="text-sm sm:text-base text-white/95 leading-relaxed mb-7 max-w-xl">
                 {churchInfo.heroSubtitle}
               </p>
 
@@ -84,7 +86,7 @@ export function HeroSection() {
                 <a
                   href="#worship"
                   onClick={(e) => handleAnchorClick(e, '#worship')}
-                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-[var(--theme-ink)] bg-[var(--theme-bg)] hover:bg-white rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-[var(--theme-ink)] bg-white hover:bg-[#FAF8F4] shadow-md rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 [text-shadow:none] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   <span>了解本周主日崇拜</span>
                   <ArrowDownRight className="w-4 h-4" />
@@ -92,7 +94,7 @@ export function HeroSection() {
                 <a
                   href="#contact"
                   onClick={(e) => handleAnchorClick(e, '#contact')}
-                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-[#F3EFE6] hover:text-white underline underline-offset-4 decoration-white/40 transition-colors whitespace-nowrap shrink-0"
+                  className="inline-flex items-center px-3 py-2 text-sm font-semibold text-white underline underline-offset-4 decoration-white/80 hover:decoration-white transition-colors whitespace-nowrap shrink-0"
                 >
                   联系方式
                 </a>
@@ -104,21 +106,21 @@ export function HeroSection() {
 
       {/* Full-width Operational Utility Ribbon */}
       <div className="bg-[var(--theme-surface)] transition-colors duration-300">
-        <div className="max-w-[1200px] mx-auto px-6 py-4 grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 text-sm">
+        <div className="max-w-[1200px] mx-auto px-6 py-4 grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 text-sm font-sans">
           <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
-            <span className="text-xs text-[var(--theme-ink-subtle)]">主日崇拜</span>
-            <span className="font-medium text-[var(--theme-ink)] tabular-nums">每周日 09:30 – 11:15（一楼大堂）</span>
+            <span className="text-xs font-medium text-[#1E3A5F]">主日崇拜</span>
+            <span className="font-medium text-[#1E3A5F]">每周日14:30-16:30</span>
           </div>
           <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
-            <span className="text-xs text-[var(--theme-ink-subtle)]">儿童主日学</span>
-            <span className="font-medium text-[var(--theme-ink)] tabular-nums">每周日 13:00 – 14:15</span>
+            <span className="text-xs font-medium text-[#1E3A5F]">儿童主日学</span>
+            <span className="font-medium text-[#1E3A5F]">每周日14:30-16:30</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-[var(--theme-ink-subtle)]">教会堂址</span>
+            <span className="text-xs font-medium text-[#1E3A5F]">教会堂址</span>
             <a
               href="#contact"
               onClick={(e) => handleAnchorClick(e, '#contact')}
-              className="font-medium text-[var(--theme-accent)] hover:underline underline-offset-4 truncate"
+              className="font-medium text-[#1E3A5F] hover:underline underline-offset-4 truncate"
             >
               {churchInfo.shortAddress}
             </a>
