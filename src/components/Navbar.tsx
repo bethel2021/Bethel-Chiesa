@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Check, Menu, Palette, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useChurchData } from '../context/ChurchDataContext';
-import { SITE_THEMES } from '../data/themes';
 import { getStickyHeaderHeight, handleAnchorClick } from '../utils/scroll';
 
 const NAV_LINKS = [
@@ -27,16 +26,11 @@ interface NavbarProps {
 }
 
 export function Navbar({ onOpenAdmin }: NavbarProps) {
-  const { churchInfo, activeTheme, setPreviewTheme } = useChurchData();
+  const { churchInfo } = useChurchData();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>('top');
   const headerRef = useRef<HTMLElement | null>(null);
-  const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const scrollLockRef = useRef<{ targetId: string; until: number } | null>(null);
-
-  const currentThemeOption =
-    SITE_THEMES.find((item) => item.id === activeTheme) ?? SITE_THEMES[0];
 
   useEffect(() => {
     let ticking = false;
@@ -97,22 +91,17 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
   }, []);
 
   useEffect(() => {
-    if (!mobileOpen && !themeMenuOpen) return;
+    if (!mobileOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMobileOpen(false);
-        setThemeMenuOpen(false);
       }
     };
 
     const handlePointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (mobileOpen && headerRef.current && !headerRef.current.contains(target)) {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
         setMobileOpen(false);
-      }
-      if (themeMenuOpen && themeMenuRef.current && !themeMenuRef.current.contains(target)) {
-        setThemeMenuOpen(false);
       }
     };
 
@@ -123,12 +112,11 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
       window.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [mobileOpen, themeMenuOpen]);
+  }, [mobileOpen]);
 
   const handleNavClick = (e: MouseEvent<HTMLAnchorElement>, href: string) => {
     handleAnchorClick(e, href, (targetId) => {
       setMobileOpen(false);
-      setThemeMenuOpen(false);
       setActiveSection(targetId);
       const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       scrollLockRef.current = {
@@ -185,86 +173,8 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
           })}
         </nav>
 
-        {/* Zone 3: Theme switcher popover + Admin button + mobile menu trigger */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div ref={themeMenuRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setThemeMenuOpen((prev) => !prev)}
-              aria-label={`切换网页主题样式（当前：${currentThemeOption.name}）`}
-              aria-expanded={themeMenuOpen}
-              aria-haspopup="menu"
-              title={`切换主题（当前：${currentThemeOption.name}）`}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-[var(--theme-ink-muted)] hover:text-[var(--theme-ink)] bg-[var(--theme-surface)]/75 hover:bg-[var(--theme-surface-alt)] border border-[var(--theme-border)] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
-            >
-              <Palette className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />
-              <span className="hidden lg:inline">{currentThemeOption.name}</span>
-            </button>
-
-            {themeMenuOpen && (
-              <div
-                role="menu"
-                aria-label="选择网页主题样式"
-                className="absolute right-0 mt-2 w-64 bg-[var(--theme-card)] border border-[var(--theme-border-strong)] rounded-lg shadow-xl p-2 z-50"
-              >
-                <div className="px-2.5 py-1.5 border-b border-[var(--theme-border)] mb-1.5">
-                  <p className="text-xs font-semibold text-[var(--theme-ink)]">
-                    网页节日与季节主题
-                  </p>
-                  <p className="text-[11px] text-[var(--theme-ink-subtle)] mt-0.5">
-                    切换全站配色氛围，不改变版块结构
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  {SITE_THEMES.map((option) => {
-                    const selected = option.id === activeTheme;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={selected}
-                        onClick={() => {
-                          setPreviewTheme(option.id);
-                          setThemeMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors cursor-pointer ${
-                          selected
-                            ? 'bg-[var(--theme-surface)] text-[var(--theme-ink)]'
-                            : 'hover:bg-[var(--theme-surface)]/55 text-[var(--theme-ink-body)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="inline-flex items-center -space-x-1 shrink-0" aria-hidden="true">
-                            {option.swatches.map((hex, idx) => (
-                              <span
-                                key={`${option.id}-dot-${idx}`}
-                                className="w-3 h-3 rounded-full border border-white shadow-xs"
-                                style={{ backgroundColor: hex }}
-                              />
-                            ))}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium leading-tight truncate">
-                              {option.name}
-                            </p>
-                            <p className="text-[11px] text-[var(--theme-ink-subtle)] truncate mt-0.5">
-                              {option.subtitle}
-                            </p>
-                          </div>
-                        </div>
-                        {selected && (
-                          <Check className="w-3.5 h-3.5 text-[var(--theme-accent)] shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
+        {/* Zone 3: 1 primary action + mobile menu trigger */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={onOpenAdmin}

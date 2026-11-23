@@ -75,7 +75,6 @@ import {
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
 const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
-const THEME_PREVIEW_KEY = 'bethel_church_theme_preview_v1';
 const PUBLIC_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes local cache TTL
 
 export interface PublicBundleData {
@@ -128,11 +127,8 @@ interface ChurchDataContextValue {
   publishPublicBundle: () => Promise<void>;
   refreshPublicSnapshot: () => Promise<void>;
 
-  // Theme state & actions
+  // Theme state & admin action
   activeTheme: SiteThemeId;
-  isPreviewingTheme: boolean;
-  setPreviewTheme: (theme: SiteThemeId) => void;
-  resetPreviewTheme: () => void;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
 
   // CRUD actions
@@ -288,38 +284,6 @@ function removeById<T extends { id: string }>(list: T[], id: string): T[] {
   return list.filter((x) => x.id !== id);
 }
 
-interface ThemePreviewEnvelope {
-  theme: SiteThemeId;
-  baseCloudTheme: SiteThemeId;
-}
-
-function readThemePreview(): ThemePreviewEnvelope | null {
-  try {
-    const raw = window.localStorage.getItem(THEME_PREVIEW_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ThemePreviewEnvelope>;
-    if (!parsed || !parsed.theme || !parsed.baseCloudTheme) return null;
-    return {
-      theme: normalizeSiteTheme(parsed.theme),
-      baseCloudTheme: normalizeSiteTheme(parsed.baseCloudTheme),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeThemePreview(envelope: ThemePreviewEnvelope | null): void {
-  try {
-    if (!envelope) {
-      window.localStorage.removeItem(THEME_PREVIEW_KEY);
-    } else {
-      window.localStorage.setItem(THEME_PREVIEW_KEY, JSON.stringify(envelope));
-    }
-  } catch {
-    // Ignore storage quota/private mode errors
-  }
-}
-
 export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const initialCache = typeof window !== 'undefined' ? readLocalBundleCache() : null;
 
@@ -345,29 +309,15 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         }
       : CHURCH_INFO
   );
-  const [previewOverride, setPreviewOverride] = useState<ThemePreviewEnvelope | null>(() =>
-    typeof window !== 'undefined' ? readThemePreview() : null
-  );
   const initialCachedHeroRef = useRef(initialCache?.bundle.churchInfo?.heroImage);
 
-  const cloudTheme = normalizeSiteTheme(churchInfo.siteTheme);
-  const hasValidPreview =
-    previewOverride !== null && previewOverride.baseCloudTheme === cloudTheme;
-  const activeTheme: SiteThemeId = hasValidPreview ? previewOverride.theme : cloudTheme;
-  const isPreviewingTheme = hasValidPreview && previewOverride.theme !== cloudTheme;
+  const activeTheme: SiteThemeId = normalizeSiteTheme(churchInfo.siteTheme);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-site-theme', activeTheme);
     }
   }, [activeTheme]);
-
-  useEffect(() => {
-    if (previewOverride && previewOverride.baseCloudTheme !== cloudTheme) {
-      setPreviewOverride(null);
-      writeThemePreview(null);
-    }
-  }, [cloudTheme, previewOverride]);
 
   useEffect(() => {
     if (initialCachedHeroRef.current) {
@@ -1072,34 +1022,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [publishBundleSnapshot]
   );
 
-  const setPreviewTheme = useCallback(
-    (theme: SiteThemeId) => {
-      const next = normalizeSiteTheme(theme);
-      if (next === cloudTheme) {
-        setPreviewOverride(null);
-        writeThemePreview(null);
-        return;
-      }
-      const envelope: ThemePreviewEnvelope = {
-        theme: next,
-        baseCloudTheme: cloudTheme,
-      };
-      setPreviewOverride(envelope);
-      writeThemePreview(envelope);
-    },
-    [cloudTheme]
-  );
-
-  const resetPreviewTheme = useCallback(() => {
-    setPreviewOverride(null);
-    writeThemePreview(null);
-  }, []);
-
   const saveSiteTheme = useCallback(
     async (theme: SiteThemeId) => {
       const nextTheme = normalizeSiteTheme(theme);
-      setPreviewOverride(null);
-      writeThemePreview(null);
       await saveChurchInfo({
         ...latestStateRef.current.churchInfo,
         siteTheme: nextTheme,
@@ -1570,9 +1495,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         publishPublicBundle,
         refreshPublicSnapshot,
         activeTheme,
-        isPreviewingTheme,
-        setPreviewTheme,
-        resetPreviewTheme,
         saveSiteTheme,
         saveChurchInfo,
         savePastor,

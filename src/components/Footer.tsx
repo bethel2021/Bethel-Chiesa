@@ -1,5 +1,4 @@
 import { useChurchData } from '../context/ChurchDataContext';
-import { SITE_THEMES } from '../data/themes';
 import { handleAnchorClick } from '../utils/scroll';
 
 interface FooterProps {
@@ -7,7 +6,7 @@ interface FooterProps {
 }
 
 export function Footer({ onOpenAdmin }: FooterProps) {
-  const { churchInfo, activeTheme, setPreviewTheme } = useChurchData();
+  const { churchInfo } = useChurchData();
 
   return (
     <footer className="bg-[var(--theme-bg)] border-t border-[var(--theme-border)] transition-colors duration-300">
@@ -33,39 +32,6 @@ export function Footer({ onOpenAdmin }: FooterProps) {
             <p className="font-medium text-[var(--theme-ink)] mb-2">堂址与联系</p>
             <p>{churchInfo.address}</p>
             <p className="tabular-nums">联系电话：{churchInfo.pastoralPhone}</p>
-          </div>
-        </div>
-
-        <div className="py-4 border-b border-[var(--theme-border)] flex flex-wrap items-center justify-between gap-3 text-xs">
-          <span className="text-[var(--theme-ink-subtle)]">网页主题样式预览：</span>
-          <div
-            role="group"
-            aria-label="选择网页主题样式"
-            className="flex flex-wrap items-center gap-1.5"
-          >
-            {SITE_THEMES.map((option) => {
-              const selected = option.id === activeTheme;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setPreviewTheme(option.id)}
-                  aria-pressed={selected}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] ${
-                    selected
-                      ? 'bg-[var(--theme-accent)] text-white border-[var(--theme-accent)]'
-                      : 'bg-[var(--theme-surface)]/70 text-[var(--theme-ink-muted)] border-[var(--theme-border)] hover:text-[var(--theme-ink)]'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="w-2.5 h-2.5 rounded-full border border-white/70 shrink-0"
-                    style={{ backgroundColor: option.swatches[1] }}
-                  />
-                  <span>{option.name}</span>
-                </button>
-              );
-            })}
           </div>
         </div>
 
