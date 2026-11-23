@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { CheckCircle2, ExternalLink, MapPin, Navigation, Phone } from 'lucide-react';
 import { useChurchData } from '../context/ChurchDataContext';
 import { buildGoogleMapsDirectionsUrl } from '../lib/googleMaps';
+import { parsePastoralPhoneEntries } from '../utils/phone';
 
 interface FormState {
   name: string;
@@ -55,6 +56,7 @@ export function ContactSection() {
   const directionsUrl = buildGoogleMapsDirectionsUrl({
     destination: churchInfo.address,
   });
+  const phoneEntries = parsePastoralPhoneEntries(churchInfo.pastoralPhone);
 
   return (
     <section
@@ -108,11 +110,39 @@ export function ContactSection() {
 
                 <div className="border-t border-[var(--theme-border)]/80 pt-5 flex items-start gap-3.5">
                   <Phone className="w-5 h-5 text-[var(--theme-accent)] shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-semibold text-[var(--theme-ink)] mb-1">联系电话</h4>
-                    <p className="text-sm font-medium text-[var(--theme-ink)] tabular-nums">
-                      {churchInfo.pastoralPhone}
-                    </p>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-[var(--theme-ink)] mb-1.5">联系电话</h4>
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-1 text-sm font-medium text-[var(--theme-ink)] tabular-nums">
+                      {phoneEntries.map((entry, idx) => (
+                        <div key={`${entry.raw}-${idx}`} className="flex items-center gap-2.5">
+                          {idx > 0 && (
+                            <span
+                              aria-hidden="true"
+                              className="hidden sm:inline text-[var(--theme-ink-faint)] font-normal"
+                            >
+                              /
+                            </span>
+                          )}
+                          <span className="inline-flex flex-wrap items-baseline">
+                            {entry.prefix && (
+                              <span className="whitespace-pre-wrap">{entry.prefix}</span>
+                            )}
+                            {entry.phone &&
+                              (entry.telHref ? (
+                                <a
+                                  href={entry.telHref}
+                                  className="whitespace-nowrap hover:text-[var(--theme-accent)] hover:underline underline-offset-4"
+                                >
+                                  {entry.phone}
+                                </a>
+                              ) : (
+                                <span className="whitespace-nowrap">{entry.phone}</span>
+                              ))}
+                            {entry.suffix && <span>{entry.suffix}</span>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

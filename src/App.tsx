@@ -5,6 +5,7 @@
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnnouncementsSection } from './components/AnnouncementsSection';
+import { BackToTopButton } from './components/BackToTopButton';
 import { ChurchIntroSection } from './components/ChurchIntroSection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
@@ -81,7 +82,8 @@ function BethelChurchApp() {
         <AnnouncementsSection />
         <ContactSection />
       </main>
-      <Footer onOpenAdmin={openAdmin} />
+      <Footer />
+      <BackToTopButton />
     </div>
   );
 }

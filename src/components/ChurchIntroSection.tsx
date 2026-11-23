@@ -10,7 +10,7 @@ export function ChurchIntroSection() {
         {/* Section Header */}
         <div className="max-w-2xl mb-7 md:mb-8">
           <p className="text-xs tracking-widest text-[var(--theme-ink-subtle)] mb-2">
-            01. 认识我们 · {churchInfo.founded}
+            01. 认识我们
           </p>
           <h2 className="font-editorial text-3xl md:text-4xl font-semibold text-[var(--theme-ink)] tracking-tight">
             教会简介与异象使命

@@ -394,14 +394,17 @@ export function AdminInfoEditor() {
           </FieldLabel>
         </div>
 
-        <FieldLabel label="联系电话">
-          <input
-            type="text"
+        <FieldLabel
+          label="联系电话"
+          hint="支持填写多人电话（换行、用「/」或空格分隔均可），手机端将自动分行显示"
+        >
+          <textarea
+            rows={2}
             required
             maxLength={100}
             value={form.pastoralPhone}
             onChange={(e) => setForm({ ...form, pastoralPhone: e.target.value })}
-            className={inputClass}
+            className={textareaClass}
           />
         </FieldLabel>
       </div>
