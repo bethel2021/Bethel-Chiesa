@@ -57,7 +57,7 @@ function BethelChurchApp() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF8F4] text-[#1C1917]">
+    <div className="min-h-screen flex flex-col bg-[var(--theme-bg)] text-[var(--theme-ink)] transition-colors duration-300">
       <Navbar onOpenAdmin={openAdmin} />
       <main className="flex-1">
         <HeroSection />

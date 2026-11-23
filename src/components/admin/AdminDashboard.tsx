@@ -4,18 +4,21 @@ import {
   Bell,
   BookOpen,
   CalendarDays,
+  Check,
   ClipboardList,
   Database,
   FileText,
   LogOut,
   Menu,
   Music,
+  Palette,
   RefreshCw,
   ShieldCheck,
   Users,
   X,
 } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
+import { normalizeSiteTheme, SITE_THEMES, type SiteThemeId } from '../../data/themes';
 import { AdminAnnouncementsEditor } from './AdminAnnouncementsEditor';
 import { AdminInfoEditor } from './AdminInfoEditor';
 import { AdminMinistryEditor } from './AdminMinistryEditor';
@@ -64,6 +67,8 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     signOutUser,
     syncModifiedContentToCloud,
     publishPublicBundle,
+    saveSiteTheme,
+    churchInfo,
     pastors,
     coworkers,
     worshipTimes,
@@ -75,15 +80,22 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     visitorRequests,
   } = useChurchData();
 
+  const currentCloudTheme = normalizeSiteTheme(churchInfo.siteTheme);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<SiteThemeId>(currentCloudTheme);
+  const [savingTheme, setSavingTheme] = useState(false);
   const [authError, setAuthError] = useState('');
   const [syncStatus, setSyncStatus] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
   const autoPublishedRef = useRef(false);
+
+  useEffect(() => {
+    setSelectedTheme(currentCloudTheme);
+  }, [currentCloudTheme]);
 
   // If an existing cloud database was created before single-doc snapshot support,
   // wait briefly for all admin collection listeners to settle and auto-generate public_bundle once.
@@ -122,6 +134,27 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleApplySiteTheme = async () => {
+    setSavingTheme(true);
+    setSyncStatus(null);
+    try {
+      await saveSiteTheme(selectedTheme);
+      const themeName =
+        SITE_THEMES.find((item) => item.id === selectedTheme)?.name ?? '常年经典';
+      setSyncStatus({
+        type: 'success',
+        message: `全站主题已切换为「${themeName}」并同步到公开首页。`,
+      });
+    } catch (err) {
+      setSyncStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : '切换全站主题失败，请稍后重试。',
+      });
+    } finally {
+      setSavingTheme(false);
     }
   };
 
@@ -449,6 +482,78 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
                   {syncing ? '正在同步…' : '同步修改内容到云端'}
                 </button>
+              </div>
+
+              <div className="bg-white border border-[#E5DFD3] rounded-lg p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <Palette className="w-4 h-4 text-[#1E3A5F] shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#1C1917]">
+                        全站节日与季节主题样式
+                      </h3>
+                      <p className="text-xs text-[#57534E] mt-0.5">
+                        在不改变主页各版块框架结构的前提下，一键发布节期氛围主题（例如圣诞佳音、受难复活、感恩丰收）。
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplySiteTheme}
+                    disabled={savingTheme || selectedTheme === currentCloudTheme}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-50 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    {savingTheme
+                      ? '正在发布…'
+                      : selectedTheme === currentCloudTheme
+                      ? '当前全站已生效'
+                      : '应用并发布到首页'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {SITE_THEMES.map((option) => {
+                    const isPicked = selectedTheme === option.id;
+                    const isLive = currentCloudTheme === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedTheme(option.id)}
+                        aria-pressed={isPicked}
+                        className={`text-left rounded-md border p-3.5 transition-colors cursor-pointer ${
+                          isPicked
+                            ? 'border-[#1E3A5F] bg-[#FAF8F4] ring-1 ring-[#1E3A5F]'
+                            : 'border-[#E5DFD3] bg-white hover:border-[#D6CFC2]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="inline-flex items-center -space-x-1" aria-hidden="true">
+                            {option.swatches.map((hex, idx) => (
+                              <span
+                                key={`${option.id}-ov-dot-${idx}`}
+                                className="w-3.5 h-3.5 rounded-full border border-white shadow-xs"
+                                style={{ backgroundColor: hex }}
+                              />
+                            ))}
+                          </span>
+                          {isPicked && <Check className="w-3.5 h-3.5 text-[#1E3A5F]" />}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-[#1C1917]">
+                            {option.name}
+                          </span>
+                          {isLive && (
+                            <span className="text-[11px] font-medium text-[#14532D]">
+                              当前生效
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#78716C] mt-1">{option.subtitle}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

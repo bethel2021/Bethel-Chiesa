@@ -6,10 +6,118 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+:root,
+[data-site-theme='classic'] {
+  --theme-bg: #FAF8F4;
+  --theme-surface: #F3EFE6;
+  --theme-surface-alt: #EFEAE0;
+  --theme-surface-strong: #E7E0D3;
+  --theme-card: #FFFFFF;
+  --theme-border: #E5DFD3;
+  --theme-border-strong: #DFD8C8;
+  --theme-border-input: #D6CFC2;
+  --theme-ink: #1C1917;
+  --theme-ink-body: #292524;
+  --theme-ink-muted: #57534E;
+  --theme-ink-subtle: #78716C;
+  --theme-ink-faint: #A8A29E;
+  --theme-accent: #1E3A5F;
+  --theme-accent-hover: #162C49;
+  --theme-gold: #8B5E34;
+  --theme-alert: #9A3412;
+  --theme-hero-bg: #1C1917;
+  --theme-hero-scrim-from: rgba(20, 18, 16, 0.8);
+  --theme-hero-scrim-via: rgba(20, 18, 16, 0.35);
+  --theme-hero-mist: rgba(250, 248, 244, 0.1);
+  --theme-top-bar: transparent;
+}
+
+[data-site-theme='christmas'] {
+  --theme-bg: #FBF9F5;
+  --theme-surface: #EEF2EC;
+  --theme-surface-alt: #E4EBE1;
+  --theme-surface-strong: #D7E1D3;
+  --theme-card: #FFFFFF;
+  --theme-border: #DCE3D8;
+  --theme-border-strong: #CDD7C8;
+  --theme-border-input: #C2CEBC;
+  --theme-ink: #17211B;
+  --theme-ink-body: #243029;
+  --theme-ink-muted: #4B5B51;
+  --theme-ink-subtle: #66776C;
+  --theme-ink-faint: #9AA89F;
+  --theme-accent: #1B4332;
+  --theme-accent-hover: #133124;
+  --theme-gold: #9B2226;
+  --theme-alert: #9B2226;
+  --theme-hero-bg: #132219;
+  --theme-hero-scrim-from: rgba(15, 29, 21, 0.82);
+  --theme-hero-scrim-via: rgba(27, 46, 35, 0.36);
+  --theme-hero-mist: rgba(251, 249, 245, 0.1);
+  --theme-top-bar: linear-gradient(90deg, #1B4332 0%, #A67C2E 50%, #9B2226 100%);
+}
+
+[data-site-theme='easter'] {
+  --theme-bg: #FAF9FB;
+  --theme-surface: #F1EDF5;
+  --theme-surface-alt: #E8E1EF;
+  --theme-surface-strong: #DDD3E8;
+  --theme-card: #FFFFFF;
+  --theme-border: #E3DCEB;
+  --theme-border-strong: #D5CCE0;
+  --theme-border-input: #C9BED6;
+  --theme-ink: #1E1926;
+  --theme-ink-body: #2C2536;
+  --theme-ink-muted: #584F63;
+  --theme-ink-subtle: #736980;
+  --theme-ink-faint: #A39AAE;
+  --theme-accent: #4C2A6A;
+  --theme-accent-hover: #3B1F54;
+  --theme-gold: #A16207;
+  --theme-alert: #9A3412;
+  --theme-hero-bg: #1A1423;
+  --theme-hero-scrim-from: rgba(24, 17, 34, 0.82);
+  --theme-hero-scrim-via: rgba(38, 25, 52, 0.36);
+  --theme-hero-mist: rgba(250, 249, 251, 0.1);
+  --theme-top-bar: linear-gradient(90deg, #4C2A6A 0%, #A16207 50%, #4C2A6A 100%);
+}
+
+[data-site-theme='thanksgiving'] {
+  --theme-bg: #FBF8F2;
+  --theme-surface: #F4EDE0;
+  --theme-surface-alt: #ECE2D0;
+  --theme-surface-strong: #E2D5BE;
+  --theme-card: #FFFFFF;
+  --theme-border: #E6DCCB;
+  --theme-border-strong: #DACCB6;
+  --theme-border-input: #CFC0A8;
+  --theme-ink: #241911;
+  --theme-ink-body: #332419;
+  --theme-ink-muted: #614E3F;
+  --theme-ink-subtle: #7D6959;
+  --theme-ink-faint: #AE9B8C;
+  --theme-accent: #7C3D18;
+  --theme-accent-hover: #602E11;
+  --theme-gold: #9A5B13;
+  --theme-alert: #9A3412;
+  --theme-hero-bg: #1F1610;
+  --theme-hero-scrim-from: rgba(26, 17, 11, 0.82);
+  --theme-hero-scrim-via: rgba(42, 26, 16, 0.36);
+  --theme-hero-mist: rgba(251, 248, 242, 0.1);
+  --theme-top-bar: linear-gradient(90deg, #7C3D18 0%, #B7791F 50%, #7C3D18 100%);
+}
+
 @layer base {
   html {
     font-family: var(--font-sans);
     scroll-padding-top: 65px;
+    background-color: var(--theme-bg);
+    color: var(--theme-ink);
+  }
+
+  body {
+    background-color: var(--theme-bg);
+    color: var(--theme-ink);
   }
 
   h1, h2, h3, .font-editorial {

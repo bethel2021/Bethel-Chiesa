@@ -82,7 +82,7 @@ service cloud.firestore {
         'name', 'founded', 'scriptureQuote', 'scriptureRef',
         'heroSubtitle', 'heroImage', 'fellowshipImage', 'address', 'shortAddress',
         'pastoralPhone', 'themeVerse', 'themeVerseRef', 'thisWeekLabel',
-        'nextWeekLabel', 'introParagraphs', 'coreValues', 'updatedAt'
+        'nextWeekLabel', 'siteTheme', 'introParagraphs', 'coreValues', 'updatedAt'
       ])
       && isStringBounds(data.name, 1, 100)
       && isStringBounds(data.founded, 1, 100)
@@ -98,6 +98,7 @@ service cloud.firestore {
       && isStringBounds(data.themeVerseRef, 1, 100)
       && isStringBounds(data.thisWeekLabel, 1, 60)
       && isStringBounds(data.nextWeekLabel, 1, 60)
+      && (!('siteTheme' in data) || data.siteTheme in ['classic', 'christmas', 'easter', 'thanksgiving'])
       && isValidStringList(data.introParagraphs, 10)
       && isValidMapList(data.coreValues, 10)
       && data.updatedAt == request.time;

@@ -1,3 +1,5 @@
+import type { SiteThemeId } from './themes';
+
 export interface CoreValueItem {
   index: string;
   title: string;
@@ -19,6 +21,7 @@ export interface ChurchInfo {
   themeVerseRef: string;
   thisWeekLabel: string;
   nextWeekLabel: string;
+  siteTheme?: SiteThemeId;
   introParagraphs: string[];
   coreValues: CoreValueItem[];
 }
@@ -198,6 +201,7 @@ export const CHURCH_INFO: ChurchInfo = {
   themeVerseRef: '约翰福音 15:12 · 伯特利教会年度主题经文',
   thisWeekLabel: '本周主日 · 11月15日',
   nextWeekLabel: '下周主日 · 11月22日',
+  siteTheme: 'classic',
   introParagraphs: [
     '伯特利教会设立于 1998 年秋，是一间秉承使徒信经与宗教改革纯正信仰传统的基督教地方教会。「伯特利」（Bethel）意为「神的殿」，正如雅各在旷野梦中见天梯而发出的赞叹，我们盼望这间教会成为城市中人遇见神、得蒙赦罪与更新的生命驿站。',
     '二十余年来，教会始终坚持「以圣道为根基、以敬拜为核心、以团契为纽带、以宣教为使命」的牧养方向。无论你是初涉信仰的慕道朋友，或是多年同行主路的肢体，都能在真理的教导与弟兄姊妹真诚的守望中，经历从神而来的平安与力量。',

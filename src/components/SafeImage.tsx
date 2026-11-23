@@ -101,7 +101,13 @@ export function SafeImage({
   }, [mediaRef, directSrc, priority, inView]);
 
   if (defer) {
-    return <div ref={containerRef} aria-label={alt} className={`bg-[#1C1917]/10 ${className}`} />;
+    return (
+      <div
+        ref={containerRef}
+        aria-label={alt}
+        className={`bg-[var(--theme-ink)]/10 ${className}`}
+      />
+    );
   }
 
   const effectiveSrc = mediaRef ? resolvedMediaUrl : directSrc;
@@ -111,7 +117,7 @@ export function SafeImage({
       <div
         ref={containerRef}
         aria-label={alt}
-        className={`bg-[#1C1917]/15 animate-pulse ${className}`}
+        className={`bg-[var(--theme-ink)]/15 animate-pulse ${className}`}
       />
     );
   }
@@ -121,10 +127,10 @@ export function SafeImage({
       <div
         role="img"
         aria-label={alt}
-        className={`flex flex-col items-center justify-center bg-[#EFEAE0] text-[#57534E] p-6 text-center ${className}`}
+        className={`flex flex-col items-center justify-center bg-[var(--theme-surface-alt)] text-[var(--theme-ink-muted)] p-6 text-center ${className}`}
       >
-        <Church className="w-8 h-8 mb-2 text-[#1E3A5F]/60" strokeWidth={1.5} />
-        <span className="text-xs font-medium tracking-wide text-[#57534E]">
+        <Church className="w-8 h-8 mb-2 text-[var(--theme-accent)]/60" strokeWidth={1.5} />
+        <span className="text-xs font-medium tracking-wide text-[var(--theme-ink-muted)]">
           {fallbackLabel || alt}
         </span>
       </div>

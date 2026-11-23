@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Check, Plus, Trash2 } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
 import { CHURCH_IMAGES, type ChurchInfo } from '../../data/churchData';
+import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
 import {
   AdminPanelHeader,
   FieldLabel,
@@ -13,14 +14,20 @@ import { ImageFieldControl } from './ImageFieldControl';
 
 export function AdminInfoEditor() {
   const { churchInfo, saveChurchInfo } = useChurchData();
-  const [form, setForm] = useState<ChurchInfo>(churchInfo);
+  const [form, setForm] = useState<ChurchInfo>({
+    ...churchInfo,
+    siteTheme: normalizeSiteTheme(churchInfo.siteTheme),
+  });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
 
   useEffect(() => {
-    setForm(churchInfo);
+    setForm({
+      ...churchInfo,
+      siteTheme: normalizeSiteTheme(churchInfo.siteTheme),
+    });
   }, [churchInfo]);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -142,6 +149,48 @@ export function AdminInfoEditor() {
             hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
             required
           />
+        </div>
+
+        <div className="pt-4 border-t border-[#EFEAE0]">
+          <p className="text-xs font-medium text-[#292524] mb-1">
+            网页主题样式（全站默认）
+          </p>
+          <p className="text-xs text-[#78716C] mb-3">
+            切换后保留所有版块结构与排版不变，仅更新全站配色氛围（保存后所有访客默认可见）。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {SITE_THEMES.map((option) => {
+              const selected = normalizeSiteTheme(form.siteTheme) === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, siteTheme: option.id })}
+                  aria-pressed={selected}
+                  className={`text-left rounded-md border p-3 transition-colors cursor-pointer ${
+                    selected
+                      ? 'border-[#1E3A5F] bg-[#FAF8F4] ring-1 ring-[#1E3A5F]'
+                      : 'border-[#E5DFD3] bg-white hover:border-[#D6CFC2]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="inline-flex items-center -space-x-1" aria-hidden="true">
+                      {option.swatches.map((hex, idx) => (
+                        <span
+                          key={`${option.id}-info-dot-${idx}`}
+                          className="w-3.5 h-3.5 rounded-full border border-white shadow-xs"
+                          style={{ backgroundColor: hex }}
+                        />
+                      ))}
+                    </span>
+                    {selected && <Check className="w-3.5 h-3.5 text-[#1E3A5F]" />}
+                  </div>
+                  <p className="text-xs font-semibold text-[#1C1917]">{option.name}</p>
+                  <p className="text-[11px] text-[#78716C] mt-0.5">{option.subtitle}</p>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

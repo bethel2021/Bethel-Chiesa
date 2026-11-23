@@ -19,6 +19,7 @@
         "themeVerseRef": { "type": "string", "minLength": 1, "maxLength": 100 },
         "thisWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
         "nextWeekLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "siteTheme": { "type": "string", "enum": ["classic", "christmas", "easter", "thanksgiving"] },
         "introParagraphs": { "type": "array", "description": "Up to 10 intro paragraphs" },
         "coreValues": { "type": "array", "description": "Up to 10 core value items" },
         "updatedAt": { "type": "string", "format": "date-time" }

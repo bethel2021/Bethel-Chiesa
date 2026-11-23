@@ -4,14 +4,17 @@ import { handleAnchorClick } from '../utils/scroll';
 import { SafeImage } from './SafeImage';
 
 export function HeroSection() {
-  const { churchInfo, cloudLoading } = useChurchData();
+  const { churchInfo, cloudLoading, activeTheme } = useChurchData();
   const normalizedChurchName = churchInfo.name.trim();
   const splitNameMatch = normalizedChurchName.match(/^(基督教意大利)\s*(伯特利华人教会.*)$/);
 
   return (
-    <section id="top" className="border-b border-[#E5DFD3]">
+    <section id="top" className="border-b border-[var(--theme-border)]">
       {/* Architectural Sanctuary Focal Hero */}
-      <div className="relative w-full h-[540px] md:h-[620px] overflow-hidden bg-[#1C1917]">
+      <div
+        className="relative w-full h-[540px] md:h-[620px] overflow-hidden"
+        style={{ backgroundColor: 'var(--theme-hero-bg)' }}
+      >
         <SafeImage
           src={churchInfo.heroImage}
           alt={`${normalizedChurchName}主堂清晨阳光`}
@@ -24,20 +27,37 @@ export function HeroSection() {
         {/* Subtle Frosted Privacy Veil (10% warm mist without darkening) */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[#FAF8F4]/10 backdrop-blur-[3px]"
+          className="absolute inset-0 backdrop-blur-[3px]"
+          style={{ backgroundColor: 'var(--theme-hero-mist)' }}
         />
 
         {/* Measured Bottom Contrast Scrim for Text Readability */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-t from-[#141210]/80 via-[#141210]/35 to-transparent"
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              'linear-gradient(to top, var(--theme-hero-scrim-from), var(--theme-hero-scrim-via), transparent)',
+          }}
         />
 
         <div className="absolute inset-0 flex items-end">
           <div className="max-w-[1200px] w-full mx-auto px-6 pb-12 md:pb-16">
             <div className="max-w-2xl text-white">
-              <p className="text-xs md:text-sm tracking-widest text-[#E5DFD3] mb-3 font-medium">
-                {churchInfo.founded} · {churchInfo.shortAddress}
+              <p className="text-xs md:text-sm tracking-widest text-[#E5DFD3] mb-3 font-medium flex items-center gap-1.5">
+                {activeTheme === 'christmas' && (
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="w-3.5 h-3.5 text-[#E9C46A] shrink-0"
+                    fill="currentColor"
+                  >
+                    <path d="M12 1.5l2.15 7.35L21.5 11l-7.35 2.15L12 20.5l-2.15-7.35L2.5 11l7.35-2.15L12 1.5z" />
+                  </svg>
+                )}
+                <span>
+                  {churchInfo.founded} · {churchInfo.shortAddress}
+                </span>
               </p>
 
               <h1 className="font-editorial text-[2rem] min-[360px]:text-4xl sm:text-5xl md:text-[3.5rem] font-semibold leading-[1.25] sm:leading-[1.15] tracking-tight text-white mb-4">
@@ -64,7 +84,7 @@ export function HeroSection() {
                 <a
                   href="#worship"
                   onClick={(e) => handleAnchorClick(e, '#worship')}
-                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-[#1C1917] bg-[#FAF8F4] hover:bg-white rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-[var(--theme-ink)] bg-[var(--theme-bg)] hover:bg-white rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   <span>了解本周主日崇拜</span>
                   <ArrowDownRight className="w-4 h-4" />
@@ -83,22 +103,22 @@ export function HeroSection() {
       </div>
 
       {/* Full-width Operational Utility Ribbon */}
-      <div className="bg-[#F3EFE6]">
+      <div className="bg-[var(--theme-surface)] transition-colors duration-300">
         <div className="max-w-[1200px] mx-auto px-6 py-4 grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 text-sm">
-          <div className="flex flex-col gap-0.5 md:border-r md:border-[#DFD8C8] md:pr-4">
-            <span className="text-xs text-[#78716C]">主日崇拜</span>
-            <span className="font-medium text-[#1C1917] tabular-nums">每周日 09:30 – 11:15（一楼大堂）</span>
+          <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
+            <span className="text-xs text-[var(--theme-ink-subtle)]">主日崇拜</span>
+            <span className="font-medium text-[var(--theme-ink)] tabular-nums">每周日 09:30 – 11:15（一楼大堂）</span>
           </div>
-          <div className="flex flex-col gap-0.5 md:border-r md:border-[#DFD8C8] md:pr-4">
-            <span className="text-xs text-[#78716C]">儿童主日学</span>
-            <span className="font-medium text-[#1C1917] tabular-nums">每周日 13:00 – 14:15</span>
+          <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
+            <span className="text-xs text-[var(--theme-ink-subtle)]">儿童主日学</span>
+            <span className="font-medium text-[var(--theme-ink)] tabular-nums">每周日 13:00 – 14:15</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-[#78716C]">教会堂址</span>
+            <span className="text-xs text-[var(--theme-ink-subtle)]">教会堂址</span>
             <a
               href="#contact"
               onClick={(e) => handleAnchorClick(e, '#contact')}
-              className="font-medium text-[#1E3A5F] hover:underline underline-offset-4 truncate"
+              className="font-medium text-[var(--theme-accent)] hover:underline underline-offset-4 truncate"
             >
               {churchInfo.shortAddress}
             </a>
