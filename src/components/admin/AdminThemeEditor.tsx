@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, Loader2, Palette, RotateCcw } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
 import { normalizeSiteTheme, SITE_THEMES, type SiteThemeId } from '../../data/themes';
-import { AdminPanelHeader, StatusBanner } from './AdminSharedUI';
+import { AdminPanelHeader, getFriendlyAdminError, StatusBanner } from './AdminSharedUI';
 
 export function AdminThemeEditor() {
   const { churchInfo, saveSiteTheme, lastSyncedAt } = useChurchData();
@@ -29,10 +29,10 @@ export function AdminThemeEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message:
-          err instanceof Error
-            ? err.message
-            : '主题切换同步到 Firestore 失败，请确认管理员登录状态后重试。',
+        message: getFriendlyAdminError(
+          err,
+          '主题切换同步到 Firestore 失败，请确认管理员登录状态后重试。'
+        ),
       });
     } finally {
       setSwitchingTo(null);

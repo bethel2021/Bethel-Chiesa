@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   onAuthStateChanged,
-  signInWithPopup,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -18,7 +17,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDoc,
   getDocFromServer,
   getDocs,
   onSnapshot,
@@ -59,9 +57,9 @@ import {
   auth,
   db,
   fetchPublicBundleFromServer,
-  googleProvider,
   handleFirestoreError,
   OperationType,
+  signInWithGoogleSafe,
 } from '../lib/firebase';
 import {
   DATA_IMAGE_URI_REGEX,
@@ -69,6 +67,12 @@ import {
   persistLosslessImageIfNeeded,
   preloadImageRef,
 } from '../lib/mediaStorage';
+import {
+  filterSafeImageSrc,
+  filterSafeYoutubeUrl,
+  SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
+  YOUTUBE_HTTPS_URL_REGEX,
+} from '../utils/urlSafety';
 
 import {
   normalizeSiteTheme,
@@ -122,6 +126,7 @@ interface ChurchDataContextValue {
   user: User | null;
   authReady: boolean;
   isAdmin: boolean;
+  isMainAdmin: boolean;
   hasCloudData: boolean;
   hasPublicBundle: boolean;
   cloudLoading: boolean;
@@ -182,7 +187,7 @@ function clampStr(val: string, maxLen: number): string {
 function sanitizeImageRef(val: string | undefined, maxLen: number): string {
   const trimmed = String(val ?? '').trim();
   if (!trimmed) return '';
-  const isSafeUrlOrPath = /^(https?:\/\/|\/).+$/.test(trimmed);
+  const isSafeUrlOrPath = SAFE_HTTP_OR_ROOT_RELATIVE_REGEX.test(trimmed);
   const isSafeMediaRef = isMediaUri(trimmed);
   const isSafeDataUri = DATA_IMAGE_URI_REGEX.test(trimmed);
   if (!isSafeUrlOrPath && !isSafeMediaRef && !isSafeDataUri) {
@@ -202,12 +207,7 @@ function sanitizeYoutubeUrl(val: string | undefined): string {
   } else if (/^([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
-  if (
-    trimmed.length > 500 ||
-    !/^https:\/\/([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\/.+$/.test(
-      trimmed
-    )
-  ) {
+  if (trimmed.length > 500 || !YOUTUBE_HTTPS_URL_REGEX.test(trimmed)) {
     throw new Error(
       '请输入有效的 YouTube 视频链接（例如 https://www.youtube.com/watch?v=... 或 https://youtu.be/...），或留空。'
     );
@@ -215,24 +215,51 @@ function sanitizeYoutubeUrl(val: string | undefined): string {
   return trimmed;
 }
 
+function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): ChurchInfo {
+  const base = raw ? { ...CHURCH_INFO, ...raw } : { ...CHURCH_INFO };
+  return {
+    ...base,
+    heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
+    fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
+    siteTheme: normalizeSiteTheme(base.siteTheme),
+  };
+}
+
+function normalizePastors(list: Partial<PastorProfile>[]): PastorProfile[] {
+  return list.map((p, idx) => ({
+    id: String(p.id || `pastor-${idx + 1}`),
+    name: clampStr(p.name || '', 80),
+    role: clampStr(p.role || '', 120),
+    tenure: clampStr(p.tenure || '', 60),
+    image: filterSafeImageSrc(p.image, PASTORS_TEAM[0]?.image || ''),
+    education: clampStr(p.education || '', 200),
+    ministryFocus: clampStr(p.ministryFocus || '', 200),
+    bio: clampStr(p.bio || '', 1200),
+    sortOrder: Number(p.sortOrder) || idx + 1,
+  }));
+}
+
 function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong[] {
   return list.map((song, idx) => ({
     id: String(song.id || `song-${idx + 1}`),
     title: clampStr(song.title || '', 140),
-    youtubeUrl: typeof song.youtubeUrl === 'string' ? song.youtubeUrl : '',
-    youtubeUrl2: typeof song.youtubeUrl2 === 'string' ? song.youtubeUrl2 : '',
+    youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
+    youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
     sortOrder: Number(song.sortOrder) || idx + 1,
   }));
 }
 
 function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
-  return list.map((cw, idx) => ({
-    id: String(cw.id || `cw-${idx + 1}`),
-    name: clampStr(cw.name || '', 80),
-    title: clampStr(cw.title || '', 120),
-    ...(typeof cw.image === 'string' && cw.image.trim() ? { image: cw.image.trim() } : {}),
-    sortOrder: Number(cw.sortOrder) || idx + 1,
-  }));
+  return list.map((cw, idx) => {
+    const safeImg = filterSafeImageSrc(cw.image);
+    return {
+      id: String(cw.id || `cw-${idx + 1}`),
+      name: clampStr(cw.name || '', 80),
+      title: clampStr(cw.title || '', 120),
+      ...(safeImg ? { image: safeImg } : {}),
+      sortOrder: Number(cw.sortOrder) || idx + 1,
+    };
+  });
 }
 
 function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
@@ -332,6 +359,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
   const [cloudLoading, setCloudLoading] = useState(!initialCache && !initialEarlyBundle);
   const [hasCloudData, setHasCloudData] = useState(
     Boolean(initialCache?.hasCloudBundle || initialEarlyBundle)
@@ -347,13 +375,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   );
 
   const [churchInfo, setChurchInfo] = useState<ChurchInfo>(
-    initialBundle?.churchInfo
-      ? {
-          ...CHURCH_INFO,
-          ...initialBundle.churchInfo,
-          siteTheme: normalizeSiteTheme(initialBundle.churchInfo.siteTheme),
-        }
-      : CHURCH_INFO
+    initialBundle?.churchInfo ? normalizeChurchInfo(initialBundle.churchInfo) : CHURCH_INFO
   );
   const initialCachedHeroRef = useRef(initialBundle?.churchInfo?.heroImage);
   const earlyPrefetchBundleRef = useRef<PublicBundleData | null>(initialEarlyBundle);
@@ -376,7 +398,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [pastors, setPastors] = useState<PastorProfile[]>(
-    initialBundle?.pastors?.length ? initialBundle.pastors : PASTORS_TEAM
+    initialBundle?.pastors?.length ? normalizePastors(initialBundle.pastors) : PASTORS_TEAM
   );
   const [coworkers, setCoworkers] = useState<PulpitCoworker[]>(
     initialBundle?.coworkers?.length
@@ -452,15 +474,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const applyBundleToState = useCallback((bundle: PublicBundleData) => {
     if (bundle.churchInfo) {
-      const merged: ChurchInfo = {
-        ...CHURCH_INFO,
-        ...bundle.churchInfo,
-        siteTheme: normalizeSiteTheme(bundle.churchInfo.siteTheme),
-      };
+      const merged = normalizeChurchInfo(bundle.churchInfo);
       preloadImageRef(merged.heroImage, 'high');
       setChurchInfo(merged);
     }
-    if (bundle.pastors?.length) setPastors(bundle.pastors);
+    if (bundle.pastors?.length) setPastors(normalizePastors(bundle.pastors));
     if (bundle.coworkers?.length) setCoworkers(normalizeCoworkers(bundle.coworkers));
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
     if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
@@ -693,37 +711,63 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [applyBundleToState]
   );
 
-  // Auth listener & Admin RBAC resolution
+  // Auth listener & real-time Admin RBAC resolution
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubAdminDoc: (() => void) | null = null;
+    let authEpoch = 0;
+
+    const cleanupAdminDocListener = () => {
+      if (unsubAdminDoc) {
+        unsubAdminDoc();
+        unsubAdminDoc = null;
+      }
+    };
+
+    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+      authEpoch += 1;
+      const currentEpoch = authEpoch;
+      cleanupAdminDocListener();
+
       setUser(currentUser);
-      if (!currentUser) {
+      if (!currentUser || !currentUser.emailVerified) {
         setIsAdmin(false);
+        setIsMainAdmin(false);
         setAuthReady(true);
         return;
       }
 
       const isBootstrapped =
-        currentUser.emailVerified &&
         currentUser.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
 
       if (isBootstrapped) {
         setIsAdmin(true);
+        setIsMainAdmin(true);
         setAuthReady(true);
         return;
       }
 
-      try {
-        const adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
-        setIsAdmin(adminDoc.exists() && currentUser.emailVerified);
-      } catch {
-        setIsAdmin(false);
-      } finally {
-        setAuthReady(true);
-      }
+      setIsMainAdmin(false);
+      setAuthReady(false);
+      unsubAdminDoc = onSnapshot(
+        doc(db, 'admins', currentUser.uid),
+        (adminDoc) => {
+          if (currentEpoch !== authEpoch) return;
+          setIsAdmin(adminDoc.exists() && currentUser.emailVerified);
+          setAuthReady(true);
+        },
+        () => {
+          if (currentEpoch !== authEpoch) return;
+          setIsAdmin(false);
+          setAuthReady(true);
+        }
+      );
     });
 
-    return () => unsub();
+    return () => {
+      authEpoch += 1;
+      cleanupAdminDocListener();
+      unsubAuth();
+    };
   }, []);
 
   // Visitor Mode boot: immediately load or apply public snapshot without waiting for Firebase Auth
@@ -766,11 +810,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         (snap) => {
           if (snap.exists()) {
             const data = snap.data() as ChurchInfo;
-            setChurchInfo({
-              ...CHURCH_INFO,
-              ...data,
-              siteTheme: normalizeSiteTheme(data.siteTheme),
-            });
+            setChurchInfo(normalizeChurchInfo(data));
             setHasCloudData(true);
           } else {
             setHasCloudData(false);
@@ -840,7 +880,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       );
     };
 
-    subscribeSorted<PastorProfile>('pastors', setPastors, PASTORS_TEAM);
+    subscribeSorted<PastorProfile>(
+      'pastors',
+      (items) => setPastors(normalizePastors(items)),
+      PASTORS_TEAM
+    );
     subscribeSorted<PulpitCoworker>(
       'coworkers',
       (items) => setCoworkers(normalizeCoworkers(items)),
@@ -896,33 +940,37 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       )
     );
 
-    unsubs.push(
-      onSnapshot(
-        collection(db, 'admins'),
-        (snap) => {
-          const items: AdminUserItem[] = snap.docs.map((d) => ({
-            ...(d.data() as Omit<AdminUserItem, 'uid'>),
-            uid: d.id,
-          }));
-          setAdminUsers(items);
-        },
-        (error) => {
-          try {
-            handleFirestoreError(error, OperationType.LIST, 'admins');
-          } catch {
-            // Logged
+    if (isMainAdmin) {
+      unsubs.push(
+        onSnapshot(
+          collection(db, 'admins'),
+          (snap) => {
+            const items: AdminUserItem[] = snap.docs.map((d) => ({
+              ...(d.data() as Omit<AdminUserItem, 'uid'>),
+              uid: d.id,
+            }));
+            setAdminUsers(items);
+          },
+          (error) => {
+            try {
+              handleFirestoreError(error, OperationType.LIST, 'admins');
+            } catch {
+              // Logged
+            }
           }
-        }
-      )
-    );
+        )
+      );
+    } else {
+      setAdminUsers([]);
+    }
 
     return () => {
       unsubs.forEach((fn) => fn());
     };
-  }, [authReady, isAdmin, loadSingleDocPublicBundle]);
+  }, [authReady, isAdmin, isMainAdmin, loadSingleDocPublicBundle]);
 
   const signInWithGoogle = useCallback(async () => {
-    await signInWithPopup(auth, googleProvider);
+    await signInWithGoogleSafe();
   }, []);
 
   const signOutUser = useCallback(async () => {
@@ -1029,10 +1077,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
         for (const song of current.worshipSongs) {
           batch.set(doc(db, 'worship_songs', song.id), {
-            title: song.title,
-            youtubeUrl: song.youtubeUrl,
-            youtubeUrl2: song.youtubeUrl2 || '',
-            sortOrder: song.sortOrder,
+            title: clampStr(song.title, 140),
+            youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
+            youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
+            sortOrder: Number(song.sortOrder) || 0,
             updatedAt: serverTimestamp(),
           });
         }
@@ -1577,10 +1625,18 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       if (!/^[a-zA-Z0-9_\-]+$/.test(cleanUid)) {
         throw new Error('管理员 UID 格式无效（仅支持字母、数字、下划线或连字符）。');
       }
+      const cleanEmail = clampStr(email, 160);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
+        throw new Error('请输入有效的同工邮箱地址。');
+      }
+      const cleanDisplayName = clampStr(displayName, 80);
+      if (!cleanDisplayName) {
+        throw new Error('请填写同工称呼。');
+      }
       try {
         await setDoc(doc(db, 'admins', cleanUid), {
-          email: clampStr(email, 160),
-          displayName: clampStr(displayName, 80),
+          email: cleanEmail,
+          displayName: cleanDisplayName,
           addedAt: serverTimestamp(),
         });
       } catch (error) {
@@ -1591,6 +1647,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeAdminUser = useCallback(async (uid: string) => {
+    if (uid === auth.currentUser?.uid) {
+      throw new Error('为防止误锁定，无法在此撤销当前登录账号自身的权限。');
+    }
     try {
       await deleteDoc(doc(db, 'admins', uid));
     } catch (error) {
@@ -1615,6 +1674,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         user,
         authReady,
         isAdmin,
+        isMainAdmin,
         hasCloudData,
         hasPublicBundle,
         cloudLoading,

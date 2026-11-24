@@ -76,3 +76,25 @@ export function StatusBanner({
     </div>
   );
 }
+
+export function getFriendlyAdminError(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const msg = err.message.trim();
+  if (!msg) return fallback;
+  if (msg.startsWith('{') && msg.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(msg) as { error?: string };
+      const inner = String(parsed.error ?? '').toLowerCase();
+      if (inner.includes('permission-denied') || inner.includes('insufficient permissions')) {
+        return '当前账号缺少此操作的权限，请确认已使用授权管理员账号登录。';
+      }
+      if (inner.includes('unavailable') || inner.includes('offline') || inner.includes('network')) {
+        return '网络连接异常，请稍后重试。';
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return msg;
+}

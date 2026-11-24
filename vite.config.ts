@@ -48,7 +48,7 @@ function buildHeadPrefetchScript(cfg: {
     var preloadImageUrl = function(url) {
       if (!url || typeof url !== 'string') return;
       var u = url.trim();
-      if (!/^(\\/|https?:\\/\\/)/.test(u)) return;
+      if (!/^(\\/[^\\/]|https?:\\/\\/).+$/.test(u)) return;
       var l = document.createElement('link');
       l.rel = 'preload';
       l.as = 'image';

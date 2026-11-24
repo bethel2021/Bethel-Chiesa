@@ -12,6 +12,7 @@ import {
 import {
   AdminPanelHeader,
   FieldLabel,
+  getFriendlyAdminError,
   inputClass,
   StatusBanner,
   textareaClass,
@@ -53,7 +54,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       await saveChurchInfo({ ...churchInfo, thisWeekLabel, nextWeekLabel });
       setStatus({ type: 'success', message: '本周与下周轮值日期标签已更新。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请重试。') });
     } finally {
       setSaving(false);
     }
@@ -68,7 +69,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       setEditingRoster(null);
       setStatus({ type: 'success', message: '主日事工岗位安排已保存。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请重试。') });
     } finally {
       setSaving(false);
     }
@@ -83,7 +84,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       setEditingWeekday(null);
       setStatus({ type: 'success', message: '周间事工安排已保存。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请重试。') });
     } finally {
       setSaving(false);
     }
@@ -165,8 +166,16 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    await deleteWeekdayMinistry(wm.id);
-                    setStatus({ type: 'success', message: `已删除「${wm.title}」。` });
+                    setStatus(null);
+                    try {
+                      await deleteWeekdayMinistry(wm.id);
+                      setStatus({ type: 'success', message: `已删除「${wm.title}」。` });
+                    } catch (err) {
+                      setStatus({
+                        type: 'error',
+                        message: getFriendlyAdminError(err, '删除周间事工失败，请重试。'),
+                      });
+                    }
                   }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
                 >
@@ -450,8 +459,16 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    await deleteMinistryRoster(item.id);
-                    setStatus({ type: 'success', message: `已删除「${item.role}」。` });
+                    setStatus(null);
+                    try {
+                      await deleteMinistryRoster(item.id);
+                      setStatus({ type: 'success', message: `已删除「${item.role}」。` });
+                    } catch (err) {
+                      setStatus({
+                        type: 'error',
+                        message: getFriendlyAdminError(err, '删除事工岗位失败，请重试。'),
+                      });
+                    }
                   }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
                 >

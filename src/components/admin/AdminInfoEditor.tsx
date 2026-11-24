@@ -6,6 +6,7 @@ import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
 import {
   AdminPanelHeader,
   FieldLabel,
+  getFriendlyAdminError,
   inputClass,
   StatusBanner,
   textareaClass,
@@ -40,7 +41,7 @@ export function AdminInfoEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '保存失败，请确认管理员权限与字段长度。',
+        message: getFriendlyAdminError(err, '保存失败，请确认管理员权限与字段长度。'),
       });
     } finally {
       setSaving(false);

@@ -6,6 +6,7 @@ import {
   isMediaUri,
   resolveMediaUri,
 } from '../lib/mediaStorage';
+import { SAFE_HTTP_OR_ROOT_RELATIVE_REGEX } from '../utils/urlSafety';
 
 interface SafeImageProps {
   src: string;
@@ -19,7 +20,7 @@ interface SafeImageProps {
 function isSafeDirectImageSrc(src: string): boolean {
   const trimmed = String(src ?? '').trim();
   if (!trimmed) return false;
-  return /^(https?:\/\/|\/).+$/.test(trimmed) || DATA_IMAGE_URI_REGEX.test(trimmed);
+  return SAFE_HTTP_OR_ROOT_RELATIVE_REGEX.test(trimmed) || DATA_IMAGE_URI_REGEX.test(trimmed);
 }
 
 export function SafeImage({

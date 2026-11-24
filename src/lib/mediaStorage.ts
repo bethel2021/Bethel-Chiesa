@@ -1,9 +1,13 @@
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import {
+  DATA_IMAGE_URI_REGEX,
+  MEDIA_URI_REGEX,
+  SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
+} from '../utils/urlSafety';
 import { consumeEarlyHeroMediaChunks } from './earlyPrefetch';
 import { db } from './firebase';
 
-export const MEDIA_URI_REGEX = /^media:\/\/([a-zA-Z0-9_-]+)\/([1-9][0-9]?)$/;
-export const DATA_IMAGE_URI_REGEX = /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+export { DATA_IMAGE_URI_REGEX, MEDIA_URI_REGEX };
 
 const CHUNK_SIZE_CHARS = 650_000;
 const MAX_MEDIA_CHUNKS = 30;
@@ -170,7 +174,7 @@ export function preloadImageRef(src: string | undefined, priority: 'high' | 'low
     return;
   }
 
-  if (/^(https?:\/\/|\/).+$/.test(trimmed) && !preloadedExternalUrls.has(trimmed)) {
+  if (SAFE_HTTP_OR_ROOT_RELATIVE_REGEX.test(trimmed) && !preloadedExternalUrls.has(trimmed)) {
     preloadedExternalUrls.add(trimmed);
     if (priority === 'high' && typeof document !== 'undefined' && document.head) {
       const link = document.createElement('link');

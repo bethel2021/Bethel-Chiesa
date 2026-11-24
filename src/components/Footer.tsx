@@ -22,7 +22,6 @@ export function Footer() {
             <p className="font-medium text-[var(--theme-ink)] mb-2">聚会时间</p>
             <p className="tabular-nums">主日崇拜：每周日14:30-16:30</p>
             <p className="tabular-nums">儿童主日学：每周日14:30-16:30</p>
-            <p className="tabular-nums">祷告会：周二 19:30 – 21:00</p>
           </div>
 
           <div className="md:col-span-4 space-y-2 text-xs text-[var(--theme-ink-muted)]">

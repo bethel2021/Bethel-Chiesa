@@ -5,6 +5,7 @@ import type { AnnouncementItem } from '../../data/churchData';
 import {
   AdminPanelHeader,
   FieldLabel,
+  getFriendlyAdminError,
   inputClass,
   StatusBanner,
   textareaClass,
@@ -36,7 +37,10 @@ export function AdminAnnouncementsEditor() {
       setEditing(null);
       setStatus({ type: 'success', message: '聚会公告已保存并同步发布。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({
+        type: 'error',
+        message: getFriendlyAdminError(err, '保存失败，请稍后重试。'),
+      });
     } finally {
       setSaving(false);
     }
@@ -112,8 +116,16 @@ export function AdminAnnouncementsEditor() {
               <button
                 type="button"
                 onClick={async () => {
-                  await deleteAnnouncement(item.id);
-                  setStatus({ type: 'success', message: `已删除公告「${item.title}」。` });
+                  setStatus(null);
+                  try {
+                    await deleteAnnouncement(item.id);
+                    setStatus({ type: 'success', message: `已删除公告「${item.title}」。` });
+                  } catch (err) {
+                    setStatus({
+                      type: 'error',
+                      message: getFriendlyAdminError(err, '删除公告失败，请重试。'),
+                    });
+                  }
                 }}
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
               >

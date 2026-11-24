@@ -10,6 +10,7 @@ import { SafeImage } from '../SafeImage';
 import {
   AdminPanelHeader,
   FieldLabel,
+  getFriendlyAdminError,
   inputClass,
   StatusBanner,
   textareaClass,
@@ -59,7 +60,7 @@ export function AdminPastorsEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '保存牧者档案失败。',
+        message: getFriendlyAdminError(err, '保存牧者档案失败，请稍后重试。'),
       });
     } finally {
       setSaving(false);
@@ -74,7 +75,7 @@ export function AdminPastorsEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '删除失败。',
+        message: getFriendlyAdminError(err, '删除失败，请稍后重试。'),
       });
     }
   };
@@ -91,7 +92,7 @@ export function AdminPastorsEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '保存同工信息失败。',
+        message: getFriendlyAdminError(err, '保存同工信息失败，请稍后重试。'),
       });
     } finally {
       setSaving(false);
@@ -106,7 +107,7 @@ export function AdminPastorsEditor() {
     } catch (err) {
       setStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '删除失败。',
+        message: getFriendlyAdminError(err, '删除失败，请稍后重试。'),
       });
     }
   };

@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
 import type { LiturgyStep, WorshipSong, WorshipTimeSlot } from '../../data/churchData';
+import { isSafeYoutubeUrl } from '../../utils/urlSafety';
 import {
   AdminPanelHeader,
   FieldLabel,
+  getFriendlyAdminError,
   inputClass,
   StatusBanner,
   textareaClass,
@@ -42,7 +44,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       setEditingTime(null);
       setStatus({ type: 'success', message: '主日聚会时段已保存。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请稍后重试。') });
     } finally {
       setSaving(false);
     }
@@ -57,7 +59,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       setEditingStep(null);
       setStatus({ type: 'success', message: '主日崇拜流程步骤已保存。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请稍后重试。') });
     } finally {
       setSaving(false);
     }
@@ -73,7 +75,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       setEditingSong(null);
       setStatus({ type: 'success', message: '主日崇拜歌曲与 YouTube 链接已保存。' });
     } catch (err) {
-      setStatus({ type: 'error', message: err instanceof Error ? err.message : '保存失败。' });
+      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请稍后重试。') });
     } finally {
       setSaving(false);
     }
@@ -109,9 +111,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
 
         <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
           {worshipSongs.map((song) => {
-            const links = [song.youtubeUrl, song.youtubeUrl2].filter(
-              (url): url is string => Boolean(url && url.trim())
-            );
+            const links = [song.youtubeUrl, song.youtubeUrl2].filter(isSafeYoutubeUrl);
             return (
               <div
                 key={song.id}
@@ -163,8 +163,16 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                   <button
                     type="button"
                     onClick={async () => {
-                      await deleteWorshipSong(song.id);
-                      setStatus({ type: 'success', message: `已删除「${song.title}」。` });
+                      setStatus(null);
+                      try {
+                        await deleteWorshipSong(song.id);
+                        setStatus({ type: 'success', message: `已删除「${song.title}」。` });
+                      } catch (err) {
+                        setStatus({
+                          type: 'error',
+                          message: getFriendlyAdminError(err, '删除歌曲失败，请重试。'),
+                        });
+                      }
                     }}
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
                   >
@@ -342,8 +350,16 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    await deleteWorshipTime(slot.id);
-                    setStatus({ type: 'success', message: `已删除「${slot.title}」。` });
+                    setStatus(null);
+                    try {
+                      await deleteWorshipTime(slot.id);
+                      setStatus({ type: 'success', message: `已删除「${slot.title}」。` });
+                    } catch (err) {
+                      setStatus({
+                        type: 'error',
+                        message: getFriendlyAdminError(err, '删除时段失败，请重试。'),
+                      });
+                    }
                   }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
                 >
@@ -438,8 +454,16 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    await deleteLiturgyStep(step.id);
-                    setStatus({ type: 'success', message: `已删除步骤「${step.step}」。` });
+                    setStatus(null);
+                    try {
+                      await deleteLiturgyStep(step.id);
+                      setStatus({ type: 'success', message: `已删除步骤「${step.step}」。` });
+                    } catch (err) {
+                      setStatus({
+                        type: 'error',
+                        message: getFriendlyAdminError(err, '删除流程步骤失败，请重试。'),
+                      });
+                    }
                   }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
                 >

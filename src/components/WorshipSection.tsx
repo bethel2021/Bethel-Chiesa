@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { ExternalLink, PlayCircle } from 'lucide-react';
 import { AnimatePresence, motion, useInView, useReducedMotion, type Variants } from 'motion/react';
 import { useChurchData } from '../context/ChurchDataContext';
+import { isSafeYoutubeUrl } from '../utils/urlSafety';
 
 export function WorshipSection() {
   const { worshipTimes, liturgySteps, worshipSongs } = useChurchData();
@@ -186,13 +187,7 @@ export function WorshipSection() {
 
             <div className="divide-y divide-[var(--theme-border-strong)]">
               {worshipSongs.map((song, idx) => {
-                const links = [song.youtubeUrl, song.youtubeUrl2].filter(
-                  (url): url is string =>
-                    typeof url === 'string' &&
-                    /^https:\/\/([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\/.+$/.test(
-                      url.trim()
-                    )
-                );
+                const links = [song.youtubeUrl, song.youtubeUrl2].filter(isSafeYoutubeUrl);
                 return (
                   <div
                     key={song.id}

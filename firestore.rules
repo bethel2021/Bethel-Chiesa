@@ -56,7 +56,7 @@ service cloud.firestore {
         && val.size() <= maxLen
         && (
           val == '' ||
-          val.matches('^(https?://|/).+$') ||
+          val.matches('^(https?://.+|/[^/].*)$') ||
           val.matches('^media://[a-zA-Z0-9_\\-]+/[1-9][0-9]?$') ||
           val.matches('^data:image/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$')
         );
@@ -98,7 +98,7 @@ service cloud.firestore {
       && isStringBounds(data.themeVerseRef, 1, 100)
       && isStringBounds(data.thisWeekLabel, 1, 60)
       && isStringBounds(data.nextWeekLabel, 1, 60)
-      && (!('siteTheme' in data) || data.siteTheme in ['classic', 'christmas', 'easter', 'thanksgiving'])
+      && (!('siteTheme' in data) || (data.siteTheme is string && data.siteTheme in ['classic', 'christmas', 'easter', 'thanksgiving']))
       && isValidStringList(data.introParagraphs, 10)
       && isValidMapList(data.coreValues, 10)
       && data.updatedAt == request.time;
@@ -283,6 +283,7 @@ service cloud.firestore {
       return data.keys().hasAll(['email', 'displayName', 'addedAt'])
       && data.keys().hasOnly(['email', 'displayName', 'addedAt'])
       && isStringBounds(data.email, 3, 160)
+      && data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
       && isStringBounds(data.displayName, 1, 80)
       && data.addedAt == request.time;
     }
@@ -293,6 +294,7 @@ service cloud.firestore {
       && isValidId(data.mediaId)
       && data.chunkIndex is number && data.chunkIndex >= 0 && data.chunkIndex < 30
       && data.totalChunks is number && data.totalChunks >= 1 && data.totalChunks <= 30
+      && data.chunkIndex < data.totalChunks
       && isStringBounds(data.data, 1, 750000)
       && data.updatedAt == request.time;
     }
@@ -300,7 +302,7 @@ service cloud.firestore {
     // --- Collection Rules ---
     match /church_sections/{sectionId} {
       allow get: if isValidId(sectionId);
-      allow list: if true;
+      allow list: if false;
       allow create: if isValidId(sectionId) && isAdmin() && (
         (sectionId == 'info' && isValidChurchInfo(incoming())) ||
         (sectionId == 'public_bundle' && isValidPublicBundle(incoming()))
@@ -389,13 +391,17 @@ service cloud.firestore {
       allow delete: if isValidId(requestId) && isAdmin();
     }
 
-    // Admin RBAC table: strictly managed by verified admins only
+    // Admin RBAC table: role assignment/revocation restricted strictly to bootstrapped main admin;
+    // verified users may only read their own role document to verify permissions.
     match /admins/{adminUid} {
-      allow get: if isValidId(adminUid) && isAdmin();
-      allow list: if isAdmin();
-      allow create: if isValidId(adminUid) && isValidAdminUser(incoming()) && isAdmin();
+      allow get: if isValidId(adminUid) && (
+        isBootstrappedAdmin() ||
+        (isVerifiedUser() && request.auth.uid == adminUid)
+      );
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(adminUid) && isValidAdminUser(incoming()) && isBootstrappedAdmin();
       allow update: if false;
-      allow delete: if isValidId(adminUid) && isAdmin();
+      allow delete: if isValidId(adminUid) && isBootstrappedAdmin() && adminUid != request.auth.uid;
     }
 
     // Lossless original image chunks: direct get by known ID only, list disabled, admin-only write

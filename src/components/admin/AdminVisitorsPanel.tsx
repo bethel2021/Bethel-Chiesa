@@ -2,7 +2,13 @@ import { useState, type FormEvent } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useChurchData } from '../../context/ChurchDataContext';
 import type { VisitorRequestItem } from '../../data/churchData';
-import { AdminPanelHeader, FieldLabel, inputClass, StatusBanner } from './AdminSharedUI';
+import {
+  AdminPanelHeader,
+  FieldLabel,
+  getFriendlyAdminError,
+  inputClass,
+  StatusBanner,
+} from './AdminSharedUI';
 
 const STATUS_LABELS: Record<VisitorRequestItem['status'], string> = {
   pending: '待同工跟进',
@@ -12,6 +18,7 @@ const STATUS_LABELS: Record<VisitorRequestItem['status'], string> = {
 
 export function AdminVisitorsPanel() {
   const {
+    isMainAdmin,
     visitorRequests,
     updateVisitorRequestStatus,
     deleteVisitorRequest,
@@ -48,7 +55,7 @@ export function AdminVisitorsPanel() {
     } catch (err) {
       setStatusMsg({
         type: 'error',
-        message: err instanceof Error ? err.message : '添加管理员失败。',
+        message: getFriendlyAdminError(err, '添加管理员失败，请检查权限或邮箱格式。'),
       });
     }
   };
@@ -161,7 +168,7 @@ export function AdminVisitorsPanel() {
                         } catch (err) {
                           setStatusMsg({
                             type: 'error',
-                            message: err instanceof Error ? err.message : '更新状态失败，请重试。',
+                            message: getFriendlyAdminError(err, '更新状态失败，请重试。'),
                           });
                         }
                       }}
@@ -182,7 +189,7 @@ export function AdminVisitorsPanel() {
                         } catch (err) {
                           setStatusMsg({
                             type: 'error',
-                            message: err instanceof Error ? err.message : '保存备注失败，请重试。',
+                            message: getFriendlyAdminError(err, '保存备注失败，请重试。'),
                           });
                         }
                       }}
@@ -201,7 +208,7 @@ export function AdminVisitorsPanel() {
                         } catch (err) {
                           setStatusMsg({
                             type: 'error',
-                            message: err instanceof Error ? err.message : '删除记录失败，请重试。',
+                            message: getFriendlyAdminError(err, '删除记录失败，请重试。'),
                           });
                         }
                       }}
@@ -225,85 +232,105 @@ export function AdminVisitorsPanel() {
             授权同工管理员名录
           </h3>
           <p className="text-xs text-[#57534E] mt-1">
-            主管理员（chinarenzhian@gmail.com）默认拥有全部权限。若其他同工需共同管理后台，请将其登录后显示的 UID 添加至此名录。
+            {isMainAdmin
+              ? '教会主管理员默认拥有全部权限。若其他同工需共同管理后台，请将其登录后显示的 UID 添加至此名录。'
+              : '同工管理员可编辑教会主页内容与跟进来访代祷留言；管理员权限的授予与撤销仅由教会主管理员统一管理。'}
           </p>
         </div>
 
-        <form onSubmit={handleAddAdmin} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-          <div className="md:col-span-4">
-            <FieldLabel label="同工用户 UID *">
-              <input
-                type="text"
-                required
-                maxLength={128}
-                value={newUid}
-                onChange={(e) => setNewUid(e.target.value)}
-                placeholder="例如：Abc123xyz..."
-                className={inputClass}
-              />
-            </FieldLabel>
-          </div>
-          <div className="md:col-span-4">
-            <FieldLabel label="同工邮箱 *">
-              <input
-                type="email"
-                required
-                maxLength={160}
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="fellow@bethelchurch.org"
-                className={inputClass}
-              />
-            </FieldLabel>
-          </div>
-          <div className="md:col-span-2">
-            <FieldLabel label="同工称呼 *">
-              <input
-                type="text"
-                required
-                maxLength={80}
-                value={newDisplayName}
-                onChange={(e) => setNewDisplayName(e.target.value)}
-                placeholder="陈牧师"
-                className={inputClass}
-              />
-            </FieldLabel>
-          </div>
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="w-full inline-flex items-center justify-center gap-1 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              授权
-            </button>
-          </div>
-        </form>
-
-        {adminUsers.length > 0 && (
-          <div className="divide-y divide-[#EFEAE0] border-t border-[#EFEAE0]">
-            {adminUsers.map((adm) => (
-              <div
-                key={adm.uid}
-                className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-              >
-                <div>
-                  <span className="font-semibold text-[#1C1917]">{adm.displayName}</span>
-                  <span className="text-[#78716C] mx-2">·</span>
-                  <span className="text-[#57534E]">{adm.email}</span>
-                  <span className="text-[#78716C] mx-2">·</span>
-                  <span className="font-mono text-[#78716C]">UID: {adm.uid}</span>
-                </div>
+        {isMainAdmin && (
+          <>
+            <form onSubmit={handleAddAdmin} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-4">
+                <FieldLabel label="同工用户 UID *">
+                  <input
+                    type="text"
+                    required
+                    maxLength={128}
+                    value={newUid}
+                    onChange={(e) => setNewUid(e.target.value)}
+                    placeholder="例如：Abc123xyz..."
+                    className={inputClass}
+                  />
+                </FieldLabel>
+              </div>
+              <div className="md:col-span-4">
+                <FieldLabel label="同工邮箱 *">
+                  <input
+                    type="email"
+                    required
+                    maxLength={160}
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="fellow@bethelchurch.org"
+                    className={inputClass}
+                  />
+                </FieldLabel>
+              </div>
+              <div className="md:col-span-2">
+                <FieldLabel label="同工称呼 *">
+                  <input
+                    type="text"
+                    required
+                    maxLength={80}
+                    value={newDisplayName}
+                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    placeholder="陈牧师"
+                    className={inputClass}
+                  />
+                </FieldLabel>
+              </div>
+              <div className="md:col-span-2">
                 <button
-                  type="button"
-                  onClick={() => removeAdminUser(adm.uid)}
-                  className="text-[#9A3412] hover:underline cursor-pointer self-start sm:self-auto"
+                  type="submit"
+                  className="w-full inline-flex items-center justify-center gap-1 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
                 >
-                  撤销权限
+                  <Plus className="w-3.5 h-3.5" />
+                  授权
                 </button>
               </div>
-            ))}
-          </div>
+            </form>
+
+            {adminUsers.length > 0 && (
+              <div className="divide-y divide-[#EFEAE0] border-t border-[#EFEAE0]">
+                {adminUsers.map((adm) => (
+                  <div
+                    key={adm.uid}
+                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-[#1C1917]">{adm.displayName}</span>
+                      <span className="text-[#78716C] mx-2">·</span>
+                      <span className="text-[#57534E]">{adm.email}</span>
+                      <span className="text-[#78716C] mx-2">·</span>
+                      <span className="font-mono text-[#78716C]">UID: {adm.uid}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setStatusMsg(null);
+                        try {
+                          await removeAdminUser(adm.uid);
+                          setStatusMsg({
+                            type: 'success',
+                            message: `已撤销「${adm.displayName}」的后台管理权限。`,
+                          });
+                        } catch (err) {
+                          setStatusMsg({
+                            type: 'error',
+                            message: getFriendlyAdminError(err, '撤销管理员权限失败，请重试。'),
+                          });
+                        }
+                      }}
+                      className="text-[#9A3412] hover:underline cursor-pointer self-start sm:self-auto"
+                    >
+                      撤销权限
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

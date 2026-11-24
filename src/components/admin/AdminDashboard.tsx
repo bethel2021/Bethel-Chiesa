@@ -22,7 +22,7 @@ import { AdminAnnouncementsEditor } from './AdminAnnouncementsEditor';
 import { AdminInfoEditor } from './AdminInfoEditor';
 import { AdminMinistryEditor } from './AdminMinistryEditor';
 import { AdminPastorsEditor } from './AdminPastorsEditor';
-import { StatusBanner } from './AdminSharedUI';
+import { getFriendlyAdminError, StatusBanner } from './AdminSharedUI';
 import { AdminThemeEditor } from './AdminThemeEditor';
 import { AdminVisitorsPanel } from './AdminVisitorsPanel';
 import { AdminWorshipEditor } from './AdminWorshipEditor';
@@ -88,6 +88,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -127,7 +128,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     } catch (err) {
       setSyncStatus({
         type: 'error',
-        message: err instanceof Error ? err.message : '同步到云端失败，请稍后重试。',
+        message: getFriendlyAdminError(err, '同步到云端失败，请稍后重试。'),
       });
     } finally {
       setSyncing(false);
@@ -183,8 +184,11 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           <div className="space-y-3 pt-2">
             <button
               type="button"
+              disabled={signingIn}
               onClick={async () => {
+                if (signingIn) return;
                 setAuthError('');
+                setSigningIn(true);
                 try {
                   await signInWithGoogle();
                 } catch (err) {
@@ -199,17 +203,34 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   } else if (code === 'auth/popup-blocked') {
                     setAuthError('登录弹窗被浏览器拦截，请允许当前站点弹出窗口后重试。');
                   } else if (code === 'auth/popup-closed-by-user') {
-                    setAuthError('已取消 Google 登录，请重新点击登录。');
+                    setAuthError('已取消或关闭 Google 登录弹窗，请重新点击登录。');
+                  } else if (code === 'auth/web-storage-unsupported') {
+                    setAuthError('当前浏览器的第三方 Cookie 或本地存储被禁用，请在浏览器设置中允许后重试，或在新标签页打开页面登录。');
+                  } else if (
+                    code === 'auth/cancelled-popup-request' ||
+                    code === 'auth/popup-interrupted'
+                  ) {
+                    setAuthError('登录弹窗请求被中断，请重新点击登录按钮。');
+                  } else if (code === 'auth/network-request-failed') {
+                    setAuthError('网络连接异常，无法连接 Google 登录服务，请检查网络后重试。');
+                  } else if (code === 'auth/user-disabled') {
+                    setAuthError('该 Google 账号已被停用，请联系管理员处理。');
+                  } else if (code === 'auth/operation-not-allowed') {
+                    setAuthError('Google 登录方式尚未在后台启用，请联系管理员检查身份验证配置。');
+                  } else if (code === 'auth/too-many-requests') {
+                    setAuthError('登录尝试过于频繁，请稍候几分钟后再试。');
+                  } else if (code === 'auth/account-exists-with-different-credential') {
+                    setAuthError('该邮箱已关联其他登录方式，请使用原授权方式登录。');
                   } else {
-                    setAuthError(
-                      err instanceof Error ? err.message : '登录弹窗被拦截或已取消，请重试。'
-                    );
+                    setAuthError('Google 登录未能完成，请重试或检查浏览器弹窗设置。');
                   }
+                } finally {
+                  setSigningIn(false);
                 }
               }}
-              className="w-full py-2.5 px-4 text-sm font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 text-sm font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 disabled:cursor-not-allowed rounded-md transition-colors cursor-pointer"
             >
-              使用 Google 账号登录后台
+              {signingIn ? '正在打开 Google 登录窗口…' : '使用 Google 账号登录后台'}
             </button>
 
             <button

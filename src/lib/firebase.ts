@@ -1,6 +1,18 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import {
+  browserPopupRedirectResolver,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth';
+import {
+  doc,
+  getDoc,
+  getDocFromServer,
+  getFirestore,
+  initializeFirestore,
+  type Firestore,
+} from 'firebase/firestore';
 import appletConfig from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -17,9 +29,90 @@ const firestoreDatabaseId =
   import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || appletConfig.firestoreDatabaseId;
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firestoreDatabaseId);
+
+function createFirestoreClient(): Firestore {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+        ignoreUndefinedProperties: true,
+      },
+      firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firestoreDatabaseId);
+  }
+}
+
+export const db = createFirestoreClient();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Prevent orphaned Firebase Auth AbstractPopupRedirectOperation.onAuthEvent races
+// from emitting unhandled rejections after a popup has already settled/cancelled.
+if (typeof window !== 'undefined') {
+  const globalKey = '__bethelAuthAssertionGuardInstalled';
+  const win = window as Window & { [globalKey]?: boolean };
+  if (!win[globalKey]) {
+    win[globalKey] = true;
+    window.addEventListener('unhandledrejection', (event) => {
+      const msg =
+        event.reason instanceof Error
+          ? event.reason.message
+          : typeof event.reason === 'string'
+            ? event.reason
+            : '';
+      if (
+        msg.includes('INTERNAL ASSERTION FAILED') &&
+        msg.includes('Pending promise was never set')
+      ) {
+        event.preventDefault();
+      }
+    });
+  }
+}
+
+let activeGoogleSignIn: Promise<void> | null = null;
+
+export async function signInWithGoogleSafe(): Promise<void> {
+  if (activeGoogleSignIn) {
+    return activeGoogleSignIn;
+  }
+
+  activeGoogleSignIn = (async () => {
+    await auth.authStateReady();
+    try {
+      await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error ?? '');
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: string }).code)
+          : '';
+      if (
+        msg.includes('Pending promise was never set') ||
+        code === 'auth/cancelled-popup-request'
+      ) {
+        await auth.authStateReady();
+        if (auth.currentUser) {
+          return;
+        }
+        const friendly = new Error('登录弹窗请求已中断，请重新点击登录。') as Error & {
+          code?: string;
+        };
+        friendly.code = code || 'auth/popup-interrupted';
+        throw friendly;
+      }
+      throw error;
+    }
+  })().finally(() => {
+    activeGoogleSignIn = null;
+  });
+
+  return activeGoogleSignIn;
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -35,15 +128,9 @@ export interface FirestoreErrorInfo {
   operationType: OperationType;
   path: string | null;
   authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
+    isSignedIn: boolean;
+    emailVerified: boolean;
+    isAnonymous: boolean;
   };
 }
 
@@ -55,16 +142,9 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
+      isSignedIn: Boolean(auth.currentUser),
+      emailVerified: Boolean(auth.currentUser?.emailVerified),
+      isAnonymous: Boolean(auth.currentUser?.isAnonymous),
     },
     operationType,
     path,
@@ -74,11 +154,17 @@ export function handleFirestoreError(
 }
 
 export async function fetchPublicBundleFromServer() {
+  const bundleRef = doc(db, 'church_sections', 'public_bundle');
   try {
-    return await getDocFromServer(doc(db, 'church_sections', 'public_bundle'));
+    return await getDocFromServer(bundleRef);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: string }).code)
+        : '';
+    const msg = error instanceof Error ? error.message : String(error ?? '');
+    if (code === 'unavailable' || msg.includes('the client is offline')) {
+      return await getDoc(bundleRef);
     }
     throw error;
   }
