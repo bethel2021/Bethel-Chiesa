@@ -88,7 +88,7 @@ export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
                 </span>
               </p>
 
-              <p className="text-sm sm:text-base text-white/95 leading-relaxed mb-7 max-w-xl">
+              <p className="text-sm sm:text-base text-white/95 leading-relaxed mb-7 max-w-xl lg:max-w-none lg:whitespace-nowrap">
                 {churchInfo.heroSubtitle}
               </p>
 

@@ -25,7 +25,7 @@ export function AnnouncementsSection({
   selectedAnnouncementId,
   onSelectAnnouncement,
 }: AnnouncementsSectionProps = {}) {
-  const { announcements } = usePublicChurchData();
+  const { announcements, cloudLoading } = usePublicChurchData();
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('全部');
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
 
@@ -93,6 +93,54 @@ export function AnnouncementsSection({
     return summaryText ? [summaryText, ...detailParagraphs] : detailParagraphs;
   }, [activeAnnouncement]);
 
+  if (cloudLoading && announcements.length === 0) {
+    return (
+      <section id="announcements" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
+        <div className="max-w-[1200px] mx-auto px-6">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-7">
+            <div className="max-w-2xl">
+              <div className="w-32 h-3 bg-[var(--theme-ink)]/10 rounded animate-pulse mb-2" />
+              <div className="w-48 h-9 bg-[var(--theme-ink)]/15 rounded animate-pulse" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="w-20 h-8 bg-[var(--theme-ink)]/10 rounded-md animate-pulse" />
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-[var(--theme-surface)]/80 border border-[var(--theme-border)] rounded-lg p-6 md:p-8 mb-8 animate-pulse">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-16 h-3 bg-[var(--theme-ink)]/15 rounded" />
+              <div className="w-3 h-3 rounded-full bg-[var(--theme-ink)]/10" />
+              <div className="w-20 h-3 bg-[var(--theme-ink)]/15 rounded" />
+            </div>
+            <div className="w-3/4 h-8 bg-[var(--theme-ink)]/20 rounded mb-3" />
+            <div className="w-full h-4 bg-[var(--theme-ink)]/15 rounded mb-2" />
+            <div className="w-2/3 h-4 bg-[var(--theme-ink)]/15 rounded mb-4" />
+            <div className="w-48 h-4 bg-[var(--theme-ink)]/10 rounded mb-6" />
+            <div className="w-36 h-10 bg-[var(--theme-ink)]/20 rounded-md" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[1, 2].map((i) => (
+              <div key={i} className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg p-6 animate-pulse">
+                <div className="w-24 h-3 bg-[var(--theme-ink)]/15 rounded mb-3" />
+                <div className="w-4/5 h-6 bg-[var(--theme-ink)]/20 rounded mb-2.5" />
+                <div className="w-full h-4 bg-[var(--theme-ink)]/15 rounded mb-2" />
+                <div className="w-3/4 h-4 bg-[var(--theme-ink)]/15 rounded mb-5" />
+                <div className="pt-4 border-t border-[var(--theme-surface-alt)] flex items-center justify-between">
+                  <div className="w-32 h-3 bg-[var(--theme-ink)]/10 rounded" />
+                  <div className="w-16 h-3 bg-[var(--theme-ink)]/15 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="announcements" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
       <div className="max-w-[1200px] mx-auto px-6">
@@ -137,7 +185,7 @@ export function AnnouncementsSection({
           >
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
               <div className={featuredItem.image ? 'lg:col-span-7' : 'lg:col-span-8'}>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-2">
                   <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
                   <span aria-hidden="true">·</span>
                   <span>{featuredItem.category}</span>
@@ -145,15 +193,15 @@ export function AnnouncementsSection({
                   <span className="tabular-nums">{featuredItem.date}</span>
                 </div>
 
-                <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-3">
+                <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
                   {featuredItem.title}
                 </h3>
 
-                <p className="text-base text-[var(--theme-ink-body)] leading-relaxed mb-4 max-w-2xl">
+                <p className="text-base text-[var(--theme-ink-body)] leading-relaxed mb-3 max-w-2xl">
                   {featuredItem.summary}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--theme-ink-muted)] mb-5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--theme-ink-muted)] mb-4">
                   <span className="tabular-nums">时间：{featuredItem.time}</span>
                   <span aria-hidden="true">·</span>
                   <span>地点：{featuredItem.location}</span>
@@ -205,7 +253,7 @@ export function AnnouncementsSection({
               >
                 <div>
                   {item.image && (
-                    <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)] mb-4">
+                    <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)] mb-3">
                       <SafeImage
                         src={item.image}
                         alt={item.title}
@@ -215,17 +263,17 @@ export function AnnouncementsSection({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-2">
+                  <div className="flex items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-1.5">
                     <span className="text-[var(--theme-accent)] font-medium">{item.category}</span>
                     <span aria-hidden="true">·</span>
                     <span className="tabular-nums">{item.date}</span>
                   </div>
 
-                  <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2.5">
+                  <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
                     {item.title}
                   </h3>
 
-                  <p className="text-sm text-[var(--theme-ink-muted)] leading-relaxed mb-4">
+                  <p className="text-sm text-[var(--theme-ink-muted)] leading-relaxed mb-3">
                     {item.summary}
                   </p>
                 </div>

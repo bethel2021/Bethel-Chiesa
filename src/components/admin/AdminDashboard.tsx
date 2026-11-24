@@ -387,7 +387,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded-md whitespace-nowrap cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              预览公开主页
+              返回主页
             </button>
           </div>
         </header>

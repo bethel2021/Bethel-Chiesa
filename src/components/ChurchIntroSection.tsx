@@ -78,7 +78,7 @@ export function ChurchIntroSection() {
 
             {/* Quiet Pull Quote */}
             <div className="mt-8 pt-6 border-t border-[var(--theme-border-strong)]">
-              <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed text-justify">
+              <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed">
                 {churchInfo.themeVerse}
               </p>
               {(() => {
@@ -95,7 +95,7 @@ export function ChurchIntroSection() {
                   );
                 }
                 return (
-                  <p className="text-xs text-[var(--theme-ink-subtle)] mt-2 text-justify">
+                  <p className="text-xs text-[var(--theme-ink-subtle)] mt-2">
                     {churchInfo.themeVerseRef}
                   </p>
                 );

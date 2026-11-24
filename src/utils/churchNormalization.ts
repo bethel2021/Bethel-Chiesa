@@ -80,8 +80,16 @@ export function sanitizeYoutubeUrl(val: string | undefined): string {
 
 export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): ChurchInfo {
   const base = raw ? { ...CHURCH_INFO, ...raw } : { ...CHURCH_INFO };
+  let themeVerseRef = clampStr(base.themeVerseRef, FIELD_LIMITS.churchInfo.themeVerseRef);
+  if (themeVerseRef.includes('伯特利教会年度主题经文')) {
+    themeVerseRef = themeVerseRef.replace(/·?\s*伯特利教会年度主题经文/g, '').trim();
+  }
+  if (!themeVerseRef) {
+    themeVerseRef = CHURCH_INFO.themeVerseRef;
+  }
   return {
     ...base,
+    themeVerseRef,
     heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
     fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
     siteTheme: normalizeSiteTheme(base.siteTheme),
@@ -174,6 +182,13 @@ export function toWeekdayFirestoreBody(item: WeekdayMinistry): Record<string, un
 
 export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
   const L = FIELD_LIMITS.churchInfo;
+  let themeVerseRef = clampStr(info.themeVerseRef, L.themeVerseRef);
+  if (themeVerseRef.includes('伯特利教会年度主题经文')) {
+    themeVerseRef = themeVerseRef.replace(/·?\s*伯特利教会年度主题经文/g, '').trim();
+  }
+  if (!themeVerseRef) {
+    themeVerseRef = CHURCH_INFO.themeVerseRef;
+  }
   return {
     name: clampStr(info.name, L.name),
     founded: clampStr(info.founded, L.founded),
@@ -187,7 +202,7 @@ export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
     shortAddress: clampStr(info.shortAddress, L.shortAddress),
     pastoralPhone: clampStr(info.pastoralPhone, L.pastoralPhone),
     themeVerse: clampStr(info.themeVerse, L.themeVerse),
-    themeVerseRef: clampStr(info.themeVerseRef, L.themeVerseRef),
+    themeVerseRef,
     thisWeekLabel: clampStr(info.thisWeekLabel, L.thisWeekLabel),
     nextWeekLabel: clampStr(info.nextWeekLabel, L.nextWeekLabel),
     siteTheme: normalizeSiteTheme(info.siteTheme),

@@ -264,7 +264,7 @@ export function ContactSection() {
 
                   <div className="pt-2 flex items-center justify-between gap-4">
                     <span className="text-xs text-[var(--theme-ink-subtle)]">
-                      所有信息仅用于教牧关怀与来访接待
+                      所有资料仅用于教会内部关怀，个人信息严格保密！
                     </span>
                     <button
                       type="submit"
