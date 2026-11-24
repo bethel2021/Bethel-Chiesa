@@ -1,14 +1,15 @@
-import { useChurchData } from '../context/ChurchDataContext';
+import { useMemo } from 'react';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import { SafeImage } from './SafeImage';
 
 export function PastorsSection() {
-  const { pastors, coworkers, cloudLoading } = useChurchData();
+  const { pastors, coworkers, cloudLoading } = usePublicChurchData();
 
-  const seniorPastor =
-    pastors.find((p) => p.role.includes('主任牧师')) ?? pastors[0] ?? null;
-  const otherPastors = seniorPastor
-    ? pastors.filter((p) => p.id !== seniorPastor.id)
-    : [];
+  const { seniorPastor, otherPastors } = useMemo(() => {
+    const senior = pastors.find((p) => p.role.includes('主任牧师')) ?? pastors[0] ?? null;
+    const others = senior ? pastors.filter((p) => p.id !== senior.id) : [];
+    return { seniorPastor: senior, otherPastors: others };
+  }, [pastors]);
 
   return (
     <section

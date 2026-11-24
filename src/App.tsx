@@ -31,6 +31,13 @@ function BethelChurchApp() {
   const [view, setView] = useState<'public' | 'admin'>(resolveInitialView);
 
   useEffect(() => {
+    document.title =
+      view === 'admin'
+        ? '同工管理后台 · 基督教意大利伯特利华人教会'
+        : '基督教意大利伯特利华人教会';
+  }, [view]);
+
+  useEffect(() => {
     const handlePopState = () => {
       setView(resolveInitialView());
     };

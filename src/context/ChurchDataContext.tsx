@@ -3,15 +3,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import {
-  onAuthStateChanged,
-  signOut,
-  type User,
-} from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import {
   addDoc,
   collection,
@@ -26,7 +23,9 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  type DocumentReference,
 } from 'firebase/firestore';
+import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
   ANNOUNCEMENTS,
   CHURCH_INFO,
@@ -53,63 +52,53 @@ import {
   type WorshipSong,
   type WorshipTimeSlot,
 } from '../data/churchData';
+import { normalizeSiteTheme, type SiteThemeId } from '../data/themes';
 import {
-  auth,
+  awaitEarlyPrefetchedBundle,
+  getEarlyPrefetchedBundleSnapshot,
+} from '../lib/earlyPrefetch';
+import {
   db,
   fetchPublicBundleFromServer,
+  getCurrentAuthUid,
   handleFirestoreError,
   OperationType,
-  signInWithGoogleSafe,
 } from '../lib/firebase';
 import {
-  DATA_IMAGE_URI_REGEX,
+  deleteMediaChunksByUri,
   isMediaUri,
   persistLosslessImageIfNeeded,
   preloadImageRef,
 } from '../lib/mediaStorage';
 import {
-  filterSafeImageSrc,
-  filterSafeYoutubeUrl,
-  SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
-  YOUTUBE_HTTPS_URL_REGEX,
-} from '../utils/urlSafety';
-
+  isCacheFresh,
+  readLocalBundleCache,
+  writeLocalBundleCache,
+  type PublicBundleData,
+} from '../lib/publicBundleCache';
 import {
-  normalizeSiteTheme,
-  type SiteThemeId,
-} from '../data/themes';
-import {
-  awaitEarlyPrefetchedBundle,
-  getEarlyPrefetchedBundleSnapshot,
-} from '../lib/earlyPrefetch';
+  buildChurchInfoFields,
+  clampSortOrder,
+  clampStr,
+  cleanWeekdayMinistry,
+  makeDocId,
+  normalizeChurchInfo,
+  normalizeCoworkers,
+  normalizeMinistryRoster,
+  normalizePastors,
+  normalizeWorshipSongs,
+  removeById,
+  sanitizeImageRef,
+  sanitizeYoutubeUrl,
+  toWeekdayFirestoreBody,
+  upsertSorted,
+} from '../utils/churchNormalization';
+import { filterSafeYoutubeUrl } from '../utils/urlSafety';
 
-const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
-const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
-const PUBLIC_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes local cache TTL
-
-export interface PublicBundleData {
-  churchInfo: ChurchInfo;
-  pastors: PastorProfile[];
-  coworkers: PulpitCoworker[];
-  worshipTimes: WorshipTimeSlot[];
-  liturgySteps: LiturgyStep[];
-  worshipSongs: WorshipSong[];
-  ministryRoster: MinistryRosterItem[];
-  weekdayMinistries: WeekdayMinistry[];
-  announcements: AnnouncementItem[];
-  version: number;
-}
-
-interface CachedBundleEnvelope {
-  cachedAt: number;
-  hasCloudBundle: boolean;
-  bundle: PublicBundleData;
-}
-
+export type { PublicBundleData };
 export type DataSourceMode = 'local-cache' | 'cloud-bundle' | 'admin-live' | 'default';
 
-interface ChurchDataContextValue {
-  // Live merged data
+export interface PublicChurchDataValue {
   churchInfo: ChurchInfo;
   pastors: PastorProfile[];
   coworkers: PulpitCoworker[];
@@ -119,30 +108,37 @@ interface ChurchDataContextValue {
   ministryRoster: MinistryRosterItem[];
   weekdayMinistries: WeekdayMinistry[];
   announcements: AnnouncementItem[];
-  visitorRequests: VisitorRequestItem[];
-  adminUsers: AdminUserItem[];
-
-  // Auth, cache & readiness
-  user: User | null;
-  authReady: boolean;
-  isAdmin: boolean;
-  isMainAdmin: boolean;
+  activeTheme: SiteThemeId;
   hasCloudData: boolean;
   hasPublicBundle: boolean;
   cloudLoading: boolean;
   dataSource: DataSourceMode;
   lastSyncedAt: number | null;
+  submitVisitorRequest: (payload: {
+    name: string;
+    contact: string;
+    intent: string;
+    message: string;
+  }) => Promise<void>;
+  refreshPublicSnapshot: () => Promise<void>;
+}
+
+export interface ChurchAuthValue {
+  user: User | null;
+  authReady: boolean;
+  isAdmin: boolean;
+  isMainAdmin: boolean;
+  visitorRequests: VisitorRequestItem[];
+  adminUsers: AdminUserItem[];
+  activateAdminSession: () => void;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
+}
+
+export interface ChurchAdminActionsValue {
   syncModifiedContentToCloud: () => Promise<void>;
   publishPublicBundle: () => Promise<void>;
-  refreshPublicSnapshot: () => Promise<void>;
-
-  // Theme state & admin action
-  activeTheme: SiteThemeId;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
-
-  // CRUD actions
   saveChurchInfo: (info: ChurchInfo) => Promise<void>;
   savePastor: (item: PastorProfile) => Promise<void>;
   deletePastor: (id: string) => Promise<void>;
@@ -160,14 +156,6 @@ interface ChurchDataContextValue {
   deleteWeekdayMinistry: (id: string) => Promise<void>;
   saveAnnouncement: (item: AnnouncementItem) => Promise<void>;
   deleteAnnouncement: (id: string) => Promise<void>;
-
-  // Visitor & Admin management
-  submitVisitorRequest: (payload: {
-    name: string;
-    contact: string;
-    intent: string;
-    message: string;
-  }) => Promise<void>;
   updateVisitorRequestStatus: (
     id: string,
     status: VisitorRequestItem['status'],
@@ -178,200 +166,78 @@ interface ChurchDataContextValue {
   removeAdminUser: (uid: string) => Promise<void>;
 }
 
-const ChurchDataContext = createContext<ChurchDataContextValue | null>(null);
+export type ChurchDataContextValue = PublicChurchDataValue &
+  ChurchAuthValue &
+  ChurchAdminActionsValue;
 
-function clampStr(val: string, maxLen: number): string {
-  return String(val ?? '').trim().slice(0, maxLen);
+const ChurchPublicContext = createContext<PublicChurchDataValue | null>(null);
+const ChurchAuthContext = createContext<ChurchAuthValue | null>(null);
+const ChurchAdminActionsContext = createContext<ChurchAdminActionsValue | null>(null);
+
+interface BatchWriteOp {
+  ref: DocumentReference;
+  data: Record<string, unknown>;
 }
 
-function sanitizeImageRef(val: string | undefined, maxLen: number): string {
-  const trimmed = String(val ?? '').trim();
-  if (!trimmed) return '';
-  const isSafeUrlOrPath = SAFE_HTTP_OR_ROOT_RELATIVE_REGEX.test(trimmed);
-  const isSafeMediaRef = isMediaUri(trimmed);
-  const isSafeDataUri = DATA_IMAGE_URI_REGEX.test(trimmed);
-  if (!isSafeUrlOrPath && !isSafeMediaRef && !isSafeDataUri) {
-    throw new Error('图片地址格式无效：请上传 JPG/PNG/WebP 原图，或填写以 https:// 或 / 开头的有效路径。');
+async function commitChunkedBatches(ops: BatchWriteOp[], chunkSize = 400): Promise<void> {
+  for (let i = 0; i < ops.length; i += chunkSize) {
+    const batch = writeBatch(db);
+    const slice = ops.slice(i, i + chunkSize);
+    for (const op of slice) {
+      batch.set(op.ref, op.data);
+    }
+    await batch.commit();
   }
-  if (trimmed.length > maxLen) {
-    throw new Error('图片地址长度超出单字段限制，请重新上传或填写外链图片地址。');
+}
+
+function cleanupReplacedMediaUri(
+  oldUri: string | undefined,
+  newUri: string | undefined,
+  stillReferencedUris: Set<string> = new Set()
+): void {
+  const prev = String(oldUri ?? '').trim();
+  const next = String(newUri ?? '').trim();
+  if (!prev || prev === next || !isMediaUri(prev) || stillReferencedUris.has(prev)) {
+    return;
   }
-  return trimmed;
-}
-
-function sanitizeYoutubeUrl(val: string | undefined): string {
-  let trimmed = String(val ?? '').trim();
-  if (!trimmed) return '';
-  if (/^http:\/\//i.test(trimmed)) {
-    trimmed = trimmed.replace(/^http:\/\//i, 'https://');
-  } else if (/^([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(trimmed)) {
-    trimmed = `https://${trimmed}`;
-  }
-  if (trimmed.length > 500 || !YOUTUBE_HTTPS_URL_REGEX.test(trimmed)) {
-    throw new Error(
-      '请输入有效的 YouTube 视频链接（例如 https://www.youtube.com/watch?v=... 或 https://youtu.be/...），或留空。'
-    );
-  }
-  return trimmed;
-}
-
-function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): ChurchInfo {
-  const base = raw ? { ...CHURCH_INFO, ...raw } : { ...CHURCH_INFO };
-  return {
-    ...base,
-    heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
-    fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
-    siteTheme: normalizeSiteTheme(base.siteTheme),
-  };
-}
-
-function normalizePastors(list: Partial<PastorProfile>[]): PastorProfile[] {
-  return list.map((p, idx) => ({
-    id: String(p.id || `pastor-${idx + 1}`),
-    name: clampStr(p.name || '', 80),
-    role: clampStr(p.role || '', 120),
-    tenure: clampStr(p.tenure || '', 60),
-    image: filterSafeImageSrc(p.image, PASTORS_TEAM[0]?.image || ''),
-    education: clampStr(p.education || '', 200),
-    ministryFocus: clampStr(p.ministryFocus || '', 200),
-    bio: clampStr(p.bio || '', 1200),
-    sortOrder: Number(p.sortOrder) || idx + 1,
-  }));
-}
-
-function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong[] {
-  return list.map((song, idx) => ({
-    id: String(song.id || `song-${idx + 1}`),
-    title: clampStr(song.title || '', 140),
-    youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
-    youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
-    sortOrder: Number(song.sortOrder) || idx + 1,
-  }));
-}
-
-function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
-  return list.map((cw, idx) => {
-    const safeImg = filterSafeImageSrc(cw.image);
-    return {
-      id: String(cw.id || `cw-${idx + 1}`),
-      name: clampStr(cw.name || '', 80),
-      title: clampStr(cw.title || '', 120),
-      ...(safeImg ? { image: safeImg } : {}),
-      sortOrder: Number(cw.sortOrder) || idx + 1,
-    };
+  void deleteMediaChunksByUri(prev).catch(() => {
+    // Best-effort orphaned chunk cleanup
   });
 }
 
-function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
-  return list.map((item, idx) => ({
-    id: String(item.id || `roster-${idx + 1}`),
-    category: normalizeMinistryCategory(item.category),
-    role: clampStr(item.role || '', 140),
-    thisWeek: clampStr(item.thisWeek || '', 200),
-    nextWeek: clampStr(item.nextWeek || '', 200),
-    sortOrder: Number(item.sortOrder) || idx + 1,
-  }));
-}
-
-function makeDocId(prefix: string): string {
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  return `${prefix}-${Date.now()}-${randomPart}`;
-}
-
-function cleanWeekdayMinistry(item: Partial<WeekdayMinistry>, fallbackSort = 0): WeekdayMinistry {
-  const location = clampStr(item.location ?? '', 160);
-  const leader = clampStr(item.leader ?? '', 120);
-  const description = clampStr(item.description ?? '', 400);
-  const parsedSort = Number(item.sortOrder);
-  const sortOrder = Number.isFinite(parsedSort)
-    ? Math.min(1000, Math.max(0, parsedSort))
-    : fallbackSort;
-
-  return {
-    id: String(item.id || makeDocId('wm')),
-    day: clampStr(item.day ?? '', 20),
-    time: clampStr(item.time ?? '', 60),
-    title: clampStr(item.title ?? '', 120),
-    ...(location ? { location } : {}),
-    ...(leader ? { leader } : {}),
-    ...(description ? { description } : {}),
-    sortOrder,
-  };
-}
-
-function toWeekdayFirestoreBody(item: WeekdayMinistry): Record<string, unknown> {
-  const { id: _ignored, location, leader, description, ...required } = item;
-  return {
-    ...required,
-    ...(location ? { location } : {}),
-    ...(leader ? { leader } : {}),
-    ...(description ? { description } : {}),
-    updatedAt: serverTimestamp(),
-  };
-}
-
-function readLocalBundleCache(): CachedBundleEnvelope | null {
-  try {
-    const raw = window.localStorage.getItem(PUBLIC_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedBundleEnvelope;
-    if (!parsed || !parsed.bundle || typeof parsed.cachedAt !== 'number') {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalBundleCache(bundle: PublicBundleData, hasCloudBundle: boolean): number {
-  const now = Date.now();
-  try {
-    const envelope: CachedBundleEnvelope = {
-      cachedAt: now,
-      hasCloudBundle,
-      bundle,
-    };
-    window.localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify(envelope));
-  } catch {
-    // Ignore quota/private-mode storage errors
-  }
-  return now;
-}
-
-function upsertSorted<T extends { id: string; sortOrder: number }>(list: T[], item: T): T[] {
-  const idx = list.findIndex((x) => x.id === item.id);
-  const next = idx >= 0 ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item];
-  return [...next].sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-function removeById<T extends { id: string }>(list: T[], id: string): T[] {
-  return list.filter((x) => x.id !== id);
+function resolveInitialAdminRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname === '/admin' || window.location.hash === '#admin';
 }
 
 export function ChurchDataProvider({ children }: { children: ReactNode }) {
-  const initialCache = typeof window !== 'undefined' ? readLocalBundleCache() : null;
+  const rawCache = typeof window !== 'undefined' ? readLocalBundleCache() : null;
+  const freshCache = isCacheFresh(rawCache) ? rawCache : null;
   const earlySnapshot =
-    !initialCache && typeof window !== 'undefined' ? getEarlyPrefetchedBundleSnapshot() : null;
+    !freshCache && typeof window !== 'undefined' ? getEarlyPrefetchedBundleSnapshot() : null;
   const initialEarlyBundle = earlySnapshot?.status === 'ok' ? earlySnapshot.bundle : null;
-  const initialBundle = initialCache?.bundle ?? initialEarlyBundle;
+  const initialBundle = freshCache?.bundle ?? initialEarlyBundle ?? rawCache?.bundle ?? null;
 
+  const [adminSessionRequested, setAdminSessionRequested] = useState<boolean>(
+    resolveInitialAdminRoute
+  );
   const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [authReady, setAuthReady] = useState<boolean>(() => !resolveInitialAdminRoute());
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
-  const [cloudLoading, setCloudLoading] = useState(!initialCache && !initialEarlyBundle);
+
+  const [cloudLoading, setCloudLoading] = useState(!freshCache && !initialEarlyBundle);
   const [hasCloudData, setHasCloudData] = useState(
-    Boolean(initialCache?.hasCloudBundle || initialEarlyBundle)
+    Boolean(freshCache?.hasCloudBundle || initialEarlyBundle)
   );
   const [hasPublicBundle, setHasPublicBundle] = useState(
-    Boolean(initialCache?.hasCloudBundle || initialEarlyBundle)
+    Boolean(freshCache?.hasCloudBundle || initialEarlyBundle)
   );
   const [dataSource, setDataSource] = useState<DataSourceMode>(
-    initialCache ? 'local-cache' : initialEarlyBundle ? 'cloud-bundle' : 'default'
+    freshCache ? 'local-cache' : initialEarlyBundle ? 'cloud-bundle' : 'default'
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(
-    initialCache ? initialCache.cachedAt : null
+    freshCache ? freshCache.cachedAt : null
   );
 
   const [churchInfo, setChurchInfo] = useState<ChurchInfo>(
@@ -435,7 +301,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const [visitorRequests, setVisitorRequests] = useState<VisitorRequestItem[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
 
-  // Keep a mutable ref of latest state for atomic bundle publishing after Admin mutations
   const latestStateRef = useRef({
     churchInfo,
     pastors,
@@ -492,33 +357,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     if (bundle.announcements?.length) setAnnouncements(bundle.announcements);
   }, []);
 
-  const buildChurchInfoFields = (info: ChurchInfo): ChurchInfo => ({
-    name: clampStr(info.name, 100),
-    founded: clampStr(info.founded, 100),
-    scriptureQuote: clampStr(info.scriptureQuote, 400),
-    scriptureRef: clampStr(info.scriptureRef, 100),
-    heroSubtitle: clampStr(info.heroSubtitle, 400),
-    heroImage: sanitizeImageRef(info.heroImage, 480000) || CHURCH_INFO.heroImage,
-    fellowshipImage: sanitizeImageRef(info.fellowshipImage, 240000) || CHURCH_INFO.fellowshipImage,
-    address: clampStr(info.address, 300),
-    shortAddress: clampStr(info.shortAddress, 100),
-    pastoralPhone: clampStr(info.pastoralPhone, 100),
-    themeVerse: clampStr(info.themeVerse, 300),
-    themeVerseRef: clampStr(info.themeVerseRef, 100),
-    thisWeekLabel: clampStr(info.thisWeekLabel, 60),
-    nextWeekLabel: clampStr(info.nextWeekLabel, 60),
-    siteTheme: normalizeSiteTheme(info.siteTheme),
-    introParagraphs: info.introParagraphs
-      .slice(0, 10)
-      .map((s) => clampStr(s, 1000))
-      .filter(Boolean),
-    coreValues: info.coreValues.slice(0, 10).map((cv, idx) => ({
-      index: clampStr(cv.index || String(idx + 1).padStart(2, '0'), 10),
-      title: clampStr(cv.title, 60),
-      description: clampStr(cv.description, 300),
-    })),
-  });
-
   const buildPublicBundlePayload = useCallback(
     (snapshot: {
       churchInfo: ChurchInfo;
@@ -530,38 +368,25 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       ministryRoster: MinistryRosterItem[];
       weekdayMinistries: WeekdayMinistry[];
       announcements: AnnouncementItem[];
-    }) => {
-      const version = Date.now();
-      return {
-        churchInfo: buildChurchInfoFields(snapshot.churchInfo),
-        pastors: snapshot.pastors.slice(0, 30),
-        coworkers: normalizeCoworkers(snapshot.coworkers).slice(0, 50),
-        worshipTimes: snapshot.worshipTimes.slice(0, 20),
-        liturgySteps: snapshot.liturgySteps.slice(0, 40),
-        worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
-        ministryRoster: normalizeMinistryRoster(snapshot.ministryRoster).slice(0, 80),
-        weekdayMinistries: normalizeWeekdayMinistries(snapshot.weekdayMinistries)
-          .slice(0, 30)
-          .map((wm, idx) => cleanWeekdayMinistry(wm, idx + 1)),
-        announcements: snapshot.announcements.slice(0, 50),
-        version,
-      };
-    },
+    }) => ({
+      churchInfo: buildChurchInfoFields(snapshot.churchInfo),
+      pastors: snapshot.pastors.slice(0, 30),
+      coworkers: normalizeCoworkers(snapshot.coworkers).slice(0, 50),
+      worshipTimes: snapshot.worshipTimes.slice(0, 20),
+      liturgySteps: snapshot.liturgySteps.slice(0, 40),
+      worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
+      ministryRoster: normalizeMinistryRoster(snapshot.ministryRoster).slice(0, 80),
+      weekdayMinistries: normalizeWeekdayMinistries(snapshot.weekdayMinistries)
+        .slice(0, 30)
+        .map((wm, idx) => cleanWeekdayMinistry(wm, idx + 1)),
+      announcements: snapshot.announcements.slice(0, 50),
+      version: Date.now(),
+    }),
     []
   );
 
   const publishBundleSnapshot = useCallback(
-    async (snapshot: {
-      churchInfo: ChurchInfo;
-      pastors: PastorProfile[];
-      coworkers: PulpitCoworker[];
-      worshipTimes: WorshipTimeSlot[];
-      liturgySteps: LiturgyStep[];
-      worshipSongs: WorshipSong[];
-      ministryRoster: MinistryRosterItem[];
-      weekdayMinistries: WeekdayMinistry[];
-      announcements: AnnouncementItem[];
-    }) => {
+    async (snapshot: Parameters<typeof buildPublicBundlePayload>[0]) => {
       const bundle = buildPublicBundlePayload(snapshot);
       const approxBytes = new Blob([JSON.stringify(bundle)]).size;
       if (approxBytes > 950_000) {
@@ -584,7 +409,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (forceRefresh = false) => {
       if (!forceRefresh) {
         const cached = readLocalBundleCache();
-        if (cached && Date.now() - cached.cachedAt < PUBLIC_CACHE_TTL_MS) {
+        if (isCacheFresh(cached)) {
           applyBundleToState(cached.bundle);
           setHasCloudData(cached.hasCloudBundle);
           setHasPublicBundle(cached.hasCloudBundle);
@@ -597,7 +422,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
       setCloudLoading(true);
       try {
-        // Consume <head> Firestore REST prefetch if available (avoids waiting for Auth + WebChannel)
         const earlyResult = !forceRefresh ? await awaitEarlyPrefetchedBundle() : null;
         if (earlyResult?.status === 'ok') {
           const data = earlyResult.bundle;
@@ -611,7 +435,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         }
 
         if (earlyResult?.status !== 'not-found') {
-          // 1-Read public snapshot fetch (also validates Firestore server connection)
           const bundleSnap = await fetchPublicBundleFromServer();
           if (bundleSnap.exists()) {
             const data = bundleSnap.data() as PublicBundleData;
@@ -625,7 +448,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Backward compatibility: if public_bundle doesn't exist yet, check if legacy 'info' exists
+        // Backward compatibility for legacy pre-bundle databases
         const infoSnap = await getDocFromServer(doc(db, 'church_sections', 'info'));
         if (infoSnap.exists()) {
           const fetchSorted = async <T extends { sortOrder: number }>(
@@ -679,7 +502,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           setDataSource('cloud-bundle');
           setLastSyncedAt(syncedAt);
         } else {
-          // Brand-new unseeded database: cache default data for 10 min so visitors make 0 extra reads
           const defaultBundle: PublicBundleData = {
             churchInfo: CHURCH_INFO,
             pastors: PASTORS_TEAM,
@@ -711,64 +533,44 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [applyBundleToState]
   );
 
-  // Auth listener & real-time Admin RBAC resolution
-  useEffect(() => {
-    let unsubAdminDoc: (() => void) | null = null;
-    let authEpoch = 0;
-
-    const cleanupAdminDocListener = () => {
-      if (unsubAdminDoc) {
-        unsubAdminDoc();
-        unsubAdminDoc = null;
+  const activateAdminSession = useCallback(() => {
+    setAdminSessionRequested((prev) => {
+      if (!prev) {
+        setAuthReady(false);
       }
-    };
+      return true;
+    });
+  }, []);
 
-    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
-      authEpoch += 1;
-      const currentEpoch = authEpoch;
-      cleanupAdminDocListener();
+  // Lazy-load Firebase Auth only when Admin mode is accessed
+  useEffect(() => {
+    if (!adminSessionRequested) return;
+    let active = true;
+    let unsub: (() => void) | null = null;
 
-      setUser(currentUser);
-      if (!currentUser || !currentUser.emailVerified) {
+    void import('../lib/firebaseAuth')
+      .then((mod) => {
+        if (!active) return;
+        unsub = mod.subscribeAdminAuthAndRbac((state) => {
+          if (!active) return;
+          setUser(state.user);
+          setIsAdmin(state.isAdmin);
+          setIsMainAdmin(state.isMainAdmin);
+          setAuthReady(state.authReady);
+        });
+      })
+      .catch(() => {
+        if (!active) return;
         setIsAdmin(false);
         setIsMainAdmin(false);
         setAuthReady(true);
-        return;
-      }
-
-      const isBootstrapped =
-        currentUser.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
-
-      if (isBootstrapped) {
-        setIsAdmin(true);
-        setIsMainAdmin(true);
-        setAuthReady(true);
-        return;
-      }
-
-      setIsMainAdmin(false);
-      setAuthReady(false);
-      unsubAdminDoc = onSnapshot(
-        doc(db, 'admins', currentUser.uid),
-        (adminDoc) => {
-          if (currentEpoch !== authEpoch) return;
-          setIsAdmin(adminDoc.exists() && currentUser.emailVerified);
-          setAuthReady(true);
-        },
-        () => {
-          if (currentEpoch !== authEpoch) return;
-          setIsAdmin(false);
-          setAuthReady(true);
-        }
-      );
-    });
+      });
 
     return () => {
-      authEpoch += 1;
-      cleanupAdminDocListener();
-      unsubAuth();
+      active = false;
+      unsub?.();
     };
-  }, []);
+  }, [adminSessionRequested]);
 
   // Visitor Mode boot: immediately load or apply public snapshot without waiting for Firebase Auth
   useEffect(() => {
@@ -784,7 +586,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     void loadSingleDocPublicBundle(false);
   }, [loadSingleDocPublicBundle]);
 
-  // Admin Mode (live multi-collection sync after Auth & RBAC verification)
+  // Admin Mode live multi-collection sync after Auth & RBAC verification
   useEffect(() => {
     if (!authReady) return;
 
@@ -800,7 +602,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
 
     wasAdminRef.current = true;
-    // Admin Mode: attach real-time listeners across source collections + PII collections
     setDataSource('admin-live');
     const unsubs: (() => void)[] = [];
 
@@ -970,11 +771,14 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAdmin, isMainAdmin, loadSingleDocPublicBundle]);
 
   const signInWithGoogle = useCallback(async () => {
+    setAdminSessionRequested(true);
+    const { signInWithGoogleSafe } = await import('../lib/firebaseAuth');
     await signInWithGoogleSafe();
   }, []);
 
   const signOutUser = useCallback(async () => {
-    await signOut(auth);
+    const { signOutFirebaseUser } = await import('../lib/firebaseAuth');
+    await signOutFirebaseUser();
   }, []);
 
   const publishPublicBundle = useCallback(async () => {
@@ -994,19 +798,20 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     try {
       if (!hasCloudData) {
         const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
-          persistLosslessImageIfNeeded(current.churchInfo.heroImage, 180000),
-          persistLosslessImageIfNeeded(current.churchInfo.fellowshipImage, 180000),
+          persistLosslessImageIfNeeded(current.churchInfo.heroImage, 180_000),
+          persistLosslessImageIfNeeded(current.churchInfo.fellowshipImage, 180_000),
         ]);
         const resolvedPastors = await Promise.all(
           current.pastors.map(async (p) => ({
             ...p,
-            image: (await persistLosslessImageIfNeeded(p.image, 100000)) || PASTORS_TEAM[0].image,
+            image:
+              (await persistLosslessImageIfNeeded(p.image, 100_000)) || PASTORS_TEAM[0].image,
           }))
         );
         const resolvedCoworkers = await Promise.all(
           normalizeCoworkers(current.coworkers).map(async (cw) => ({
             ...cw,
-            ...(cw.image ? { image: await persistLosslessImageIfNeeded(cw.image, 50000) } : {}),
+            ...(cw.image ? { image: await persistLosslessImageIfNeeded(cw.image, 50_000) } : {}),
           }))
         );
         const normalizedSnapshot = {
@@ -1020,113 +825,100 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           coworkers: resolvedCoworkers,
         };
 
-        const batch = writeBatch(db);
-        batch.set(doc(db, 'church_sections', 'info'), {
-          ...buildChurchInfoFields(normalizedSnapshot.churchInfo),
-          updatedAt: serverTimestamp(),
-        });
+        const ops: BatchWriteOp[] = [
+          {
+            ref: doc(db, 'church_sections', 'info'),
+            data: {
+              ...buildChurchInfoFields(normalizedSnapshot.churchInfo),
+              updatedAt: serverTimestamp(),
+            },
+          },
+        ];
 
         for (const p of normalizedSnapshot.pastors) {
-          batch.set(doc(db, 'pastors', p.id), {
-            name: p.name,
-            role: p.role,
-            tenure: p.tenure,
-            image: p.image,
-            education: p.education,
-            ministryFocus: p.ministryFocus,
-            bio: p.bio,
-            sortOrder: p.sortOrder,
-            updatedAt: serverTimestamp(),
+          const { id, ...body } = p;
+          ops.push({
+            ref: doc(db, 'pastors', id),
+            data: { ...body, updatedAt: serverTimestamp() },
           });
         }
 
         for (const cw of normalizedSnapshot.coworkers) {
-          batch.set(doc(db, 'coworkers', cw.id), {
-            name: cw.name,
-            title: cw.title,
-            ...(cw.image ? { image: cw.image } : {}),
-            sortOrder: cw.sortOrder,
-            updatedAt: serverTimestamp(),
+          const { id, image, ...body } = cw;
+          ops.push({
+            ref: doc(db, 'coworkers', id),
+            data: { ...body, ...(image ? { image } : {}), updatedAt: serverTimestamp() },
           });
         }
 
         for (const wt of current.worshipTimes) {
-          batch.set(doc(db, 'worship_times', wt.id), {
-            time: wt.time,
-            title: wt.title,
-            place: wt.place,
-            desc: wt.desc,
-            sortOrder: wt.sortOrder,
-            updatedAt: serverTimestamp(),
+          const { id, ...body } = wt;
+          ops.push({
+            ref: doc(db, 'worship_times', id),
+            data: { ...body, updatedAt: serverTimestamp() },
           });
         }
 
         for (const ls of current.liturgySteps) {
-          const cleanRef = clampStr(ls.scriptureOrHymn ?? '', 200);
-          batch.set(doc(db, 'liturgy_steps', ls.id), {
-            liturgyType: ls.liturgyType,
-            time: ls.time,
-            step: ls.step,
-            ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
-            leader: ls.leader,
-            note: ls.note,
-            sortOrder: ls.sortOrder,
-            updatedAt: serverTimestamp(),
+          const cleanRef = clampStr(
+            ls.scriptureOrHymn,
+            FIELD_LIMITS.liturgyStep.scriptureOrHymn
+          );
+          const { id, scriptureOrHymn: _ignoredRef, ...body } = ls;
+          ops.push({
+            ref: doc(db, 'liturgy_steps', id),
+            data: {
+              ...body,
+              ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
+              updatedAt: serverTimestamp(),
+            },
           });
         }
 
         for (const song of current.worshipSongs) {
-          batch.set(doc(db, 'worship_songs', song.id), {
-            title: clampStr(song.title, 140),
-            youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
-            youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
-            sortOrder: Number(song.sortOrder) || 0,
-            updatedAt: serverTimestamp(),
+          ops.push({
+            ref: doc(db, 'worship_songs', song.id),
+            data: {
+              title: clampStr(song.title, FIELD_LIMITS.worshipSong.title),
+              youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
+              youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
+              sortOrder: clampSortOrder(song.sortOrder, 0),
+              updatedAt: serverTimestamp(),
+            },
           });
         }
 
         for (const r of normalizeMinistryRoster(current.ministryRoster)) {
-          batch.set(doc(db, 'ministry_roster', r.id), {
-            category: r.category,
-            role: r.role,
-            thisWeek: r.thisWeek,
-            nextWeek: r.nextWeek,
-            sortOrder: r.sortOrder,
-            updatedAt: serverTimestamp(),
+          const { id, ...body } = r;
+          ops.push({
+            ref: doc(db, 'ministry_roster', id),
+            data: { ...body, updatedAt: serverTimestamp() },
           });
         }
 
         for (const [idx, wm] of normalizeWeekdayMinistries(current.weekdayMinistries).entries()) {
           const cleanedWm = cleanWeekdayMinistry(wm, idx + 1);
-          batch.set(
-            doc(db, 'weekday_ministries', cleanedWm.id),
-            toWeekdayFirestoreBody(cleanedWm)
-          );
+          ops.push({
+            ref: doc(db, 'weekday_ministries', cleanedWm.id),
+            data: toWeekdayFirestoreBody(cleanedWm),
+          });
         }
 
         for (const ann of current.announcements) {
-          batch.set(doc(db, 'announcements', ann.id), {
-            category: ann.category,
-            date: ann.date,
-            title: ann.title,
-            summary: ann.summary,
-            time: ann.time,
-            location: ann.location,
-            contact: ann.contact,
-            isFeatured: ann.isFeatured,
-            details: ann.details,
-            sortOrder: ann.sortOrder,
-            updatedAt: serverTimestamp(),
+          const { id, ...body } = ann;
+          ops.push({
+            ref: doc(db, 'announcements', id),
+            data: { ...body, updatedAt: serverTimestamp() },
           });
         }
 
         const bundle = buildPublicBundlePayload(normalizedSnapshot);
-        batch.set(doc(db, 'church_sections', 'public_bundle'), {
-          ...bundle,
-          updatedAt: serverTimestamp(),
+        ops.push({
+          ref: doc(db, 'church_sections', 'public_bundle'),
+          data: { ...bundle, updatedAt: serverTimestamp() },
         });
 
-        await batch.commit();
+        await commitChunkedBatches(ops);
         const syncedAt = writeLocalBundleCache(bundle, true);
         setHasCloudData(true);
         setHasPublicBundle(true);
@@ -1140,13 +932,61 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
   }, [hasCloudData, buildPublicBundlePayload, publishBundleSnapshot]);
 
+  // Generic CRUD factories for sorted collections
+  const saveSortedCollectionDoc = useCallback(
+    async <T extends { id: string; sortOrder: number }>(
+      colName: string,
+      bundleKey: keyof Omit<PublicBundleData, 'churchInfo' | 'version'>,
+      cleaned: T
+    ) => {
+      const { id, ...docBody } = cleaned;
+      const path = `${colName}/${id}`;
+      try {
+        await setDoc(doc(db, colName, id), {
+          ...docBody,
+          updatedAt: serverTimestamp(),
+        });
+        const currentList = latestStateRef.current[bundleKey] as unknown as T[];
+        await publishBundleSnapshot({
+          ...latestStateRef.current,
+          [bundleKey]: upsertSorted(currentList, cleaned),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, path);
+      }
+    },
+    [publishBundleSnapshot]
+  );
+
+  const deleteSortedCollectionDoc = useCallback(
+    async <T extends { id: string }>(
+      colName: string,
+      bundleKey: keyof Omit<PublicBundleData, 'churchInfo' | 'version'>,
+      id: string
+    ) => {
+      const path = `${colName}/${id}`;
+      try {
+        await deleteDoc(doc(db, colName, id));
+        const currentList = latestStateRef.current[bundleKey] as unknown as T[];
+        await publishBundleSnapshot({
+          ...latestStateRef.current,
+          [bundleKey]: removeById(currentList, id),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    },
+    [publishBundleSnapshot]
+  );
+
   const saveChurchInfo = useCallback(
     async (info: ChurchInfo) => {
       const path = 'church_sections/info';
+      const prevInfo = latestStateRef.current.churchInfo;
       try {
         const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
-          persistLosslessImageIfNeeded(info.heroImage, 180000),
-          persistLosslessImageIfNeeded(info.fellowshipImage, 180000),
+          persistLosslessImageIfNeeded(info.heroImage, 180_000),
+          persistLosslessImageIfNeeded(info.fellowshipImage, 180_000),
         ]);
         const cleaned = buildChurchInfoFields({
           ...info,
@@ -1162,6 +1002,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           ...latestStateRef.current,
           churchInfo: cleaned,
         });
+
+        cleanupReplacedMediaUri(prevInfo.heroImage, cleaned.heroImage);
+        cleanupReplacedMediaUri(prevInfo.fellowshipImage, cleaned.fellowshipImage);
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, path);
       }
@@ -1171,10 +1014,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const saveSiteTheme = useCallback(
     async (theme: SiteThemeId) => {
-      const nextTheme = normalizeSiteTheme(theme);
       await saveChurchInfo({
         ...latestStateRef.current.churchInfo,
-        siteTheme: nextTheme,
+        siteTheme: normalizeSiteTheme(theme),
       });
     },
     [saveChurchInfo]
@@ -1182,273 +1024,161 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const savePastor = useCallback(
     async (item: PastorProfile) => {
+      const L = FIELD_LIMITS.pastor;
       const id = item.id || makeDocId('pastor');
-      const path = `pastors/${id}`;
+      const prevPastor = latestStateRef.current.pastors.find((p) => p.id === id);
+      let cleaned: PastorProfile;
       try {
-        const resolvedImage = await persistLosslessImageIfNeeded(item.image, 100000);
-        const cleaned: PastorProfile = {
+        const resolvedImage = await persistLosslessImageIfNeeded(item.image, 100_000);
+        cleaned = {
           id,
-          name: clampStr(item.name, 80),
-          role: clampStr(item.role, 120),
-          tenure: clampStr(item.tenure, 60),
-          image: sanitizeImageRef(resolvedImage, 120000) || PASTORS_TEAM[0].image,
-          education: clampStr(item.education, 200),
-          ministryFocus: clampStr(item.ministryFocus, 200),
-          bio: clampStr(item.bio, 1200),
-          sortOrder: Number(item.sortOrder) || 0,
+          name: clampStr(item.name, L.name),
+          role: clampStr(item.role, L.role),
+          tenure: clampStr(item.tenure, L.tenure),
+          image: sanitizeImageRef(resolvedImage, L.image) || PASTORS_TEAM[0].image,
+          education: clampStr(item.education, L.education),
+          ministryFocus: clampStr(item.ministryFocus, L.ministryFocus),
+          bio: clampStr(item.bio, L.bio),
+          sortOrder: clampSortOrder(item.sortOrder, 0),
         };
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'pastors', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          pastors: upsertSorted(latestStateRef.current.pastors, cleaned),
-        });
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
+        handleFirestoreError(error, OperationType.WRITE, `pastors/${id}`);
       }
+      await saveSortedCollectionDoc('pastors', 'pastors', cleaned);
+      cleanupReplacedMediaUri(prevPastor?.image, cleaned.image);
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deletePastor = useCallback(
     async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'pastors', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          pastors: removeById(latestStateRef.current.pastors, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `pastors/${id}`);
-      }
+      const prevPastor = latestStateRef.current.pastors.find((p) => p.id === id);
+      await deleteSortedCollectionDoc<PastorProfile>('pastors', 'pastors', id);
+      cleanupReplacedMediaUri(prevPastor?.image, '');
     },
-    [publishBundleSnapshot]
+    [deleteSortedCollectionDoc]
   );
 
   const saveCoworker = useCallback(
     async (item: PulpitCoworker) => {
+      const L = FIELD_LIMITS.coworker;
       const id = item.id || makeDocId('cw');
-      const path = `coworkers/${id}`;
+      const prevCoworker = latestStateRef.current.coworkers.find((cw) => cw.id === id);
+      let cleaned: PulpitCoworker;
       try {
         const resolvedImage = item.image
-          ? await persistLosslessImageIfNeeded(item.image, 50000)
+          ? await persistLosslessImageIfNeeded(item.image, 50_000)
           : '';
-        const cleanedImage = sanitizeImageRef(resolvedImage, 60000);
-        const cleaned: PulpitCoworker = {
+        cleaned = {
           id,
-          name: clampStr(item.name, 80),
-          title: clampStr(item.title, 120),
-          image: cleanedImage,
-          sortOrder: Number(item.sortOrder) || 0,
+          name: clampStr(item.name, L.name),
+          title: clampStr(item.title, L.title),
+          image: sanitizeImageRef(resolvedImage, L.image),
+          sortOrder: clampSortOrder(item.sortOrder, 0),
         };
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'coworkers', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          coworkers: upsertSorted(latestStateRef.current.coworkers, cleaned),
-        });
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
+        handleFirestoreError(error, OperationType.WRITE, `coworkers/${id}`);
       }
+      await saveSortedCollectionDoc('coworkers', 'coworkers', cleaned);
+      cleanupReplacedMediaUri(prevCoworker?.image, cleaned.image);
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteCoworker = useCallback(
     async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'coworkers', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          coworkers: removeById(latestStateRef.current.coworkers, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `coworkers/${id}`);
-      }
+      const prevCoworker = latestStateRef.current.coworkers.find((cw) => cw.id === id);
+      await deleteSortedCollectionDoc<PulpitCoworker>('coworkers', 'coworkers', id);
+      cleanupReplacedMediaUri(prevCoworker?.image, '');
     },
-    [publishBundleSnapshot]
+    [deleteSortedCollectionDoc]
   );
 
   const saveWorshipTime = useCallback(
     async (item: WorshipTimeSlot) => {
+      const L = FIELD_LIMITS.worshipTime;
       const id = item.id || makeDocId('wt');
-      const path = `worship_times/${id}`;
-      const cleaned: WorshipTimeSlot = {
+      await saveSortedCollectionDoc('worship_times', 'worshipTimes', {
         id,
-        time: clampStr(item.time, 60),
-        title: clampStr(item.title, 120),
-        place: clampStr(item.place, 120),
-        desc: clampStr(item.desc, 300),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
-      try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'worship_times', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          worshipTimes: upsertSorted(latestStateRef.current.worshipTimes, cleaned),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
+        time: clampStr(item.time, L.time),
+        title: clampStr(item.title, L.title),
+        place: clampStr(item.place, L.place),
+        desc: clampStr(item.desc, L.desc),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      });
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteWorshipTime = useCallback(
-    async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'worship_times', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          worshipTimes: removeById(latestStateRef.current.worshipTimes, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `worship_times/${id}`);
-      }
-    },
-    [publishBundleSnapshot]
+    (id: string) => deleteSortedCollectionDoc<WorshipTimeSlot>('worship_times', 'worshipTimes', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveLiturgyStep = useCallback(
     async (item: LiturgyStep) => {
+      const L = FIELD_LIMITS.liturgyStep;
       const id = item.id || makeDocId('ls');
-      const path = `liturgy_steps/${id}`;
-      const cleaned: LiturgyStep = {
+      const cleanRef = clampStr(item.scriptureOrHymn, L.scriptureOrHymn);
+      await saveSortedCollectionDoc<LiturgyStep>('liturgy_steps', 'liturgySteps', {
         id,
         liturgyType: item.liturgyType,
-        time: clampStr(item.time, 40),
-        step: clampStr(item.step, 120),
-        leader: clampStr(item.leader, 100),
-        note: clampStr(item.note, 500),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
-      try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'liturgy_steps', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          liturgySteps: upsertSorted(latestStateRef.current.liturgySteps, cleaned),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
+        time: clampStr(item.time, L.time),
+        step: clampStr(item.step, L.step),
+        ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
+        leader: clampStr(item.leader, L.leader),
+        note: clampStr(item.note, L.note),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      });
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteLiturgyStep = useCallback(
-    async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'liturgy_steps', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          liturgySteps: removeById(latestStateRef.current.liturgySteps, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `liturgy_steps/${id}`);
-      }
-    },
-    [publishBundleSnapshot]
+    (id: string) => deleteSortedCollectionDoc<LiturgyStep>('liturgy_steps', 'liturgySteps', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveWorshipSong = useCallback(
     async (item: WorshipSong) => {
+      const L = FIELD_LIMITS.worshipSong;
       const id = item.id || makeDocId('song');
-      const path = `worship_songs/${id}`;
-      const cleaned: WorshipSong = {
+      await saveSortedCollectionDoc('worship_songs', 'worshipSongs', {
         id,
-        title: clampStr(item.title, 140),
+        title: clampStr(item.title, L.title),
         youtubeUrl: sanitizeYoutubeUrl(item.youtubeUrl),
         youtubeUrl2: sanitizeYoutubeUrl(item.youtubeUrl2),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
-      try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'worship_songs', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          worshipSongs: upsertSorted(latestStateRef.current.worshipSongs, cleaned),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      });
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteWorshipSong = useCallback(
-    async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'worship_songs', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          worshipSongs: removeById(latestStateRef.current.worshipSongs, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `worship_songs/${id}`);
-      }
-    },
-    [publishBundleSnapshot]
+    (id: string) => deleteSortedCollectionDoc<WorshipSong>('worship_songs', 'worshipSongs', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveMinistryRoster = useCallback(
     async (item: MinistryRosterItem) => {
+      const L = FIELD_LIMITS.ministryRoster;
       const id = item.id || makeDocId('roster');
-      const path = `ministry_roster/${id}`;
-      const cleaned: MinistryRosterItem = {
+      await saveSortedCollectionDoc('ministry_roster', 'ministryRoster', {
         id,
         category: normalizeMinistryCategory(item.category),
-        role: clampStr(item.role, 140),
-        thisWeek: clampStr(item.thisWeek, 200),
-        nextWeek: clampStr(item.nextWeek, 200),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
-      try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'ministry_roster', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          ministryRoster: upsertSorted(latestStateRef.current.ministryRoster, cleaned),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
+        role: clampStr(item.role, L.role),
+        thisWeek: clampStr(item.thisWeek, L.thisWeek),
+        nextWeek: clampStr(item.nextWeek, L.nextWeek),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      });
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteMinistryRoster = useCallback(
-    async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'ministry_roster', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          ministryRoster: removeById(latestStateRef.current.ministryRoster, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `ministry_roster/${id}`);
-      }
-    },
-    [publishBundleSnapshot]
+    (id: string) =>
+      deleteSortedCollectionDoc<MinistryRosterItem>('ministry_roster', 'ministryRoster', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveWeekdayMinistry = useCallback(
@@ -1532,61 +1262,43 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const saveAnnouncement = useCallback(
     async (item: AnnouncementItem) => {
+      const L = FIELD_LIMITS.announcement;
       const id = item.id || makeDocId('ann');
-      const path = `announcements/${id}`;
-      const cleaned: AnnouncementItem = {
+      await saveSortedCollectionDoc('announcements', 'announcements', {
         id,
         category: item.category,
-        date: clampStr(item.date, 80),
-        title: clampStr(item.title, 160),
-        summary: clampStr(item.summary, 400),
-        time: clampStr(item.time, 100),
-        location: clampStr(item.location, 160),
-        contact: clampStr(item.contact, 120),
+        date: clampStr(item.date, L.date),
+        title: clampStr(item.title, L.title),
+        summary: clampStr(item.summary, L.summary),
+        time: clampStr(item.time, L.time),
+        location: clampStr(item.location, L.location),
+        contact: clampStr(item.contact, L.contact),
         isFeatured: Boolean(item.isFeatured),
-        details: item.details.slice(0, 20).map((d) => clampStr(d, 800)).filter(Boolean),
-        sortOrder: Number(item.sortOrder) || 0,
-      };
-      try {
-        const { id: _ignored, ...docBody } = cleaned;
-        await setDoc(doc(db, 'announcements', id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          announcements: upsertSorted(latestStateRef.current.announcements, cleaned),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, path);
-      }
+        details: item.details
+          .slice(0, L.detailsMaxCount)
+          .map((d) => clampStr(d, L.detailLen))
+          .filter(Boolean),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      });
     },
-    [publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteAnnouncement = useCallback(
-    async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'announcements', id));
-        await publishBundleSnapshot({
-          ...latestStateRef.current,
-          announcements: removeById(latestStateRef.current.announcements, id),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `announcements/${id}`);
-      }
-    },
-    [publishBundleSnapshot]
+    (id: string) =>
+      deleteSortedCollectionDoc<AnnouncementItem>('announcements', 'announcements', id),
+    [deleteSortedCollectionDoc]
   );
 
   const submitVisitorRequest = useCallback(
     async (payload: { name: string; contact: string; intent: string; message: string }) => {
+      const L = FIELD_LIMITS.visitorRequest;
       try {
         await addDoc(collection(db, 'visitor_requests'), {
-          name: clampStr(payload.name, 80),
-          contact: clampStr(payload.contact, 140),
-          intent: clampStr(payload.intent, 100),
-          message: clampStr(payload.message, 1000),
+          name: clampStr(payload.name, L.name),
+          contact: clampStr(payload.contact, L.contact),
+          intent: clampStr(payload.intent, L.intent),
+          message: clampStr(payload.message, L.message),
           status: 'pending',
           createdAt: serverTimestamp(),
         });
@@ -1602,7 +1314,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       try {
         await updateDoc(doc(db, 'visitor_requests', id), {
           status,
-          adminNote: clampStr(adminNote, 500),
+          adminNote: clampStr(adminNote, FIELD_LIMITS.visitorRequest.adminNote),
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `visitor_requests/${id}`);
@@ -1621,15 +1333,16 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const addAdminUser = useCallback(
     async (uid: string, email: string, displayName: string) => {
-      const cleanUid = clampStr(uid, 128);
+      const L = FIELD_LIMITS.adminUser;
+      const cleanUid = clampStr(uid, L.uid);
       if (!/^[a-zA-Z0-9_\-]+$/.test(cleanUid)) {
         throw new Error('管理员 UID 格式无效（仅支持字母、数字、下划线或连字符）。');
       }
-      const cleanEmail = clampStr(email, 160);
+      const cleanEmail = clampStr(email, L.email);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
         throw new Error('请输入有效的同工邮箱地址。');
       }
-      const cleanDisplayName = clampStr(displayName, 80);
+      const cleanDisplayName = clampStr(displayName, L.displayName);
       if (!cleanDisplayName) {
         throw new Error('请填写同工称呼。');
       }
@@ -1647,7 +1360,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeAdminUser = useCallback(async (uid: string) => {
-    if (uid === auth.currentUser?.uid) {
+    const activeUid = getCurrentAuthUid();
+    if (activeUid && uid === activeUid) {
       throw new Error('为防止误锁定，无法在此撤销当前登录账号自身的权限。');
     }
     try {
@@ -1657,69 +1371,168 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const publicValue = useMemo<PublicChurchDataValue>(
+    () => ({
+      churchInfo,
+      pastors,
+      coworkers,
+      worshipTimes,
+      liturgySteps,
+      worshipSongs,
+      ministryRoster,
+      weekdayMinistries,
+      announcements,
+      activeTheme,
+      hasCloudData,
+      hasPublicBundle,
+      cloudLoading,
+      dataSource,
+      lastSyncedAt,
+      submitVisitorRequest,
+      refreshPublicSnapshot,
+    }),
+    [
+      churchInfo,
+      pastors,
+      coworkers,
+      worshipTimes,
+      liturgySteps,
+      worshipSongs,
+      ministryRoster,
+      weekdayMinistries,
+      announcements,
+      activeTheme,
+      hasCloudData,
+      hasPublicBundle,
+      cloudLoading,
+      dataSource,
+      lastSyncedAt,
+      submitVisitorRequest,
+      refreshPublicSnapshot,
+    ]
+  );
+
+  const authValue = useMemo<ChurchAuthValue>(
+    () => ({
+      user,
+      authReady,
+      isAdmin,
+      isMainAdmin,
+      visitorRequests,
+      adminUsers,
+      activateAdminSession,
+      signInWithGoogle,
+      signOutUser,
+    }),
+    [
+      user,
+      authReady,
+      isAdmin,
+      isMainAdmin,
+      visitorRequests,
+      adminUsers,
+      activateAdminSession,
+      signInWithGoogle,
+      signOutUser,
+    ]
+  );
+
+  const adminActionsValue = useMemo<ChurchAdminActionsValue>(
+    () => ({
+      syncModifiedContentToCloud,
+      publishPublicBundle,
+      saveSiteTheme,
+      saveChurchInfo,
+      savePastor,
+      deletePastor,
+      saveCoworker,
+      deleteCoworker,
+      saveWorshipTime,
+      deleteWorshipTime,
+      saveLiturgyStep,
+      deleteLiturgyStep,
+      saveWorshipSong,
+      deleteWorshipSong,
+      saveMinistryRoster,
+      deleteMinistryRoster,
+      saveWeekdayMinistry,
+      deleteWeekdayMinistry,
+      saveAnnouncement,
+      deleteAnnouncement,
+      updateVisitorRequestStatus,
+      deleteVisitorRequest,
+      addAdminUser,
+      removeAdminUser,
+    }),
+    [
+      syncModifiedContentToCloud,
+      publishPublicBundle,
+      saveSiteTheme,
+      saveChurchInfo,
+      savePastor,
+      deletePastor,
+      saveCoworker,
+      deleteCoworker,
+      saveWorshipTime,
+      deleteWorshipTime,
+      saveLiturgyStep,
+      deleteLiturgyStep,
+      saveWorshipSong,
+      deleteWorshipSong,
+      saveMinistryRoster,
+      deleteMinistryRoster,
+      saveWeekdayMinistry,
+      deleteWeekdayMinistry,
+      saveAnnouncement,
+      deleteAnnouncement,
+      updateVisitorRequestStatus,
+      deleteVisitorRequest,
+      addAdminUser,
+      removeAdminUser,
+    ]
+  );
+
   return (
-    <ChurchDataContext.Provider
-      value={{
-        churchInfo,
-        pastors,
-        coworkers,
-        worshipTimes,
-        liturgySteps,
-        worshipSongs,
-        ministryRoster,
-        weekdayMinistries,
-        announcements,
-        visitorRequests,
-        adminUsers,
-        user,
-        authReady,
-        isAdmin,
-        isMainAdmin,
-        hasCloudData,
-        hasPublicBundle,
-        cloudLoading,
-        dataSource,
-        lastSyncedAt,
-        signInWithGoogle,
-        signOutUser,
-        syncModifiedContentToCloud,
-        publishPublicBundle,
-        refreshPublicSnapshot,
-        activeTheme,
-        saveSiteTheme,
-        saveChurchInfo,
-        savePastor,
-        deletePastor,
-        saveCoworker,
-        deleteCoworker,
-        saveWorshipTime,
-        deleteWorshipTime,
-        saveLiturgyStep,
-        deleteLiturgyStep,
-        saveWorshipSong,
-        deleteWorshipSong,
-        saveMinistryRoster,
-        deleteMinistryRoster,
-        saveWeekdayMinistry,
-        deleteWeekdayMinistry,
-        saveAnnouncement,
-        deleteAnnouncement,
-        submitVisitorRequest,
-        updateVisitorRequestStatus,
-        deleteVisitorRequest,
-        addAdminUser,
-        removeAdminUser,
-      }}
-    >
-      {children}
-    </ChurchDataContext.Provider>
+    <ChurchPublicContext.Provider value={publicValue}>
+      <ChurchAuthContext.Provider value={authValue}>
+        <ChurchAdminActionsContext.Provider value={adminActionsValue}>
+          {children}
+        </ChurchAdminActionsContext.Provider>
+      </ChurchAuthContext.Provider>
+    </ChurchPublicContext.Provider>
   );
 }
 
-export function useChurchData() {
-  const ctx = useContext(ChurchDataContext);
+export function usePublicChurchData(): PublicChurchDataValue {
+  const ctx = useContext(ChurchPublicContext);
   if (!ctx) {
-    throw new Error('useChurchData must be used inside ChurchDataProvider');
+    throw new Error('usePublicChurchData must be used inside ChurchDataProvider');
   }
   return ctx;
+}
+
+export function useChurchAuth(): ChurchAuthValue {
+  const ctx = useContext(ChurchAuthContext);
+  if (!ctx) {
+    throw new Error('useChurchAuth must be used inside ChurchDataProvider');
+  }
+  return ctx;
+}
+
+export function useChurchAdminActions(): ChurchAdminActionsValue {
+  const ctx = useContext(ChurchAdminActionsContext);
+  if (!ctx) {
+    throw new Error('useChurchAdminActions must be used inside ChurchDataProvider');
+  }
+  return ctx;
+}
+
+export function useChurchData(): ChurchDataContextValue {
+  const pub = usePublicChurchData();
+  const authCtx = useChurchAuth();
+  const actions = useChurchAdminActions();
+  return useMemo(
+    () => ({ ...pub, ...authCtx, ...actions }),
+    [pub, authCtx, actions]
+  );
 }

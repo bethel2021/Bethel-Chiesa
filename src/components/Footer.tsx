@@ -1,9 +1,14 @@
-import { useChurchData } from '../context/ChurchDataContext';
+import { useMemo } from 'react';
+import { usePublicChurchData } from '../context/ChurchDataContext';
+import { SUNDAY_SUMMARY_SCHEDULE } from '../data/cacheConfig';
 import { parsePastoralPhoneEntries } from '../utils/phone';
 
 export function Footer() {
-  const { churchInfo } = useChurchData();
-  const phoneEntries = parsePastoralPhoneEntries(churchInfo.pastoralPhone);
+  const { churchInfo } = usePublicChurchData();
+  const phoneEntries = useMemo(
+    () => parsePastoralPhoneEntries(churchInfo.pastoralPhone),
+    [churchInfo.pastoralPhone]
+  );
 
   return (
     <footer className="bg-[var(--theme-bg)] border-t border-[var(--theme-border)] transition-colors duration-300">
@@ -20,8 +25,11 @@ export function Footer() {
 
           <div className="md:col-span-3 space-y-2 text-xs text-[var(--theme-ink-muted)]">
             <p className="font-medium text-[var(--theme-ink)] mb-2">聚会时间</p>
-            <p className="tabular-nums">主日崇拜：每周日14:30-16:30</p>
-            <p className="tabular-nums">儿童主日学：每周日14:30-16:30</p>
+            {SUNDAY_SUMMARY_SCHEDULE.map((slot) => (
+              <p key={slot.label} className="tabular-nums">
+                {slot.label}：{slot.time}
+              </p>
+            ))}
           </div>
 
           <div className="md:col-span-4 space-y-2 text-xs text-[var(--theme-ink-muted)]">

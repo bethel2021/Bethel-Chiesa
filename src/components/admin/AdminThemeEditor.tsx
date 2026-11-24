@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Check, Loader2, Palette, RotateCcw } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import {
+  useChurchAdminActions,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
 import { normalizeSiteTheme, SITE_THEMES, type SiteThemeId } from '../../data/themes';
 import { AdminPanelHeader, getFriendlyAdminError, StatusBanner } from './AdminSharedUI';
 
 export function AdminThemeEditor() {
-  const { churchInfo, saveSiteTheme, lastSyncedAt } = useChurchData();
+  const { churchInfo, lastSyncedAt } = usePublicChurchData();
+  const { saveSiteTheme } = useChurchAdminActions();
   const currentTheme = normalizeSiteTheme(churchInfo.siteTheme);
   const currentMeta = SITE_THEMES.find((t) => t.id === currentTheme) ?? SITE_THEMES[0];
 

@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 
 export function AdminPanelHeader({
   title,
@@ -74,6 +75,77 @@ export function StatusBanner({
         </button>
       )}
     </div>
+  );
+}
+
+export function ConfirmDeleteButton({
+  onConfirm,
+  label = '删除',
+  confirmLabel = '确认删除',
+  ariaLabel,
+  className,
+  showIcon = true,
+}: {
+  onConfirm: () => Promise<void> | void;
+  label?: string;
+  confirmLabel?: string;
+  ariaLabel?: string;
+  className?: string;
+  showIcon?: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = window.setTimeout(() => setConfirming(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirming]);
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        aria-label={ariaLabel ?? label}
+        className={
+          className ??
+          'inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer'
+        }
+      >
+        {showIcon && <Trash2 className="w-3.5 h-3.5 shrink-0" />}
+        {label && <span>{label}</span>}
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={async () => {
+          setPending(true);
+          try {
+            await onConfirm();
+          } finally {
+            setPending(false);
+            setConfirming(false);
+          }
+        }}
+        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-[#9A3412] hover:bg-[#7C2D12] disabled:opacity-60 rounded cursor-pointer whitespace-nowrap"
+      >
+        {pending ? '处理中…' : confirmLabel}
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => setConfirming(false)}
+        className="px-2 py-1.5 text-xs text-[#57534E] border border-[#D6CFC2] bg-white hover:bg-[#F3EFE6] rounded cursor-pointer whitespace-nowrap"
+      >
+        取消
+      </button>
+    </span>
   );
 }
 

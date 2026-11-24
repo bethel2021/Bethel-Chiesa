@@ -1,4 +1,4 @@
-import type { PublicBundleData } from '../context/ChurchDataContext';
+import type { PublicBundleData } from './publicBundleCache';
 
 export type EarlyBundleResult =
   | { status: 'ok'; bundle: PublicBundleData }

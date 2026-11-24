@@ -1,8 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import {
+  useChurchAdminActions,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../../data/cacheConfig';
 import { CHURCH_IMAGES, type ChurchInfo } from '../../data/churchData';
 import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
+import { normalizeChurchInfo } from '../../utils/churchNormalization';
 import {
   AdminPanelHeader,
   FieldLabel,
@@ -14,22 +19,23 @@ import {
 import { ImageFieldControl } from './ImageFieldControl';
 
 export function AdminInfoEditor() {
-  const { churchInfo, saveChurchInfo } = useChurchData();
-  const [form, setForm] = useState<ChurchInfo>({
-    ...churchInfo,
-    siteTheme: normalizeSiteTheme(churchInfo.siteTheme),
-  });
+  const { churchInfo } = usePublicChurchData();
+  const { saveChurchInfo } = useChurchAdminActions();
+  const normalizedSource = useMemo(() => normalizeChurchInfo(churchInfo), [churchInfo]);
+  const [form, setForm] = useState<ChurchInfo>(normalizedSource);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
 
   useEffect(() => {
-    setForm({
-      ...churchInfo,
-      siteTheme: normalizeSiteTheme(churchInfo.siteTheme),
-    });
-  }, [churchInfo]);
+    setForm(normalizedSource);
+  }, [normalizedSource]);
+
+  const isDirty = useMemo(
+    () => JSON.stringify(normalizeChurchInfo(form)) !== JSON.stringify(normalizedSource),
+    [form, normalizedSource]
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -54,15 +60,31 @@ export function AdminInfoEditor() {
         title="教会简介与基本信息"
         description="编辑首屏主视觉、教会历史简介、四项核心异象、堂址及教牧联系电话。"
         action={
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md transition-colors whitespace-nowrap cursor-pointer"
-          >
-            {saving ? '正在保存…' : '保存全部更改'}
-          </button>
+          <div className="flex items-center gap-3">
+            {isDirty && (
+              <span className="text-[11px] font-medium text-[#9A5B13] bg-[#FEF3C7] border border-[#F59E0B]/40 px-2.5 py-1 rounded">
+                有未保存修改
+              </span>
+            )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+            >
+              {saving ? '正在保存…' : '保存全部更改'}
+            </button>
+          </div>
         }
       />
+
+      {isDirty && (
+        <div
+          role="status"
+          className="px-4 py-2.5 rounded-md border border-[#F59E0B]/40 bg-[#FFFBEB] text-xs text-[#92400E]"
+        >
+          有尚未保存的更改，离开或切换模块前请记得点击保存。
+        </div>
+      )}
 
       <StatusBanner status={status} onClear={() => setStatus(null)} />
 
@@ -77,7 +99,7 @@ export function AdminInfoEditor() {
             <input
               type="text"
               required
-              maxLength={100}
+              maxLength={FIELD_LIMITS.churchInfo.name}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className={inputClass}
@@ -87,7 +109,7 @@ export function AdminInfoEditor() {
             <input
               type="text"
               required
-              maxLength={100}
+              maxLength={FIELD_LIMITS.churchInfo.founded}
               value={form.founded}
               onChange={(e) => setForm({ ...form, founded: e.target.value })}
               className={inputClass}
@@ -101,7 +123,7 @@ export function AdminInfoEditor() {
               <input
                 type="text"
                 required
-                maxLength={400}
+                maxLength={FIELD_LIMITS.churchInfo.scriptureQuote}
                 value={form.scriptureQuote}
                 onChange={(e) => setForm({ ...form, scriptureQuote: e.target.value })}
                 className={inputClass}
@@ -112,7 +134,7 @@ export function AdminInfoEditor() {
             <input
               type="text"
               required
-              maxLength={100}
+              maxLength={FIELD_LIMITS.churchInfo.scriptureRef}
               value={form.scriptureRef}
               onChange={(e) => setForm({ ...form, scriptureRef: e.target.value })}
               className={inputClass}
@@ -124,7 +146,7 @@ export function AdminInfoEditor() {
           <input
             type="text"
             required
-            maxLength={400}
+            maxLength={FIELD_LIMITS.churchInfo.heroSubtitle}
             value={form.heroSubtitle}
             onChange={(e) => setForm({ ...form, heroSubtitle: e.target.value })}
             className={inputClass}
@@ -204,7 +226,7 @@ export function AdminInfoEditor() {
           <button
             type="button"
             onClick={() =>
-              form.introParagraphs.length < 10 &&
+              form.introParagraphs.length < FIELD_LIMITS.churchInfo.introParagraphMaxCount &&
               setForm({ ...form, introParagraphs: [...form.introParagraphs, ''] })
             }
             className="inline-flex items-center gap-1 text-xs font-medium text-[#1E3A5F] hover:underline cursor-pointer"
@@ -219,7 +241,7 @@ export function AdminInfoEditor() {
             <div key={idx} className="flex items-start gap-2">
               <textarea
                 rows={3}
-                maxLength={1000}
+                maxLength={FIELD_LIMITS.churchInfo.introParagraphLen}
                 value={para}
                 onChange={(e) => {
                   const next = [...form.introParagraphs];
@@ -252,7 +274,7 @@ export function AdminInfoEditor() {
               <input
                 type="text"
                 required
-                maxLength={300}
+                maxLength={FIELD_LIMITS.churchInfo.themeVerse}
                 value={form.themeVerse}
                 onChange={(e) => setForm({ ...form, themeVerse: e.target.value })}
                 className={inputClass}
@@ -263,7 +285,7 @@ export function AdminInfoEditor() {
             <input
               type="text"
               required
-              maxLength={100}
+              maxLength={FIELD_LIMITS.churchInfo.themeVerseRef}
               value={form.themeVerseRef}
               onChange={(e) => setForm({ ...form, themeVerseRef: e.target.value })}
               className={inputClass}
@@ -273,11 +295,13 @@ export function AdminInfoEditor() {
 
         <div className="pt-4 border-t border-[#EFEAE0]">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-[#292524]">核心异象条目（最多 10 项）</span>
+            <span className="text-xs font-medium text-[#292524]">
+              核心异象条目（最多 {FIELD_LIMITS.churchInfo.coreValuesMaxCount} 项）
+            </span>
             <button
               type="button"
               onClick={() =>
-                form.coreValues.length < 10 &&
+                form.coreValues.length < FIELD_LIMITS.churchInfo.coreValuesMaxCount &&
                 setForm({
                   ...form,
                   coreValues: [
@@ -306,7 +330,7 @@ export function AdminInfoEditor() {
                 <div className="md:col-span-2">
                   <input
                     type="text"
-                    maxLength={10}
+                    maxLength={FIELD_LIMITS.churchInfo.coreValueIndex}
                     value={cv.index}
                     onChange={(e) => {
                       const next = [...form.coreValues];
@@ -320,7 +344,7 @@ export function AdminInfoEditor() {
                 <div className="md:col-span-3">
                   <input
                     type="text"
-                    maxLength={60}
+                    maxLength={FIELD_LIMITS.churchInfo.coreValueTitle}
                     value={cv.title}
                     onChange={(e) => {
                       const next = [...form.coreValues];
@@ -334,7 +358,7 @@ export function AdminInfoEditor() {
                 <div className="md:col-span-6">
                   <input
                     type="text"
-                    maxLength={300}
+                    maxLength={FIELD_LIMITS.churchInfo.coreValueDescription}
                     value={cv.description}
                     onChange={(e) => {
                       const next = [...form.coreValues];
@@ -376,7 +400,7 @@ export function AdminInfoEditor() {
               <input
                 type="text"
                 required
-                maxLength={300}
+                maxLength={FIELD_LIMITS.churchInfo.address}
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 className={inputClass}
@@ -387,7 +411,7 @@ export function AdminInfoEditor() {
             <input
               type="text"
               required
-              maxLength={100}
+              maxLength={FIELD_LIMITS.churchInfo.shortAddress}
               value={form.shortAddress}
               onChange={(e) => setForm({ ...form, shortAddress: e.target.value })}
               className={inputClass}
@@ -402,7 +426,7 @@ export function AdminInfoEditor() {
           <textarea
             rows={2}
             required
-            maxLength={100}
+            maxLength={FIELD_LIMITS.churchInfo.pastoralPhone}
             value={form.pastoralPhone}
             onChange={(e) => setForm({ ...form, pastoralPhone: e.target.value })}
             className={textareaClass}

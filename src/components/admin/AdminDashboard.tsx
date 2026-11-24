@@ -16,7 +16,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import {
+  useChurchAdminActions,
+  useChurchAuth,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
 import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
 import { AdminAnnouncementsEditor } from './AdminAnnouncementsEditor';
 import { AdminInfoEditor } from './AdminInfoEditor';
@@ -58,17 +62,10 @@ const SIDEBAR_ITEMS: {
 
 export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const {
-    user,
-    authReady,
-    isAdmin,
     hasCloudData,
     hasPublicBundle,
     cloudLoading,
     lastSyncedAt,
-    signInWithGoogle,
-    signOutUser,
-    syncModifiedContentToCloud,
-    publishPublicBundle,
     churchInfo,
     pastors,
     coworkers,
@@ -78,8 +75,21 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     ministryRoster,
     weekdayMinistries,
     announcements,
+  } = usePublicChurchData();
+  const {
+    user,
+    authReady,
+    isAdmin,
     visitorRequests,
-  } = useChurchData();
+    activateAdminSession,
+    signInWithGoogle,
+    signOutUser,
+  } = useChurchAuth();
+  const { syncModifiedContentToCloud, publishPublicBundle } = useChurchAdminActions();
+
+  useEffect(() => {
+    activateAdminSession();
+  }, [activateAdminSession]);
 
   const currentCloudTheme = normalizeSiteTheme(churchInfo.siteTheme);
   const currentThemeName =

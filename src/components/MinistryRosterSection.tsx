@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { useMemo, useState } from 'react';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import {
   MINISTRY_CATEGORY_LABELS,
   MINISTRY_CATEGORY_OPTIONS,
@@ -16,21 +16,28 @@ const FILTER_TABS: { id: RosterFilter; label: string }[] = [
 ];
 
 export function MinistryRosterSection() {
-  const { churchInfo, ministryRoster, weekdayMinistries } = useChurchData();
+  const { churchInfo, ministryRoster, weekdayMinistries } = usePublicChurchData();
   const [filter, setFilter] = useState<RosterFilter>('all');
   const [weekMode, setWeekMode] = useState<WeekMode>('thisWeek');
 
-  const sortedRoster = [...ministryRoster].sort((a, b) => {
-    const catDiff =
-      (MINISTRY_CATEGORY_ORDER[a.category] ?? 99) -
-      (MINISTRY_CATEGORY_ORDER[b.category] ?? 99);
-    return catDiff !== 0 ? catDiff : a.sortOrder - b.sortOrder;
-  });
+  const sortedRoster = useMemo(
+    () =>
+      [...ministryRoster].sort((a, b) => {
+        const catDiff =
+          (MINISTRY_CATEGORY_ORDER[a.category] ?? 99) -
+          (MINISTRY_CATEGORY_ORDER[b.category] ?? 99);
+        return catDiff !== 0 ? catDiff : a.sortOrder - b.sortOrder;
+      }),
+    [ministryRoster]
+  );
 
-  const filteredRoster =
-    filter === 'all'
-      ? sortedRoster
-      : sortedRoster.filter((item) => item.category === filter);
+  const filteredRoster = useMemo(
+    () =>
+      filter === 'all'
+        ? sortedRoster
+        : sortedRoster.filter((item) => item.category === filter),
+    [filter, sortedRoster]
+  );
 
   return (
     <section

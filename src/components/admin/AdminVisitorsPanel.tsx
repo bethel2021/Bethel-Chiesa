@@ -1,9 +1,14 @@
-import { useState, type FormEvent } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import { useMemo, useState, type FormEvent } from 'react';
+import { Plus } from 'lucide-react';
+import {
+  useChurchAdminActions,
+  useChurchAuth,
+} from '../../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../../data/cacheConfig';
 import type { VisitorRequestItem } from '../../data/churchData';
 import {
   AdminPanelHeader,
+  ConfirmDeleteButton,
   FieldLabel,
   getFriendlyAdminError,
   inputClass,
@@ -17,15 +22,13 @@ const STATUS_LABELS: Record<VisitorRequestItem['status'], string> = {
 };
 
 export function AdminVisitorsPanel() {
+  const { isMainAdmin, visitorRequests, adminUsers } = useChurchAuth();
   const {
-    isMainAdmin,
-    visitorRequests,
     updateVisitorRequestStatus,
     deleteVisitorRequest,
-    adminUsers,
     addAdminUser,
     removeAdminUser,
-  } = useChurchData();
+  } = useChurchAdminActions();
 
   const [filter, setFilter] = useState<'all' | VisitorRequestItem['status']>('all');
   const [statusMsg, setStatusMsg] = useState<{
@@ -38,10 +41,23 @@ export function AdminVisitorsPanel() {
   const [newEmail, setNewEmail] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
 
-  const filteredRequests =
-    filter === 'all'
-      ? visitorRequests
-      : visitorRequests.filter((r) => r.status === filter);
+  const statusCounts = useMemo(() => {
+    const counts = { all: visitorRequests.length, pending: 0, contacted: 0, archived: 0 };
+    for (const r of visitorRequests) {
+      if (r.status === 'pending') counts.pending += 1;
+      else if (r.status === 'contacted') counts.contacted += 1;
+      else if (r.status === 'archived') counts.archived += 1;
+    }
+    return counts;
+  }, [visitorRequests]);
+
+  const filteredRequests = useMemo(
+    () =>
+      filter === 'all'
+        ? visitorRequests
+        : visitorRequests.filter((r) => r.status === filter),
+    [filter, visitorRequests]
+  );
 
   const handleAddAdmin = async (e: FormEvent) => {
     e.preventDefault();
@@ -73,19 +89,10 @@ export function AdminVisitorsPanel() {
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ['all', `全部 (${visitorRequests.length})`],
-            [
-              'pending',
-              `待跟进 (${visitorRequests.filter((r) => r.status === 'pending').length})`,
-            ],
-            [
-              'contacted',
-              `已联系 (${visitorRequests.filter((r) => r.status === 'contacted').length})`,
-            ],
-            [
-              'archived',
-              `已归档 (${visitorRequests.filter((r) => r.status === 'archived').length})`,
-            ],
+            ['all', `全部 (${statusCounts.all})`],
+            ['pending', `待跟进 (${statusCounts.pending})`],
+            ['contacted', `已联系 (${statusCounts.contacted})`],
+            ['archived', `已归档 (${statusCounts.archived})`],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -144,7 +151,7 @@ export function AdminVisitorsPanel() {
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-1">
                   <input
                     type="text"
-                    maxLength={500}
+                    maxLength={FIELD_LIMITS.visitorRequest.adminNote}
                     value={noteVal}
                     onChange={(e) =>
                       setNoteDrafts({ ...noteDrafts, [req.id]: e.target.value })
@@ -198,9 +205,12 @@ export function AdminVisitorsPanel() {
                       保存备注
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={async () => {
+                    <ConfirmDeleteButton
+                      label=""
+                      confirmLabel="确认删除"
+                      ariaLabel="删除记录"
+                      className="p-2 text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded-md cursor-pointer"
+                      onConfirm={async () => {
                         setStatusMsg(null);
                         try {
                           await deleteVisitorRequest(req.id);
@@ -212,11 +222,7 @@ export function AdminVisitorsPanel() {
                           });
                         }
                       }}
-                      aria-label="删除记录"
-                      className="p-2 text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded-md cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    />
                   </div>
                 </div>
               </div>
@@ -246,7 +252,7 @@ export function AdminVisitorsPanel() {
                   <input
                     type="text"
                     required
-                    maxLength={128}
+                    maxLength={FIELD_LIMITS.adminUser.uid}
                     value={newUid}
                     onChange={(e) => setNewUid(e.target.value)}
                     placeholder="例如：Abc123xyz..."
@@ -259,7 +265,7 @@ export function AdminVisitorsPanel() {
                   <input
                     type="email"
                     required
-                    maxLength={160}
+                    maxLength={FIELD_LIMITS.adminUser.email}
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="fellow@bethelchurch.org"
@@ -272,7 +278,7 @@ export function AdminVisitorsPanel() {
                   <input
                     type="text"
                     required
-                    maxLength={80}
+                    maxLength={FIELD_LIMITS.adminUser.displayName}
                     value={newDisplayName}
                     onChange={(e) => setNewDisplayName(e.target.value)}
                     placeholder="陈牧师"
@@ -305,9 +311,12 @@ export function AdminVisitorsPanel() {
                       <span className="text-[#78716C] mx-2">·</span>
                       <span className="font-mono text-[#78716C]">UID: {adm.uid}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
+                    <ConfirmDeleteButton
+                      label="撤销权限"
+                      confirmLabel="确认撤销"
+                      showIcon={false}
+                      className="text-[#9A3412] hover:underline cursor-pointer self-start sm:self-auto"
+                      onConfirm={async () => {
                         setStatusMsg(null);
                         try {
                           await removeAdminUser(adm.uid);
@@ -322,10 +331,7 @@ export function AdminVisitorsPanel() {
                           });
                         }
                       }}
-                      className="text-[#9A3412] hover:underline cursor-pointer self-start sm:self-auto"
-                    >
-                      撤销权限
-                    </button>
+                    />
                   </div>
                 ))}
               </div>

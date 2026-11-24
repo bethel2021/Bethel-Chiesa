@@ -1,14 +1,20 @@
 import { useState, type FormEvent } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import { Pencil, Plus, X } from 'lucide-react';
+import {
+  useChurchAdminActions,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../../data/cacheConfig';
 import {
   CHURCH_IMAGES,
   type PastorProfile,
   type PulpitCoworker,
 } from '../../data/churchData';
+import { ModalDialog } from '../ModalDialog';
 import { SafeImage } from '../SafeImage';
 import {
   AdminPanelHeader,
+  ConfirmDeleteButton,
   FieldLabel,
   getFriendlyAdminError,
   inputClass,
@@ -38,8 +44,8 @@ const EMPTY_COWORKER: PulpitCoworker = {
 };
 
 export function AdminPastorsEditor() {
-  const { pastors, coworkers, savePastor, deletePastor, saveCoworker, deleteCoworker } =
-    useChurchData();
+  const { pastors, coworkers } = usePublicChurchData();
+  const { savePastor, deletePastor, saveCoworker, deleteCoworker } = useChurchAdminActions();
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
@@ -177,14 +183,9 @@ export function AdminPastorsEditor() {
                   <Pencil className="w-3.5 h-3.5" />
                   编辑
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeletePastor(p.id, p.name)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  删除
-                </button>
+                <ConfirmDeleteButton
+                  onConfirm={() => handleDeletePastor(p.id, p.name)}
+                />
               </div>
             </div>
           ))}
@@ -252,14 +253,9 @@ export function AdminPastorsEditor() {
                   <Pencil className="w-3.5 h-3.5" />
                   编辑
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCoworker(cw.id, cw.name)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  删除
-                </button>
+                <ConfirmDeleteButton
+                  onConfirm={() => handleDeleteCoworker(cw.id, cw.name)}
+                />
               </div>
             </div>
           ))}
@@ -268,22 +264,25 @@ export function AdminPastorsEditor() {
 
       {/* Pastor Editor Modal */}
       {editingPastor && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+        <ModalDialog
+          labelledBy="pastor-modal-title"
+          maxWidthClass="max-w-xl"
+          overlayClassName="bg-[#141210]/55"
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-h-[90vh] overflow-y-auto shadow-xl"
+          onClose={() => setEditingPastor(null)}
         >
-          <form
-            onSubmit={handleSavePastor}
-            className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-xl"
-          >
+          <form onSubmit={handleSavePastor} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-              <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+              <h3
+                id="pastor-modal-title"
+                className="font-editorial text-xl font-semibold text-[#1C1917]"
+              >
                 {editingPastor.id ? '编辑牧者档案' : '新增牧者档案'}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingPastor(null)}
+                aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] hover:text-[#1C1917] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -295,7 +294,7 @@ export function AdminPastorsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={80}
+                  maxLength={FIELD_LIMITS.pastor.name}
                   value={editingPastor.name}
                   onChange={(e) =>
                     setEditingPastor({ ...editingPastor, name: e.target.value })
@@ -307,7 +306,7 @@ export function AdminPastorsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={120}
+                  maxLength={FIELD_LIMITS.pastor.role}
                   value={editingPastor.role}
                   onChange={(e) =>
                     setEditingPastor({ ...editingPastor, role: e.target.value })
@@ -319,7 +318,7 @@ export function AdminPastorsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={60}
+                  maxLength={FIELD_LIMITS.pastor.tenure}
                   value={editingPastor.tenure}
                   onChange={(e) =>
                     setEditingPastor({ ...editingPastor, tenure: e.target.value })
@@ -366,7 +365,7 @@ export function AdminPastorsEditor() {
               <input
                 type="text"
                 required
-                maxLength={200}
+                maxLength={FIELD_LIMITS.pastor.education}
                 value={editingPastor.education}
                 onChange={(e) =>
                   setEditingPastor({ ...editingPastor, education: e.target.value })
@@ -379,7 +378,7 @@ export function AdminPastorsEditor() {
               <input
                 type="text"
                 required
-                maxLength={200}
+                maxLength={FIELD_LIMITS.pastor.ministryFocus}
                 value={editingPastor.ministryFocus}
                 onChange={(e) =>
                   setEditingPastor({ ...editingPastor, ministryFocus: e.target.value })
@@ -392,7 +391,7 @@ export function AdminPastorsEditor() {
               <textarea
                 rows={4}
                 required
-                maxLength={1200}
+                maxLength={FIELD_LIMITS.pastor.bio}
                 value={editingPastor.bio}
                 onChange={(e) =>
                   setEditingPastor({ ...editingPastor, bio: e.target.value })
@@ -418,27 +417,30 @@ export function AdminPastorsEditor() {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       )}
 
       {/* Coworker Editor Modal */}
       {editingCoworker && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+        <ModalDialog
+          labelledBy="coworker-modal-title"
+          maxWidthClass="max-w-lg"
+          overlayClassName="bg-[#141210]/55"
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
+          onClose={() => setEditingCoworker(null)}
         >
-          <form
-            onSubmit={handleSaveCoworker}
-            className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-lg w-full p-6 space-y-4 shadow-xl"
-          >
+          <form onSubmit={handleSaveCoworker} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-              <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+              <h3
+                id="coworker-modal-title"
+                className="font-editorial text-xl font-semibold text-[#1C1917]"
+              >
                 {editingCoworker.id ? '编辑讲台轮值同工' : '新增讲台轮值同工'}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingCoworker(null)}
+                aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] hover:text-[#1C1917] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -450,7 +452,7 @@ export function AdminPastorsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={80}
+                  maxLength={FIELD_LIMITS.coworker.name}
                   value={editingCoworker.name}
                   onChange={(e) =>
                     setEditingCoworker({ ...editingCoworker, name: e.target.value })
@@ -479,7 +481,7 @@ export function AdminPastorsEditor() {
               <input
                 type="text"
                 required
-                maxLength={120}
+                maxLength={FIELD_LIMITS.coworker.title}
                 value={editingCoworker.title}
                 onChange={(e) =>
                   setEditingCoworker({ ...editingCoworker, title: e.target.value })
@@ -516,7 +518,7 @@ export function AdminPastorsEditor() {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       )}
     </div>
   );

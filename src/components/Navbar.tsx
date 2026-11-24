@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Menu, X } from 'lucide-react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import { getStickyHeaderHeight, handleAnchorClick } from '../utils/scroll';
 
 const NAV_LINKS = [
@@ -26,7 +26,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ onOpenAdmin }: NavbarProps) {
-  const { churchInfo } = useChurchData();
+  const { churchInfo } = usePublicChurchData();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>('top');
   const headerRef = useRef<HTMLElement | null>(null);

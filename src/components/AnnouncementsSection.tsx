@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowUpRight, X } from 'lucide-react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import type { AnnouncementItem } from '../data/churchData';
 import { handleAnchorClick } from '../utils/scroll';
+import { ModalDialog } from './ModalDialog';
 
 type CategoryFilter = '全部' | AnnouncementItem['category'];
 
@@ -15,21 +16,30 @@ const CATEGORIES: CategoryFilter[] = [
 ];
 
 export function AnnouncementsSection() {
-  const { announcements } = useChurchData();
+  const { announcements } = usePublicChurchData();
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('全部');
   const [activeAnnouncement, setActiveAnnouncement] = useState<AnnouncementItem | null>(null);
 
-  const visibleAnnouncements =
-    selectedCategory === '全部'
-      ? announcements
-      : announcements.filter((item) => item.category === selectedCategory);
+  const visibleAnnouncements = useMemo(
+    () =>
+      selectedCategory === '全部'
+        ? announcements
+        : announcements.filter((item) => item.category === selectedCategory),
+    [announcements, selectedCategory]
+  );
 
-  const featuredItem =
-    selectedCategory === '全部'
-      ? visibleAnnouncements.find((item) => item.isFeatured) || visibleAnnouncements[0]
-      : visibleAnnouncements[0];
+  const featuredItem = useMemo(
+    () =>
+      selectedCategory === '全部'
+        ? visibleAnnouncements.find((item) => item.isFeatured) || visibleAnnouncements[0]
+        : visibleAnnouncements[0],
+    [selectedCategory, visibleAnnouncements]
+  );
 
-  const remainingItems = visibleAnnouncements.filter((item) => item.id !== featuredItem?.id);
+  const remainingItems = useMemo(
+    () => visibleAnnouncements.filter((item) => item.id !== featuredItem?.id),
+    [visibleAnnouncements, featuredItem?.id]
+  );
 
   return (
     <section id="announcements" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
@@ -150,17 +160,13 @@ export function AnnouncementsSection() {
 
       {/* Announcement Detail Modal */}
       {activeAnnouncement && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="announcement-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55 backdrop-blur-[2px]"
-          onClick={() => setActiveAnnouncement(null)}
+        <ModalDialog
+          labelledBy="announcement-modal-title"
+          maxWidthClass="max-w-xl"
+          overlayClassName="bg-[#141210]/55 backdrop-blur-[2px]"
+          containerClassName="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg max-h-[85vh] overflow-y-auto p-6 md:p-8 shadow-xl"
+          onClose={() => setActiveAnnouncement(null)}
         >
-          <div
-            className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg max-w-xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--theme-border)]">
               <div>
                 <p className="text-xs text-[var(--theme-ink-subtle)] mb-1">
@@ -219,9 +225,8 @@ export function AnnouncementsSection() {
               >
                 我知道了
               </button>
-            </div>
           </div>
-        </div>
+        </ModalDialog>
       )}
     </section>
   );

@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { CheckCircle2, ExternalLink, MapPin, Navigation, Phone } from 'lucide-react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../data/cacheConfig';
 import { buildGoogleMapsDirectionsUrl } from '../lib/googleMaps';
 import { parsePastoralPhoneEntries } from '../utils/phone';
 
@@ -19,7 +20,7 @@ const INITIAL_FORM: FormState = {
 };
 
 export function ContactSection() {
-  const { churchInfo, submitVisitorRequest } = useChurchData();
+  const { churchInfo, submitVisitorRequest } = usePublicChurchData();
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [error, setError] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -53,10 +54,14 @@ export function ContactSection() {
     }
   };
 
-  const directionsUrl = buildGoogleMapsDirectionsUrl({
-    destination: churchInfo.address,
-  });
-  const phoneEntries = parsePastoralPhoneEntries(churchInfo.pastoralPhone);
+  const directionsUrl = useMemo(
+    () => buildGoogleMapsDirectionsUrl({ destination: churchInfo.address }),
+    [churchInfo.address]
+  );
+  const phoneEntries = useMemo(
+    () => parsePastoralPhoneEntries(churchInfo.pastoralPhone),
+    [churchInfo.pastoralPhone]
+  );
 
   return (
     <section
@@ -185,7 +190,7 @@ export function ContactSection() {
                       <input
                         id="visitor-name"
                         type="text"
-                        maxLength={80}
+                        maxLength={FIELD_LIMITS.visitorRequest.name}
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="例如：张弟兄 / 李女士"
@@ -203,7 +208,7 @@ export function ContactSection() {
                       <input
                         id="visitor-contact"
                         type="text"
-                        maxLength={140}
+                        maxLength={FIELD_LIMITS.visitorRequest.contact}
                         value={form.contact}
                         onChange={(e) => setForm({ ...form, contact: e.target.value })}
                         placeholder="方便同工回访与发送聚会指引"
@@ -243,7 +248,7 @@ export function ContactSection() {
                     <textarea
                       id="visitor-message"
                       rows={3}
-                      maxLength={1000}
+                      maxLength={FIELD_LIMITS.visitorRequest.message}
                       value={form.message}
                       onChange={(e) => setForm({ ...form, message: e.target.value })}
                       placeholder="可简述同行人数、儿童年龄（如需儿童主日学）或需要牧者代祷的内容"

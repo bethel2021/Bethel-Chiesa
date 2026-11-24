@@ -1,10 +1,16 @@
-import { useState, type FormEvent } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import { useMemo, useState, type FormEvent } from 'react';
+import { Pencil, Plus, X } from 'lucide-react';
+import {
+  useChurchAdminActions,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../../data/cacheConfig';
 import type { LiturgyStep, WorshipSong, WorshipTimeSlot } from '../../data/churchData';
 import { isSafeYoutubeUrl } from '../../utils/urlSafety';
+import { ModalDialog } from '../ModalDialog';
 import {
   AdminPanelHeader,
+  ConfirmDeleteButton,
   FieldLabel,
   getFriendlyAdminError,
   inputClass,
@@ -13,17 +19,15 @@ import {
 } from './AdminSharedUI';
 
 export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
+  const { worshipTimes, liturgySteps, worshipSongs } = usePublicChurchData();
   const {
-    worshipTimes,
-    liturgySteps,
-    worshipSongs,
     saveWorshipTime,
     deleteWorshipTime,
     saveLiturgyStep,
     deleteLiturgyStep,
     saveWorshipSong,
     deleteWorshipSong,
-  } = useChurchData();
+  } = useChurchAdminActions();
 
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
@@ -34,6 +38,11 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
   const [editingStep, setEditingStep] = useState<LiturgyStep | null>(null);
   const [editingSong, setEditingSong] = useState<WorshipSong | null>(null);
   const [liturgyFilter, setLiturgyFilter] = useState<'standard' | 'communion'>('standard');
+
+  const filteredSteps = useMemo(
+    () => liturgySteps.filter((s) => s.liturgyType === liturgyFilter),
+    [liturgySteps, liturgyFilter]
+  );
 
   const handleSaveTime = async (e: FormEvent) => {
     e.preventDefault();
@@ -160,9 +169,8 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                     <Pencil className="w-3.5 h-3.5" />
                     编辑
                   </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
+                  <ConfirmDeleteButton
+                    onConfirm={async () => {
                       setStatus(null);
                       try {
                         await deleteWorshipSong(song.id);
@@ -174,11 +182,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                         });
                       }
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    删除
-                  </button>
+                  />
                 </div>
               </div>
             );
@@ -186,22 +190,25 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
         </div>
 
         {editingSong && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+          <ModalDialog
+            labelledBy="song-modal-title"
+            maxWidthClass="max-w-lg"
+            overlayClassName="bg-[#141210]/55"
+            containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
+            onClose={() => setEditingSong(null)}
           >
-            <form
-              onSubmit={handleSaveSong}
-              className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-lg w-full p-6 space-y-4 shadow-xl"
-            >
+            <form onSubmit={handleSaveSong} className="p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-                <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+                <h3
+                  id="song-modal-title"
+                  className="font-editorial text-xl font-semibold text-[#1C1917]"
+                >
                   {editingSong.id ? '编辑敬拜诗歌' : '新增敬拜诗歌'}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setEditingSong(null)}
+                  aria-label="关闭弹窗"
                   className="p-1.5 text-[#57534E] cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -212,7 +219,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <input
                   type="text"
                   required
-                  maxLength={140}
+                  maxLength={FIELD_LIMITS.worshipSong.title}
                   value={editingSong.title}
                   onChange={(e) => setEditingSong({ ...editingSong, title: e.target.value })}
                   placeholder="例如：《奇异恩典》（Amazing Grace）"
@@ -223,7 +230,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               <FieldLabel label="YouTube 视频链接 1" hint="支持 youtube.com 或 youtu.be 链接">
                 <input
                   type="text"
-                  maxLength={500}
+                  maxLength={FIELD_LIMITS.worshipSong.youtubeUrl}
                   value={editingSong.youtubeUrl}
                   onChange={(e) =>
                     setEditingSong({ ...editingSong, youtubeUrl: e.target.value })
@@ -239,7 +246,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               >
                 <input
                   type="text"
-                  maxLength={500}
+                  maxLength={FIELD_LIMITS.worshipSong.youtubeUrl}
                   value={editingSong.youtubeUrl2 ?? ''}
                   onChange={(e) =>
                     setEditingSong({ ...editingSong, youtubeUrl2: e.target.value })
@@ -279,13 +286,11 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 </button>
               </div>
             </form>
-          </div>
+          </ModalDialog>
         )}
       </div>
     );
   }
-
-  const filteredSteps = liturgySteps.filter((s) => s.liturgyType === liturgyFilter);
 
   return (
     <div className="space-y-10">
@@ -347,9 +352,8 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                   <Pencil className="w-3.5 h-3.5" />
                   编辑
                 </button>
-                <button
-                  type="button"
-                  onClick={async () => {
+                <ConfirmDeleteButton
+                  onConfirm={async () => {
                     setStatus(null);
                     try {
                       await deleteWorshipTime(slot.id);
@@ -361,11 +365,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                       });
                     }
                   }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  删除
-                </button>
+                />
               </div>
             </div>
           ))}
@@ -413,6 +413,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 liturgyType: liturgyFilter,
                 time: '',
                 step: '',
+                scriptureOrHymn: '',
                 leader: '',
                 note: '',
                 sortOrder: filteredSteps.length + 1,
@@ -432,12 +433,17 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-[#1C1917]">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#1C1917]">
                   <span className="font-mono text-xs text-[#1E3A5F] tabular-nums">
                     {step.time}
                   </span>
                   <span>{step.step}</span>
                   <span className="text-xs font-normal text-[#78716C]">· {step.leader}</span>
+                  {step.scriptureOrHymn && (
+                    <span className="text-xs font-normal text-[#8B5E34]">
+                      · {step.scriptureOrHymn}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-[#57534E]">{step.note}</p>
               </div>
@@ -445,15 +451,19 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setEditingStep(step)}
+                  onClick={() =>
+                    setEditingStep({
+                      ...step,
+                      scriptureOrHymn: step.scriptureOrHymn ?? '',
+                    })
+                  }
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   编辑
                 </button>
-                <button
-                  type="button"
-                  onClick={async () => {
+                <ConfirmDeleteButton
+                  onConfirm={async () => {
                     setStatus(null);
                     try {
                       await deleteLiturgyStep(step.id);
@@ -465,11 +475,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                       });
                     }
                   }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  删除
-                </button>
+                />
               </div>
             </div>
           ))}
@@ -478,22 +484,25 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
 
       {/* Time Editor Modal */}
       {editingTime && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+        <ModalDialog
+          labelledBy="time-modal-title"
+          maxWidthClass="max-w-lg"
+          overlayClassName="bg-[#141210]/55"
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
+          onClose={() => setEditingTime(null)}
         >
-          <form
-            onSubmit={handleSaveTime}
-            className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-lg w-full p-6 space-y-4 shadow-xl"
-          >
+          <form onSubmit={handleSaveTime} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-              <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+              <h3
+                id="time-modal-title"
+                className="font-editorial text-xl font-semibold text-[#1C1917]"
+              >
                 {editingTime.id ? '编辑主日时段' : '新增主日时段'}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingTime(null)}
+                aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -504,7 +513,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <input
                   type="text"
                   required
-                  maxLength={60}
+                  maxLength={FIELD_LIMITS.worshipTime.time}
                   value={editingTime.time}
                   onChange={(e) => setEditingTime({ ...editingTime, time: e.target.value })}
                   className={inputClass}
@@ -527,7 +536,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               <input
                 type="text"
                 required
-                maxLength={120}
+                maxLength={FIELD_LIMITS.worshipTime.title}
                 value={editingTime.title}
                 onChange={(e) => setEditingTime({ ...editingTime, title: e.target.value })}
                 className={inputClass}
@@ -537,7 +546,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               <input
                 type="text"
                 required
-                maxLength={120}
+                maxLength={FIELD_LIMITS.worshipTime.place}
                 value={editingTime.place}
                 onChange={(e) => setEditingTime({ ...editingTime, place: e.target.value })}
                 className={inputClass}
@@ -547,7 +556,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               <textarea
                 rows={2}
                 required
-                maxLength={300}
+                maxLength={FIELD_LIMITS.worshipTime.desc}
                 value={editingTime.desc}
                 onChange={(e) => setEditingTime({ ...editingTime, desc: e.target.value })}
                 className={textareaClass}
@@ -570,27 +579,30 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       )}
 
       {/* Step Editor Modal */}
       {editingStep && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+        <ModalDialog
+          labelledBy="step-modal-title"
+          maxWidthClass="max-w-lg"
+          overlayClassName="bg-[#141210]/55"
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
+          onClose={() => setEditingStep(null)}
         >
-          <form
-            onSubmit={handleSaveStep}
-            className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-lg w-full p-6 space-y-4 shadow-xl"
-          >
+          <form onSubmit={handleSaveStep} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-              <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+              <h3
+                id="step-modal-title"
+                className="font-editorial text-xl font-semibold text-[#1C1917]"
+              >
                 {editingStep.id ? '编辑崇拜流程步骤' : '新增崇拜流程步骤'}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingStep(null)}
+                aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -616,7 +628,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <input
                   type="text"
                   required
-                  maxLength={40}
+                  maxLength={FIELD_LIMITS.liturgyStep.time}
                   value={editingStep.time}
                   onChange={(e) => setEditingStep({ ...editingStep, time: e.target.value })}
                   className={inputClass}
@@ -640,7 +652,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <input
                   type="text"
                   required
-                  maxLength={120}
+                  maxLength={FIELD_LIMITS.liturgyStep.step}
                   value={editingStep.step}
                   onChange={(e) => setEditingStep({ ...editingStep, step: e.target.value })}
                   className={inputClass}
@@ -650,18 +662,30 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
                 <input
                   type="text"
                   required
-                  maxLength={100}
+                  maxLength={FIELD_LIMITS.liturgyStep.leader}
                   value={editingStep.leader}
                   onChange={(e) => setEditingStep({ ...editingStep, leader: e.target.value })}
                   className={inputClass}
                 />
               </FieldLabel>
             </div>
+            <FieldLabel label="经文或圣诗（可选）" hint="例如：诗篇 100:1–5">
+              <input
+                type="text"
+                maxLength={FIELD_LIMITS.liturgyStep.scriptureOrHymn}
+                value={editingStep.scriptureOrHymn ?? ''}
+                onChange={(e) =>
+                  setEditingStep({ ...editingStep, scriptureOrHymn: e.target.value })
+                }
+                placeholder="可填写宣召经文、圣诗曲目等"
+                className={inputClass}
+              />
+            </FieldLabel>
             <FieldLabel label="礼仪说明 *">
               <textarea
                 rows={3}
                 required
-                maxLength={500}
+                maxLength={FIELD_LIMITS.liturgyStep.note}
                 value={editingStep.note}
                 onChange={(e) => setEditingStep({ ...editingStep, note: e.target.value })}
                 className={textareaClass}
@@ -684,7 +708,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       )}
     </div>
   );

@@ -1,9 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useChurchData } from '../../context/ChurchDataContext';
+import { Pencil, Plus, X } from 'lucide-react';
+import {
+  useChurchAdminActions,
+  usePublicChurchData,
+} from '../../context/ChurchDataContext';
+import { FIELD_LIMITS } from '../../data/cacheConfig';
 import type { AnnouncementItem } from '../../data/churchData';
+import { ModalDialog } from '../ModalDialog';
 import {
   AdminPanelHeader,
+  ConfirmDeleteButton,
   FieldLabel,
   getFriendlyAdminError,
   inputClass,
@@ -12,7 +18,8 @@ import {
 } from './AdminSharedUI';
 
 export function AdminAnnouncementsEditor() {
-  const { announcements, saveAnnouncement, deleteAnnouncement } = useChurchData();
+  const { announcements } = usePublicChurchData();
+  const { saveAnnouncement, deleteAnnouncement } = useChurchAdminActions();
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
@@ -29,7 +36,7 @@ export function AdminAnnouncementsEditor() {
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)
-        .slice(0, 20);
+        .slice(0, FIELD_LIMITS.announcement.detailsMaxCount);
       await saveAnnouncement({
         ...editing,
         details: details.length > 0 ? details : [editing.summary],
@@ -113,9 +120,8 @@ export function AdminAnnouncementsEditor() {
                 <Pencil className="w-3.5 h-3.5" />
                 编辑
               </button>
-              <button
-                type="button"
-                onClick={async () => {
+              <ConfirmDeleteButton
+                onConfirm={async () => {
                   setStatus(null);
                   try {
                     await deleteAnnouncement(item.id);
@@ -127,33 +133,32 @@ export function AdminAnnouncementsEditor() {
                     });
                   }
                 }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#9A3412] border border-[#E7B9B0] hover:bg-[#FDF2F0] rounded cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                删除
-              </button>
+              />
             </div>
           </div>
         ))}
       </div>
 
       {editing && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#141210]/55"
+        <ModalDialog
+          labelledBy="announcement-editor-modal-title"
+          maxWidthClass="max-w-xl"
+          overlayClassName="bg-[#141210]/55"
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-h-[90vh] overflow-y-auto shadow-xl"
+          onClose={() => setEditing(null)}
         >
-          <form
-            onSubmit={handleSave}
-            className="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-xl"
-          >
+          <form onSubmit={handleSave} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-              <h3 className="font-editorial text-xl font-semibold text-[#1C1917]">
+              <h3
+                id="announcement-editor-modal-title"
+                className="font-editorial text-xl font-semibold text-[#1C1917]"
+              >
                 {editing.id ? '编辑聚会公告' : '发布新公告'}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditing(null)}
+                aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -182,7 +187,7 @@ export function AdminAnnouncementsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={80}
+                  maxLength={FIELD_LIMITS.announcement.date}
                   value={editing.date}
                   onChange={(e) => setEditing({ ...editing, date: e.target.value })}
                   className={inputClass}
@@ -204,7 +209,7 @@ export function AdminAnnouncementsEditor() {
               <input
                 type="text"
                 required
-                maxLength={160}
+                maxLength={FIELD_LIMITS.announcement.title}
                 value={editing.title}
                 onChange={(e) => setEditing({ ...editing, title: e.target.value })}
                 className={inputClass}
@@ -215,7 +220,7 @@ export function AdminAnnouncementsEditor() {
               <textarea
                 rows={2}
                 required
-                maxLength={400}
+                maxLength={FIELD_LIMITS.announcement.summary}
                 value={editing.summary}
                 onChange={(e) => setEditing({ ...editing, summary: e.target.value })}
                 className={textareaClass}
@@ -227,7 +232,7 @@ export function AdminAnnouncementsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={100}
+                  maxLength={FIELD_LIMITS.announcement.time}
                   value={editing.time}
                   onChange={(e) => setEditing({ ...editing, time: e.target.value })}
                   className={inputClass}
@@ -237,7 +242,7 @@ export function AdminAnnouncementsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={160}
+                  maxLength={FIELD_LIMITS.announcement.location}
                   value={editing.location}
                   onChange={(e) => setEditing({ ...editing, location: e.target.value })}
                   className={inputClass}
@@ -247,7 +252,7 @@ export function AdminAnnouncementsEditor() {
                 <input
                   type="text"
                   required
-                  maxLength={120}
+                  maxLength={FIELD_LIMITS.announcement.contact}
                   value={editing.contact}
                   onChange={(e) => setEditing({ ...editing, contact: e.target.value })}
                   className={inputClass}
@@ -291,7 +296,7 @@ export function AdminAnnouncementsEditor() {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       )}
     </div>
   );

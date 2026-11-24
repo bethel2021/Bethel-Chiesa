@@ -245,3 +245,36 @@ export async function persistLosslessImageIfNeeded(
 
   return mediaUri;
 }
+
+export async function deleteMediaChunksByUri(mediaUri: string | undefined): Promise<void> {
+  const normalized = String(mediaUri ?? '').trim();
+  const match = normalized.match(MEDIA_URI_REGEX);
+  if (!match) return;
+
+  const mediaId = match[1];
+  const totalChunks = Number(match[2]);
+
+  const cachedUrl = resolvedObjectUrls.get(normalized);
+  if (cachedUrl) {
+    URL.revokeObjectURL(cachedUrl);
+    resolvedObjectUrls.delete(normalized);
+  }
+
+  if (typeof window !== 'undefined' && 'caches' in window) {
+    void window.caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.delete(`https://bethel-media.local/${mediaId}/${totalChunks}`))
+      .catch(() => {
+        // Ignore cache cleanup errors
+      });
+  }
+
+  for (let start = 0; start < totalChunks; start += BATCH_CHUNK_LIMIT) {
+    const batch = writeBatch(db);
+    const end = Math.min(start + BATCH_CHUNK_LIMIT, totalChunks);
+    for (let i = start; i < end; i += 1) {
+      batch.delete(doc(db, 'media_chunks', `${mediaId}__${i}`));
+    }
+    await batch.commit();
+  }
+}

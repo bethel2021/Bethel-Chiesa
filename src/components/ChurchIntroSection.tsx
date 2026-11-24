@@ -1,8 +1,8 @@
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import { SafeImage } from './SafeImage';
 
 export function ChurchIntroSection() {
-  const { churchInfo, cloudLoading } = useChurchData();
+  const { churchInfo, cloudLoading } = usePublicChurchData();
 
   return (
     <section id="intro" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
@@ -78,10 +78,28 @@ export function ChurchIntroSection() {
 
             {/* Quiet Pull Quote */}
             <div className="mt-8 pt-6 border-t border-[var(--theme-border-strong)]">
-              <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed">
+              <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed text-justify">
                 {churchInfo.themeVerse}
               </p>
-              <p className="text-xs text-[var(--theme-ink-subtle)] mt-2">{churchInfo.themeVerseRef}</p>
+              {(() => {
+                const refParts = churchInfo.themeVerseRef
+                  .split('·')
+                  .map((part) => part.trim())
+                  .filter(Boolean);
+                if (refParts.length >= 2) {
+                  return (
+                    <p className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-[var(--theme-ink-subtle)]">
+                      <span>{refParts[0]}</span>
+                      <span>{refParts.slice(1).join(' · ')}</span>
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-[var(--theme-ink-subtle)] mt-2 text-justify">
+                    {churchInfo.themeVerseRef}
+                  </p>
+                );
+              })()}
             </div>
           </div>
         </div>

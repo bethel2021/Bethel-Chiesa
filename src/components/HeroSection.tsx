@@ -1,12 +1,17 @@
+import { useMemo } from 'react';
 import { ArrowDownRight } from 'lucide-react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import { handleAnchorClick } from '../utils/scroll';
 import { SafeImage } from './SafeImage';
 
 export function HeroSection() {
-  const { churchInfo, cloudLoading, activeTheme } = useChurchData();
+  const { churchInfo, announcements, cloudLoading, activeTheme } = usePublicChurchData();
   const normalizedChurchName = churchInfo.name.trim();
   const splitNameMatch = normalizedChurchName.match(/^(基督教意大利)\s*(伯特利华人教会.*)$/);
+  const repeatPerHalf = useMemo(() => {
+    if (announcements.length === 0) return 0;
+    return Math.max(1, Math.ceil(4 / announcements.length));
+  }, [announcements.length]);
 
   return (
     <section id="top" className="border-b border-[var(--theme-border)]">
@@ -104,29 +109,72 @@ export function HeroSection() {
         </div>
       </div>
 
-      {/* Full-width Operational Utility Ribbon */}
-      <div className="bg-[var(--theme-surface)] transition-colors duration-300">
-        <div className="max-w-[1200px] mx-auto px-6 py-4 grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 text-sm font-sans">
-          <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
-            <span className="text-xs font-medium text-[#1E3A5F]">主日崇拜</span>
-            <span className="font-medium text-[#1E3A5F]">每周日14:30-16:30</span>
-          </div>
-          <div className="flex flex-col gap-0.5 md:border-r md:border-[var(--theme-border-strong)] md:pr-4">
-            <span className="text-xs font-medium text-[#1E3A5F]">儿童主日学</span>
-            <span className="font-medium text-[#1E3A5F]">每周日14:30-16:30</span>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs font-medium text-[#1E3A5F]">教会堂址</span>
+      {/* Full-width Scrolling Announcements Ribbon */}
+      {announcements.length > 0 && (
+        <div className="bg-[var(--theme-surface)] transition-colors duration-300">
+          <div className="max-w-[1200px] mx-auto px-6 py-3.5 flex items-center gap-4 text-sm font-sans">
             <a
-              href="#contact"
-              onClick={(e) => handleAnchorClick(e, '#contact')}
-              className="font-medium text-[#1E3A5F] hover:underline underline-offset-4 truncate"
+              href="#announcements"
+              onClick={(e) => handleAnchorClick(e, '#announcements')}
+              className="text-xs font-semibold tracking-wider text-[var(--theme-accent)] whitespace-nowrap shrink-0 pr-4 border-r border-[var(--theme-border-strong)] hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] rounded-sm"
             >
-              {churchInfo.shortAddress}
+              最新聚会公告
             </a>
+
+            <div className="marquee-viewport relative flex-1 min-w-0 overflow-hidden">
+              <div
+                className="animate-announcement-marquee flex w-max items-center"
+                style={{
+                  animationDuration: `${Math.max(24, announcements.length * repeatPerHalf * 7)}s`,
+                }}
+              >
+                {[0, 1].map((halfIdx) => (
+                  <div
+                    key={halfIdx}
+                    aria-hidden={halfIdx === 1}
+                    className={`marquee-track-group flex items-center shrink-0 gap-6 pr-6 ${
+                      halfIdx === 1 ? 'marquee-duplicate' : ''
+                    }`}
+                  >
+                    {Array.from({ length: repeatPerHalf }, (_, repIdx) =>
+                      announcements.map((item) => {
+                        const isDup = halfIdx === 1 || repIdx > 0;
+                        return (
+                          <a
+                            key={`${halfIdx}-${repIdx}-${item.id}`}
+                            href="#announcements"
+                            tabIndex={isDup ? -1 : undefined}
+                            aria-hidden={isDup && halfIdx === 0 ? true : undefined}
+                            onClick={(e) => handleAnchorClick(e, '#announcements')}
+                            className={`inline-flex items-center gap-6 text-sm font-medium text-[var(--theme-ink)] hover:text-[var(--theme-accent)] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] rounded-sm ${
+                              repIdx > 0 ? 'marquee-duplicate' : ''
+                            }`}
+                          >
+                            <span className="inline-flex items-baseline gap-2">
+                              {item.isFeatured && (
+                                <span className="text-xs font-semibold text-[var(--theme-gold)]">
+                                  重点
+                                </span>
+                              )}
+                              <span>{item.title}</span>
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className="text-[var(--theme-ink-faint)] font-normal"
+                            >
+                              ·
+                            </span>
+                          </a>
+                        );
+                      })
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }

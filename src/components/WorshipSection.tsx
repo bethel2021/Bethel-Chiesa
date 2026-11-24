@@ -1,51 +1,16 @@
-import { useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ExternalLink, PlayCircle } from 'lucide-react';
-import { AnimatePresence, motion, useInView, useReducedMotion, type Variants } from 'motion/react';
-import { useChurchData } from '../context/ChurchDataContext';
+import { usePublicChurchData } from '../context/ChurchDataContext';
 import { isSafeYoutubeUrl } from '../utils/urlSafety';
 
 export function WorshipSection() {
-  const { worshipTimes, liturgySteps, worshipSongs } = useChurchData();
+  const { worshipTimes, liturgySteps, worshipSongs } = usePublicChurchData();
   const [liturgyType, setLiturgyType] = useState<'standard' | 'communion'>('standard');
-  const liturgyListRef = useRef<HTMLDivElement>(null);
-  const isLiturgyInView = useInView(liturgyListRef, {
-    once: true,
-    margin: '0px 0px -60px 0px',
-  });
-  const shouldReduceMotion = useReducedMotion();
 
-  const steps = liturgySteps.filter((step) => step.liturgyType === liturgyType);
-
-  const listVariants: Variants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        duration: shouldReduceMotion ? 0.01 : 0.25,
-        staggerChildren: shouldReduceMotion ? 0 : 0.055,
-        delayChildren: shouldReduceMotion ? 0 : 0.04,
-      },
-    },
-    exit: {
-      opacity: 0,
-      transition: { duration: shouldReduceMotion ? 0.01 : 0.16, ease: 'easeOut' },
-    },
-  };
-
-  const stepItemVariants: Variants = {
-    hidden: {
-      opacity: 0,
-      y: shouldReduceMotion ? 0 : 12,
-    },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: shouldReduceMotion ? 0.01 : 0.42,
-        ease: [0.22, 1, 0.36, 1],
-      },
-    },
-  };
+  const steps = useMemo(
+    () => liturgySteps.filter((step) => step.liturgyType === liturgyType),
+    [liturgySteps, liturgyType]
+  );
 
   return (
     <section id="worship" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
@@ -134,40 +99,31 @@ export function WorshipSection() {
               </div>
             </div>
 
-            <div ref={liturgyListRef}>
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={liturgyType}
-                  variants={listVariants}
-                  initial="hidden"
-                  animate={isLiturgyInView ? 'visible' : 'hidden'}
-                  exit="exit"
-                  className="divide-y divide-[var(--theme-surface-alt)]"
+            <div
+              key={liturgyType}
+              className="divide-y divide-[var(--theme-surface-alt)] animate-liturgy-in"
+            >
+              {steps.map((item) => (
+                <div
+                  key={item.id}
+                  className="py-4 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 items-start"
                 >
-                  {steps.map((item) => (
-                    <motion.div
-                      key={item.id}
-                      variants={stepItemVariants}
-                      className="py-4 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 items-start"
-                    >
-                      <div className="sm:col-span-2 font-mono text-sm font-medium text-[var(--theme-accent)] tabular-nums pt-0.5">
-                        {item.time}
-                      </div>
-                      <div className="sm:col-span-10">
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-1">
-                          <h4 className="font-medium text-base text-[var(--theme-ink)]">
-                            {item.step}
-                          </h4>
-                          <span className="text-xs text-[var(--theme-ink-subtle)]">{item.leader}</span>
-                        </div>
-                        <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed">
-                          {item.note}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </AnimatePresence>
+                  <div className="sm:col-span-2 font-mono text-sm font-medium text-[var(--theme-accent)] tabular-nums pt-0.5">
+                    {item.time}
+                  </div>
+                  <div className="sm:col-span-10">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-1">
+                      <h4 className="font-medium text-base text-[var(--theme-ink)]">
+                        {item.step}
+                      </h4>
+                      <span className="text-xs text-[var(--theme-ink-subtle)]">{item.leader}</span>
+                    </div>
+                    <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed">
+                      {item.note}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
