@@ -185,6 +185,41 @@
   animation-play-state: paused;
 }
 
+@keyframes christmasSnowFall {
+  0% {
+    transform: translate3d(0, -6vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: var(--snow-opacity, 0.75);
+  }
+  25% {
+    transform: translate3d(var(--snow-sway, 20px), 24vh, 0) rotate(calc(var(--snow-rotate, 180deg) * 0.25));
+  }
+  50% {
+    transform: translate3d(calc(var(--snow-sway, 20px) * -0.55), 52vh, 0) rotate(calc(var(--snow-rotate, 180deg) * 0.5));
+  }
+  75% {
+    transform: translate3d(var(--snow-sway, 20px), 80vh, 0) rotate(calc(var(--snow-rotate, 180deg) * 0.75));
+  }
+  92% {
+    opacity: var(--snow-opacity, 0.75);
+  }
+  100% {
+    transform: translate3d(0, 108vh, 0) rotate(var(--snow-rotate, 180deg));
+    opacity: 0;
+  }
+}
+
+.christmas-snowflake {
+  position: absolute;
+  top: 0;
+  will-change: transform, opacity;
+  animation-name: christmasSnowFall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -208,6 +243,9 @@
     row-gap: 0.375rem;
   }
   .marquee-duplicate {
+    display: none;
+  }
+  .christmas-snowfall {
     display: none;
   }
 }

@@ -48,8 +48,8 @@ export const SITE_THEMES: SiteThemeOption[] = [
     id: 'christmas',
     name: '圣诞节',
     badge: '节期喜乐',
-    subtitle: '冬青松绿 · 圣诞绯红 · 暖金',
-    description: '融入深松木绿与绯红金彩的圣诞佳音氛围，适合将临期、平安夜及圣诞节聚会。',
+    subtitle: '冬青松绿 · 圣诞绯红 · 暖金雪舞',
+    description: '融入深松木绿、绯红金彩与飘落雪花元素，适合将临期、平安夜及圣诞节聚会。',
     swatches: ['#EEF2EC', '#1B4332', '#9B2226'],
     preview: {
       bg: '#FBF9F5',

@@ -6,6 +6,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { AnnouncementsSection } from './components/AnnouncementsSection';
 import { BackToTopButton } from './components/BackToTopButton';
+import { ChristmasSnowfall } from './components/ChristmasSnowfall';
 import { ChurchIntroSection } from './components/ChurchIntroSection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
@@ -79,6 +80,7 @@ function BethelChurchApp() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--theme-bg)] text-[var(--theme-ink)] transition-colors duration-300">
+      <ChristmasSnowfall />
       <Navbar onOpenAdmin={openAdmin} />
       <main className="flex-1">
         <HeroSection />

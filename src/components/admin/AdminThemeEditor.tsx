@@ -159,10 +159,40 @@ export function AdminThemeEditor() {
                   }}
                 >
                   <div
-                    className="px-3.5 py-3 flex items-center justify-between"
+                    className="relative overflow-hidden px-3.5 py-3 flex items-center justify-between"
                     style={{ backgroundColor: option.preview.heroBg }}
                   >
-                    <div className="space-y-1">
+                    {option.id === 'christmas' && (
+                      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="absolute top-1.5 left-[20%] w-2.5 h-2.5 text-white/75"
+                          fill="none"
+                        >
+                          <path
+                            d="M12 2v20M3.34 7l17.32 10M20.66 7L3.34 17"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute bottom-1.5 left-[44%] w-1 h-1 rounded-full bg-white/60" />
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="absolute top-2 right-[32%] w-2 h-2 text-white/60"
+                          fill="none"
+                        >
+                          <path
+                            d="M12 2v20M3.34 7l17.32 10M20.66 7L3.34 17"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute bottom-1 right-[14%] w-1 h-1 rounded-full bg-white/50" />
+                      </div>
+                    )}
+                    <div className="relative space-y-1">
                       <div className="flex items-center gap-1.5">
                         <span
                           className="inline-block w-2 h-2 rounded-full"
@@ -175,7 +205,7 @@ export function AdminThemeEditor() {
                       <p className="text-[10px] text-white/65">主日崇拜 · 每周日 14:30-16:30</p>
                     </div>
                     <span
-                      className="text-[10px] font-medium px-2 py-1 rounded text-white"
+                      className="relative text-[10px] font-medium px-2 py-1 rounded text-white"
                       style={{ backgroundColor: option.preview.accent }}
                     >
                       主日崇拜
