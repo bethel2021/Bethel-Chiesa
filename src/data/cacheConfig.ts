@@ -81,6 +81,7 @@ export const FIELD_LIMITS = {
     time: 100,
     location: 160,
     contact: 120,
+    image: 80_000,
     detailsMaxCount: 20,
     detailLen: 800,
   },

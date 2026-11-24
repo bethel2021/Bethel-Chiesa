@@ -1,10 +1,12 @@
 import { serverTimestamp } from 'firebase/firestore';
 import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
+  ANNOUNCEMENTS,
   CHURCH_INFO,
   normalizeMinistryCategory,
   normalizeWeekdayMinistries,
   PASTORS_TEAM,
+  type AnnouncementItem,
   type ChurchInfo,
   type MinistryRosterItem,
   type PastorProfile,
@@ -199,6 +201,52 @@ export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
       description: clampStr(cv.description, L.coreValueDescription),
     })),
   };
+}
+
+const ANNOUNCEMENT_CATEGORIES: ReadonlySet<AnnouncementItem['category']> = new Set([
+  '特别聚会',
+  '洗礼与课程',
+  '社区关怀',
+  '诗班与事奉',
+]);
+
+const DEFAULT_ANNOUNCEMENT_IMAGE_MAP: Record<string, string> = Object.fromEntries(
+  ANNOUNCEMENTS.filter((item) => item.image).map((item) => [item.id, item.image as string])
+);
+
+export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): AnnouncementItem[] {
+  const L = FIELD_LIMITS.announcement;
+  return list.map((item, idx) => {
+    const id = String(item.id || `ann-${idx + 1}`);
+    const category = ANNOUNCEMENT_CATEGORIES.has(item.category as AnnouncementItem['category'])
+      ? (item.category as AnnouncementItem['category'])
+      : '特别聚会';
+    const rawImage =
+      typeof item.image === 'string'
+        ? filterSafeImageSrc(item.image)
+        : DEFAULT_ANNOUNCEMENT_IMAGE_MAP[id] || '';
+    const details = Array.isArray(item.details)
+      ? item.details
+          .slice(0, L.detailsMaxCount)
+          .map((d) => clampStr(typeof d === 'string' ? d : '', L.detailLen))
+          .filter(Boolean)
+      : [];
+
+    return {
+      id,
+      category,
+      date: clampStr(item.date, L.date),
+      title: clampStr(item.title, L.title),
+      summary: clampStr(item.summary, L.summary),
+      time: clampStr(item.time, L.time),
+      location: clampStr(item.location, L.location),
+      contact: clampStr(item.contact, L.contact),
+      ...(typeof item.image === 'string' || rawImage ? { image: rawImage } : {}),
+      isFeatured: Boolean(item.isFeatured),
+      details,
+      sortOrder: clampSortOrder(item.sortOrder, idx + 1),
+    };
+  });
 }
 
 export { normalizeWeekdayMinistries };

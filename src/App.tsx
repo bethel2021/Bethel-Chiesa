@@ -30,6 +30,7 @@ function resolveInitialView(): 'public' | 'admin' {
 
 function BethelChurchApp() {
   const [view, setView] = useState<'public' | 'admin'>(resolveInitialView);
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title =
@@ -83,12 +84,15 @@ function BethelChurchApp() {
       <ChristmasSnowfall />
       <Navbar onOpenAdmin={openAdmin} />
       <main className="flex-1">
-        <HeroSection />
+        <HeroSection onSelectAnnouncement={(item) => setSelectedAnnouncementId(item.id)} />
         <ChurchIntroSection />
         <PastorsSection />
         <WorshipSection />
         <MinistryRosterSection />
-        <AnnouncementsSection />
+        <AnnouncementsSection
+          selectedAnnouncementId={selectedAnnouncementId}
+          onSelectAnnouncement={(item) => setSelectedAnnouncementId(item ? item.id : null)}
+        />
         <ContactSection />
       </main>
       <Footer />

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
-import { ArrowUpRight, X } from 'lucide-react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
+import { ArrowUpRight, CalendarClock, MapPin, UserCheck, X } from 'lucide-react';
 import { usePublicChurchData } from '../context/ChurchDataContext';
 import type { AnnouncementItem } from '../data/churchData';
 import { handleAnchorClick } from '../utils/scroll';
 import { ModalDialog } from './ModalDialog';
+import { SafeImage } from './SafeImage';
 
 type CategoryFilter = '全部' | AnnouncementItem['category'];
 
@@ -15,10 +16,52 @@ const CATEGORIES: CategoryFilter[] = [
   '社区关怀',
 ];
 
-export function AnnouncementsSection() {
+interface AnnouncementsSectionProps {
+  selectedAnnouncementId?: string | null;
+  onSelectAnnouncement?: (item: AnnouncementItem | null) => void;
+}
+
+export function AnnouncementsSection({
+  selectedAnnouncementId,
+  onSelectAnnouncement,
+}: AnnouncementsSectionProps = {}) {
   const { announcements } = usePublicChurchData();
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('全部');
-  const [activeAnnouncement, setActiveAnnouncement] = useState<AnnouncementItem | null>(null);
+  const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
+
+  const isControlled = typeof onSelectAnnouncement === 'function';
+  const effectiveSelectedId = isControlled ? selectedAnnouncementId : localSelectedId;
+
+  const activeAnnouncement = useMemo(
+    () =>
+      effectiveSelectedId
+        ? announcements.find((item) => item.id === effectiveSelectedId) ?? null
+        : null,
+    [announcements, effectiveSelectedId]
+  );
+
+  const openAnnouncement = (item: AnnouncementItem) => {
+    if (isControlled) {
+      onSelectAnnouncement(item);
+    } else {
+      setLocalSelectedId(item.id);
+    }
+  };
+
+  const closeAnnouncement = () => {
+    if (isControlled) {
+      onSelectAnnouncement(null);
+    } else {
+      setLocalSelectedId(null);
+    }
+  };
+
+  const handleCardKeyDown = (e: KeyboardEvent<HTMLElement>, item: AnnouncementItem) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openAnnouncement(item);
+    }
+  };
 
   const visibleAnnouncements = useMemo(
     () =>
@@ -40,6 +83,15 @@ export function AnnouncementsSection() {
     () => visibleAnnouncements.filter((item) => item.id !== featuredItem?.id),
     [visibleAnnouncements, featuredItem?.id]
   );
+
+  const modalDescriptionParagraphs = useMemo(() => {
+    if (!activeAnnouncement) return [];
+    const summaryText = activeAnnouncement.summary.trim();
+    const detailParagraphs = activeAnnouncement.details
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && p !== summaryText);
+    return summaryText ? [summaryText, ...detailParagraphs] : detailParagraphs;
+  }, [activeAnnouncement]);
 
   return (
     <section id="announcements" className="py-12 md:py-14 border-b border-[var(--theme-border)]">
@@ -75,42 +127,65 @@ export function AnnouncementsSection() {
 
         {/* Tier 1: Lead Announcement */}
         {featuredItem && (
-          <article className="bg-[var(--theme-surface)]/80 border border-[var(--theme-border)] rounded-lg p-7 md:p-9 mb-8 transition-colors duration-300">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-3">
-              <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
-              <span aria-hidden="true">·</span>
-              <span>{featuredItem.category}</span>
-              <span aria-hidden="true">·</span>
-              <span className="tabular-nums">{featuredItem.date}</span>
-            </div>
+          <article
+            role="button"
+            tabIndex={0}
+            aria-label={`查看公告详情：${featuredItem.title}`}
+            onClick={() => openAnnouncement(featuredItem)}
+            onKeyDown={(e) => handleCardKeyDown(e, featuredItem)}
+            className="group bg-[var(--theme-surface)]/80 hover:bg-[var(--theme-surface)] border border-[var(--theme-border)] hover:border-[var(--theme-accent)]/45 rounded-lg p-6 md:p-8 mb-8 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
+              <div className={featuredItem.image ? 'lg:col-span-7' : 'lg:col-span-8'}>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-3">
+                  <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{featuredItem.category}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums">{featuredItem.date}</span>
+                </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
-              <div className="lg:col-span-8">
-                <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] mb-3">
+                <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-3">
                   {featuredItem.title}
                 </h3>
+
                 <p className="text-base text-[var(--theme-ink-body)] leading-relaxed mb-4 max-w-2xl">
                   {featuredItem.summary}
                 </p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--theme-ink-muted)]">
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--theme-ink-muted)] mb-5">
                   <span className="tabular-nums">时间：{featuredItem.time}</span>
                   <span aria-hidden="true">·</span>
                   <span>地点：{featuredItem.location}</span>
                   <span aria-hidden="true">·</span>
                   <span>联系：{featuredItem.contact}</span>
                 </div>
-              </div>
 
-              <div className="lg:col-span-4 flex lg:justify-end">
                 <button
                   type="button"
-                  onClick={() => setActiveAnnouncement(featuredItem)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAnnouncement(featuredItem);
+                  }}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)] rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] focus-visible:ring-offset-2"
                 >
-                  <span>阅读详情与报名须知</span>
+                  <span>查看活动详情与日程</span>
                   <ArrowUpRight className="w-4 h-4" />
                 </button>
               </div>
+
+              {featuredItem.image && (
+                <div className="lg:col-span-5">
+                  <div className="aspect-[16/10] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)]">
+                    <SafeImage
+                      src={featuredItem.image}
+                      alt={featuredItem.title}
+                      fallbackLabel={featuredItem.title}
+                      className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </article>
         )}
@@ -121,16 +196,32 @@ export function AnnouncementsSection() {
             {remainingItems.map((item) => (
               <article
                 key={item.id}
-                className="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg p-6 flex flex-col justify-between"
+                role="button"
+                tabIndex={0}
+                aria-label={`查看公告详情：${item.title}`}
+                onClick={() => openAnnouncement(item)}
+                onKeyDown={(e) => handleCardKeyDown(e, item)}
+                className="group bg-[var(--theme-bg)] hover:bg-[var(--theme-surface)]/45 border border-[var(--theme-border)] hover:border-[var(--theme-accent)]/45 rounded-lg p-6 flex flex-col justify-between transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
               >
                 <div>
+                  {item.image && (
+                    <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)] mb-4">
+                      <SafeImage
+                        src={item.image}
+                        alt={item.title}
+                        fallbackLabel={item.title}
+                        className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                      />
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-2">
                     <span className="text-[var(--theme-accent)] font-medium">{item.category}</span>
                     <span aria-hidden="true">·</span>
                     <span className="tabular-nums">{item.date}</span>
                   </div>
 
-                  <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] mb-2.5">
+                  <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2.5">
                     {item.title}
                   </h3>
 
@@ -140,13 +231,16 @@ export function AnnouncementsSection() {
                 </div>
 
                 <div className="pt-4 border-t border-[var(--theme-surface-alt)] flex items-center justify-between gap-4">
-                  <span className="text-xs text-[var(--theme-ink-subtle)] truncate">
+                  <span className="text-xs text-[var(--theme-ink-subtle)] truncate tabular-nums">
                     {item.time} · {item.location}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveAnnouncement(item)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--theme-accent)] hover:underline underline-offset-4 whitespace-nowrap shrink-0 cursor-pointer py-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAnnouncement(item);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--theme-accent)] group-hover:underline underline-offset-4 whitespace-nowrap shrink-0 cursor-pointer py-1"
                   >
                     <span>查看详情</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
@@ -162,69 +256,143 @@ export function AnnouncementsSection() {
       {activeAnnouncement && (
         <ModalDialog
           labelledBy="announcement-modal-title"
-          maxWidthClass="max-w-xl"
-          overlayClassName="bg-[#141210]/55 backdrop-blur-[2px]"
-          containerClassName="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg max-h-[85vh] overflow-y-auto p-6 md:p-8 shadow-xl"
-          onClose={() => setActiveAnnouncement(null)}
+          maxWidthClass="max-w-2xl"
+          overlayClassName="bg-[#141210]/60 backdrop-blur-[2px]"
+          containerClassName="bg-[var(--theme-bg)] border border-[var(--theme-border)] rounded-lg max-h-[88vh] overflow-y-auto p-6 md:p-8 shadow-xl"
+          onClose={closeAnnouncement}
         >
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--theme-border)]">
-              <div>
-                <p className="text-xs text-[var(--theme-ink-subtle)] mb-1">
-                  {activeAnnouncement.category} · {activeAnnouncement.date}
-                </p>
-                <h3
-                  id="announcement-modal-title"
-                  className="font-editorial text-2xl font-semibold text-[var(--theme-ink)]"
-                >
-                  {activeAnnouncement.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveAnnouncement(null)}
-                aria-label="关闭公告详情"
-                className="w-9 h-9 inline-flex items-center justify-center rounded-md text-[var(--theme-ink-muted)] hover:text-[var(--theme-ink)] hover:bg-[var(--theme-surface-alt)] transition-colors cursor-pointer"
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--theme-border)]">
+            <div>
+              <p className="text-xs text-[var(--theme-ink-subtle)] mb-1.5 flex flex-wrap items-center gap-2">
+                {activeAnnouncement.isFeatured && (
+                  <>
+                    <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                )}
+                <span className="font-medium text-[var(--theme-accent)]">
+                  {activeAnnouncement.category}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span className="tabular-nums">{activeAnnouncement.date}</span>
+              </p>
+              <h3
+                id="announcement-modal-title"
+                className="font-editorial text-2xl md:text-[1.75rem] font-semibold text-[var(--theme-ink)] leading-snug"
               >
-                <X className="w-5 h-5" />
-              </button>
+                {activeAnnouncement.title}
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={closeAnnouncement}
+              aria-label="关闭公告详情"
+              className="w-9 h-9 inline-flex items-center justify-center rounded-md text-[var(--theme-ink-muted)] hover:text-[var(--theme-ink)] hover:bg-[var(--theme-surface-alt)] transition-colors shrink-0 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Activity Photo */}
+          <div className="mt-5 aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)]">
+            <SafeImage
+              src={activeAnnouncement.image || ''}
+              alt={activeAnnouncement.title}
+              fallbackLabel={activeAnnouncement.title}
+              priority
+              className="w-full h-full object-cover object-center"
+            />
+          </div>
+
+          {/* Detailed Date, Time & Venue Schedule */}
+          <dl className="mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+            <div className="flex items-start gap-2.5">
+              <CalendarClock
+                aria-hidden="true"
+                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+              />
+              <div>
+                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">活动日期标示</dt>
+                <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
+                  {activeAnnouncement.date}
+                </dd>
+              </div>
             </div>
 
-            <dl className="py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border-b border-[var(--theme-surface-alt)]">
+            <div className="flex items-start gap-2.5">
+              <CalendarClock
+                aria-hidden="true"
+                className="w-4 h-4 text-[var(--theme-gold)] shrink-0 mt-0.5"
+              />
               <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">聚会时间</dt>
-                <dd className="text-[var(--theme-ink)] font-medium tabular-nums">{activeAnnouncement.time}</dd>
+                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">具体时间安排</dt>
+                <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
+                  {activeAnnouncement.time}
+                </dd>
               </div>
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <MapPin
+                aria-hidden="true"
+                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+              />
               <div>
                 <dt className="text-[var(--theme-ink-subtle)] mb-0.5">聚会地点</dt>
-                <dd className="text-[var(--theme-ink)] font-medium">{activeAnnouncement.location}</dd>
+                <dd className="text-[var(--theme-ink)] font-medium">
+                  {activeAnnouncement.location}
+                </dd>
               </div>
-              <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">负责联系人</dt>
-                <dd className="text-[var(--theme-ink)] font-medium">{activeAnnouncement.contact}</dd>
-              </div>
-            </dl>
-
-            <div className="py-5 space-y-3 text-sm text-[var(--theme-ink-body)] leading-relaxed">
-              {activeAnnouncement.details.map((paragraph, idx) => (
-                <p key={idx}>{paragraph}</p>
-              ))}
             </div>
 
-            <div className="pt-4 border-t border-[var(--theme-border)] flex items-center justify-end gap-3">
+            <div className="flex items-start gap-2.5">
+              <UserCheck
+                aria-hidden="true"
+                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+              />
+              <div>
+                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">负责联系人</dt>
+                <dd className="text-[var(--theme-ink)] font-medium">
+                  {activeAnnouncement.contact}
+                </dd>
+              </div>
+            </div>
+          </dl>
+
+          {/* Full Description */}
+          <div className="py-5 space-y-3 text-[15px] text-[var(--theme-ink-body)] leading-relaxed">
+            {modalDescriptionParagraphs.map((paragraph, idx) => (
+              <p key={idx} className={idx === 0 ? 'font-medium text-[var(--theme-ink)]' : undefined}>
+                {paragraph}
+              </p>
+            ))}
+          </div>
+
+          <div className="pt-4 border-t border-[var(--theme-border)] flex flex-wrap items-center justify-between gap-3">
+            <a
+              href="#announcements"
+              onClick={(e) => handleAnchorClick(e, '#announcements', closeAnnouncement)}
+              className="text-xs font-medium text-[var(--theme-ink-muted)] hover:text-[var(--theme-accent)] hover:underline underline-offset-4 whitespace-nowrap"
+            >
+              查看全部聚会公告
+            </a>
+
+            <div className="flex items-center gap-3">
               <a
                 href="#contact"
-                onClick={(e) => handleAnchorClick(e, '#contact', () => setActiveAnnouncement(null))}
+                onClick={(e) => handleAnchorClick(e, '#contact', closeAnnouncement)}
                 className="px-4 py-2 text-xs font-medium text-[var(--theme-accent)] border border-[var(--theme-accent)]/30 hover:bg-[var(--theme-accent)]/5 rounded-md transition-colors whitespace-nowrap"
               >
                 前往来访登记咨询
               </a>
               <button
                 type="button"
-                onClick={() => setActiveAnnouncement(null)}
+                onClick={closeAnnouncement}
                 className="px-4 py-2 text-xs font-medium text-white bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
               >
                 我知道了
               </button>
+            </div>
           </div>
         </ModalDialog>
       )}

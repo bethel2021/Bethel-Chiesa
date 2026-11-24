@@ -7,6 +7,7 @@ import {
 import { FIELD_LIMITS } from '../../data/cacheConfig';
 import type { AnnouncementItem } from '../../data/churchData';
 import { ModalDialog } from '../ModalDialog';
+import { SafeImage } from '../SafeImage';
 import {
   AdminPanelHeader,
   ConfirmDeleteButton,
@@ -16,6 +17,7 @@ import {
   StatusBanner,
   textareaClass,
 } from './AdminSharedUI';
+import { ImageFieldControl } from './ImageFieldControl';
 
 export function AdminAnnouncementsEditor() {
   const { announcements } = usePublicChurchData();
@@ -71,6 +73,7 @@ export function AdminAnnouncementsEditor() {
                 time: '',
                 location: '',
                 contact: '',
+                image: '',
                 isFeatured: false,
                 details: [],
                 sortOrder: 1,
@@ -93,19 +96,31 @@ export function AdminAnnouncementsEditor() {
             key={item.id}
             className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
           >
-            <div className="space-y-1 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
-                <span className="font-mono tabular-nums">#{item.sortOrder}</span>
-                {item.isFeatured && <span className="font-medium text-[#8B5E34]">重点置顶</span>}
-                <span>{item.category}</span>
-                <span>·</span>
-                <span className="tabular-nums">{item.date}</span>
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              {item.image && (
+                <div className="hidden sm:block w-24 h-16 rounded border border-[#E5DFD3] overflow-hidden bg-[#EFEAE0] shrink-0 mt-0.5">
+                  <SafeImage
+                    src={item.image}
+                    alt={item.title}
+                    fallbackLabel={item.title}
+                    className="w-full h-full object-cover object-center"
+                  />
+                </div>
+              )}
+              <div className="space-y-1 flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
+                  <span className="font-mono tabular-nums">#{item.sortOrder}</span>
+                  {item.isFeatured && <span className="font-medium text-[#8B5E34]">重点置顶</span>}
+                  <span>{item.category}</span>
+                  <span>·</span>
+                  <span className="tabular-nums">{item.date}</span>
+                </div>
+                <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">{item.title}</h3>
+                <p className="text-xs text-[#57534E]">{item.summary}</p>
+                <p className="text-xs text-[#78716C]">
+                  时间：{item.time} · 地点：{item.location} · 联系：{item.contact}
+                </p>
               </div>
-              <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">{item.title}</h3>
-              <p className="text-xs text-[#57534E]">{item.summary}</p>
-              <p className="text-xs text-[#78716C]">
-                时间：{item.time} · 地点：{item.location} · 联系：{item.contact}
-              </p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -259,6 +274,15 @@ export function AdminAnnouncementsEditor() {
                 />
               </FieldLabel>
             </div>
+
+            <ImageFieldControl
+              label="活动配图（可选）"
+              value={editing.image ?? ''}
+              onChange={(nextValue) => setEditing({ ...editing, image: nextValue })}
+              allowClear
+              previewAspect="landscape"
+              hint="点击公告详情弹窗顶部展示"
+            />
 
             <FieldLabel label="公告正文详情（每段一行）" hint="点击查看详情弹窗内展示">
               <textarea

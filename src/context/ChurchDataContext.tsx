@@ -82,6 +82,7 @@ import {
   clampStr,
   cleanWeekdayMinistry,
   makeDocId,
+  normalizeAnnouncements,
   normalizeChurchInfo,
   normalizeCoworkers,
   normalizeMinistryRoster,
@@ -354,7 +355,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     if (bundle.weekdayMinistries?.length) {
       setWeekdayMinistries(normalizeWeekdayMinistries(bundle.weekdayMinistries));
     }
-    if (bundle.announcements?.length) setAnnouncements(bundle.announcements);
+    if (bundle.announcements?.length) {
+      setAnnouncements(normalizeAnnouncements(bundle.announcements));
+    }
   }, []);
 
   const buildPublicBundlePayload = useCallback(
@@ -379,7 +382,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       weekdayMinistries: normalizeWeekdayMinistries(snapshot.weekdayMinistries)
         .slice(0, 30)
         .map((wm, idx) => cleanWeekdayMinistry(wm, idx + 1)),
-      announcements: snapshot.announcements.slice(0, 50),
+      announcements: normalizeAnnouncements(snapshot.announcements).slice(0, 50),
       version: Date.now(),
     }),
     []
@@ -492,7 +495,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             worshipSongs: songsList,
             ministryRoster: normalizeMinistryRoster(rosterList),
             weekdayMinistries: normalizeWeekdayMinistries(weekdayList),
-            announcements: annList,
+            announcements: normalizeAnnouncements(annList),
             version: Date.now(),
           };
           applyBundleToState(legacyBundle);
@@ -719,7 +722,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       },
       WEEKDAY_MINISTRIES
     );
-    subscribeSorted<AnnouncementItem>('announcements', setAnnouncements, ANNOUNCEMENTS);
+    subscribeSorted<AnnouncementItem>(
+      'announcements',
+      (items) => setAnnouncements(normalizeAnnouncements(items)),
+      ANNOUNCEMENTS
+    );
 
     unsubs.push(
       onSnapshot(
@@ -904,7 +911,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        for (const ann of current.announcements) {
+        for (const ann of normalizeAnnouncements(current.announcements)) {
           const { id, ...body } = ann;
           ops.push({
             ref: doc(db, 'announcements', id),
@@ -1264,29 +1271,44 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: AnnouncementItem) => {
       const L = FIELD_LIMITS.announcement;
       const id = item.id || makeDocId('ann');
-      await saveSortedCollectionDoc('announcements', 'announcements', {
-        id,
-        category: item.category,
-        date: clampStr(item.date, L.date),
-        title: clampStr(item.title, L.title),
-        summary: clampStr(item.summary, L.summary),
-        time: clampStr(item.time, L.time),
-        location: clampStr(item.location, L.location),
-        contact: clampStr(item.contact, L.contact),
-        isFeatured: Boolean(item.isFeatured),
-        details: item.details
-          .slice(0, L.detailsMaxCount)
-          .map((d) => clampStr(d, L.detailLen))
-          .filter(Boolean),
-        sortOrder: clampSortOrder(item.sortOrder, 0),
-      });
+      const prevAnnouncement = latestStateRef.current.announcements.find((ann) => ann.id === id);
+      let cleaned: AnnouncementItem;
+      try {
+        const resolvedImage = item.image
+          ? await persistLosslessImageIfNeeded(item.image, 60_000)
+          : '';
+        cleaned = {
+          id,
+          category: item.category,
+          date: clampStr(item.date, L.date),
+          title: clampStr(item.title, L.title),
+          summary: clampStr(item.summary, L.summary),
+          time: clampStr(item.time, L.time),
+          location: clampStr(item.location, L.location),
+          contact: clampStr(item.contact, L.contact),
+          image: sanitizeImageRef(resolvedImage, L.image),
+          isFeatured: Boolean(item.isFeatured),
+          details: item.details
+            .slice(0, L.detailsMaxCount)
+            .map((d) => clampStr(d, L.detailLen))
+            .filter(Boolean),
+          sortOrder: clampSortOrder(item.sortOrder, 0),
+        };
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `announcements/${id}`);
+      }
+      await saveSortedCollectionDoc('announcements', 'announcements', cleaned);
+      cleanupReplacedMediaUri(prevAnnouncement?.image, cleaned.image);
     },
     [saveSortedCollectionDoc]
   );
 
   const deleteAnnouncement = useCallback(
-    (id: string) =>
-      deleteSortedCollectionDoc<AnnouncementItem>('announcements', 'announcements', id),
+    async (id: string) => {
+      const prevAnnouncement = latestStateRef.current.announcements.find((ann) => ann.id === id);
+      await deleteSortedCollectionDoc<AnnouncementItem>('announcements', 'announcements', id);
+      cleanupReplacedMediaUri(prevAnnouncement?.image, '');
+    },
     [deleteSortedCollectionDoc]
   );
 

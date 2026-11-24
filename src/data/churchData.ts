@@ -155,6 +155,7 @@ export interface AnnouncementItem {
   time: string;
   location: string;
   contact: string;
+  image?: string;
   isFeatured: boolean;
   details: string[];
   sortOrder: number;
@@ -184,6 +185,11 @@ export const CHURCH_IMAGES = {
   pastorLin: '/src/assets/images/pastor_lin_1794817209153.jpg',
   pastorChen: '/src/assets/images/pastor_chen_1794817209275.jpg',
   ministerZhao: '/src/assets/images/minister_zhao_1794817210642.jpg',
+  annThanksgiving: '/src/assets/images/ann_thanksgiving_feast_1795542569975.jpg',
+  annBaptism: '/src/assets/images/ann_baptism_class_1795542570600.jpg',
+  annChoir: '/src/assets/images/ann_christmas_choir_1795542572912.jpg',
+  annCare: '/src/assets/images/ann_community_care_1795542571854.jpg',
+  annSeekers: '/src/assets/images/ann_seekers_group_1795542572342.jpg',
 } as const;
 
 export const CHURCH_INFO: ChurchInfo = {
@@ -699,6 +705,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     time: '11月22日（主日）09:30 – 13:30',
     location: '伯特利堂一楼大堂及餐厅',
     contact: '林恩典 牧师 / 迎新招待台',
+    image: CHURCH_IMAGES.annThanksgiving,
     isFeatured: true,
     details: [
       '本次感恩节崇拜主题为「以感谢为祭献与神」（诗篇 50:14），林恩典牧师主讲感恩信息，并设会众见证分享时段。',
@@ -716,6 +723,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     time: '12月06日起连续三个主日 13:00',
     location: '二楼教牧会议室 204 室',
     contact: '陈雅惠 牧师',
+    image: CHURCH_IMAGES.annBaptism,
     isFeatured: false,
     details: [
       '洗礼预备班共设三堂核心课程：《救恩确据与基本教义》《洗礼与圣餐的意义》《教会生活与圣徒相通》。',
@@ -732,6 +740,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     time: '每周四晚 19:30 – 21:15',
     location: '一楼大堂诗班席',
     contact: '苏米利暗 执事',
+    image: CHURCH_IMAGES.annChoir,
     isFeatured: false,
     details: [
       '今年圣诞圣乐献唱将呈现韩德尔《弥赛亚》选段与传统平安夜圣诗组曲。',
@@ -748,6 +757,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     time: '11月28日（周六）09:00 集合',
     location: '伯特利堂一楼门厅集合',
     contact: '许保罗 长老',
+    image: CHURCH_IMAGES.annCare,
     isFeatured: false,
     details: [
       '募集物资仅限全新包装的羊毛围巾、保温杯或无糖营养燕麦片，请于 11 月 24 日前送至教会一楼办公室。',
@@ -764,6 +774,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
     time: '每周主日 13:00 – 14:15',
     location: '二楼 203 室',
     contact: '陈雅惠 牧师',
+    image: CHURCH_IMAGES.annSeekers,
     isFeatured: false,
     details: [
       '课程涵盖「宇宙与人生的意义」「圣经可靠吗」「苦难与神的爱」「耶稣基督是谁」等八个主题，气氛轻松真诚，欢迎自由提问探讨。',

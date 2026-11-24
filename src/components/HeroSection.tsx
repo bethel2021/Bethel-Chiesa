@@ -1,10 +1,15 @@
 import { useMemo } from 'react';
 import { ArrowDownRight } from 'lucide-react';
 import { usePublicChurchData } from '../context/ChurchDataContext';
+import type { AnnouncementItem } from '../data/churchData';
 import { handleAnchorClick } from '../utils/scroll';
 import { SafeImage } from './SafeImage';
 
-export function HeroSection() {
+interface HeroSectionProps {
+  onSelectAnnouncement?: (item: AnnouncementItem) => void;
+}
+
+export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
   const { churchInfo, announcements, cloudLoading, activeTheme } = usePublicChurchData();
   const normalizedChurchName = churchInfo.name.trim();
   const splitNameMatch = normalizedChurchName.match(/^(基督教意大利)\s*(伯特利华人教会.*)$/);
@@ -145,7 +150,14 @@ export function HeroSection() {
                             href="#announcements"
                             tabIndex={isDup ? -1 : undefined}
                             aria-hidden={isDup && halfIdx === 0 ? true : undefined}
-                            onClick={(e) => handleAnchorClick(e, '#announcements')}
+                            onClick={(e) => {
+                              if (onSelectAnnouncement) {
+                                e.preventDefault();
+                                onSelectAnnouncement(item);
+                                return;
+                              }
+                              handleAnchorClick(e, '#announcements');
+                            }}
                             className={`inline-flex items-center gap-6 text-sm font-medium text-[var(--theme-ink)] hover:text-[var(--theme-accent)] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] rounded-sm ${
                               repIdx > 0 ? 'marquee-duplicate' : ''
                             }`}

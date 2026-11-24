@@ -241,7 +241,7 @@ service cloud.firestore {
       return data.keys().hasAll([
         'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
+        'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'image', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ])
       && data.category in ['特别聚会', '洗礼与课程', '社区关怀', '诗班与事奉']
       && isStringBounds(data.date, 1, 80)
@@ -250,6 +250,7 @@ service cloud.firestore {
       && isStringBounds(data.time, 1, 100)
       && isStringBounds(data.location, 1, 160)
       && isStringBounds(data.contact, 1, 120)
+      && (!('image' in data) || isValidImageRef(data.image, 0, 80000))
       && data.isFeatured is bool
       && isValidStringList(data.details, 20)
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
