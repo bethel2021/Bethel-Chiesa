@@ -1,4 +1,4 @@
-import { PUBLIC_CACHE_KEY, PUBLIC_CACHE_TTL_MS } from '../data/cacheConfig';
+import { PUBLIC_CACHE_KEY, PUBLIC_CACHE_TTL_MS } from '../data/cacheConfig.ts';
 
 export function buildHeadPrefetchScript(cfg: {
   apiKey: string;
