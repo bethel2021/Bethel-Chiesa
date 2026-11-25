@@ -77,30 +77,32 @@ export function ChurchIntroSection() {
             </div>
 
             {/* Quiet Pull Quote */}
-            <div className="mt-8 pt-6 border-t border-[var(--theme-border-strong)]">
-              <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed">
-                {churchInfo.themeVerse}
-              </p>
-              {(() => {
-                const refParts = churchInfo.themeVerseRef
-                  .split('·')
-                  .map((part) => part.trim())
-                  .filter(Boolean);
-                if (refParts.length >= 2) {
-                  return (
-                    <p className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-[var(--theme-ink-subtle)]">
-                      <span>{refParts[0]}</span>
-                      <span>{refParts.slice(1).join(' · ')}</span>
-                    </p>
-                  );
-                }
-                return (
-                  <p className="text-xs text-[var(--theme-ink-subtle)] mt-2">
-                    {churchInfo.themeVerseRef}
+            {(() => {
+              const refParts = churchInfo.themeVerseRef
+                .split('·')
+                .map((part) => part.trim())
+                .filter(Boolean);
+              const primaryRef = refParts[0] || churchInfo.themeVerseRef.trim();
+              const secondaryRef = refParts.length >= 2 ? refParts.slice(1).join(' · ') : '';
+
+              return (
+                <div className="mt-8 pt-6 border-t border-[var(--theme-border-strong)]">
+                  <p className="font-editorial text-base italic text-[var(--theme-ink)] leading-relaxed">
+                    {churchInfo.themeVerse}
+                    {primaryRef && (
+                      <span className="not-italic text-xs text-[var(--theme-ink-subtle)] whitespace-nowrap ml-[2ch]">
+                        {primaryRef}
+                      </span>
+                    )}
                   </p>
-                );
-              })()}
-            </div>
+                  {secondaryRef && (
+                    <p className="mt-2 text-xs text-[var(--theme-ink-subtle)]">
+                      {secondaryRef}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

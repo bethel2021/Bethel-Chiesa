@@ -76,7 +76,7 @@ export function MinistryRosterSection() {
         </div>
 
         {/* Part 2: Church Life Gallery / Fellowship Moments (05) */}
-        <div className="pt-8 border-t border-[var(--theme-border)]/60">
+        <div id="moments" className="pt-8 border-t border-[var(--theme-border)]/60">
           <div className="max-w-2xl mb-7 md:mb-8">
             <p className="text-xs tracking-widest text-[var(--theme-ink-subtle)] mb-2">
               05. 教会生活剪影

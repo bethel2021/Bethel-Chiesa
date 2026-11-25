@@ -191,7 +191,7 @@ export function ContactSection() {
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="例如：张弟兄 / 李女士"
-                        className="w-full px-3.5 py-2.5 text-sm bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
+                        className="w-full px-3.5 py-2.5 text-base bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
                       />
                     </div>
 
@@ -209,7 +209,7 @@ export function ContactSection() {
                         value={form.contact}
                         onChange={(e) => setForm({ ...form, contact: e.target.value })}
                         placeholder="方便同工回访与发送聚会指引"
-                        className="w-full px-3.5 py-2.5 text-sm bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
+                        className="w-full px-3.5 py-2.5 text-base bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
                       />
                     </div>
                   </div>
@@ -228,7 +228,7 @@ export function ContactSection() {
                       value={form.message}
                       onChange={(e) => setForm({ ...form, message: e.target.value })}
                       placeholder="可简述同行人数、儿童年龄（如需儿童主日学）或需要牧者代祷的内容"
-                      className="w-full px-3.5 py-2.5 text-sm bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] resize-none"
+                      className="w-full px-3.5 py-2.5 text-base bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] resize-none"
                     />
                   </div>
 

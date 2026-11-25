@@ -7,7 +7,7 @@ const NAV_LINKS = [
   { id: 'intro', label: '教会简介', href: '#intro' },
   { id: 'pastors', label: '牧者同工', href: '#pastors' },
   { id: 'worship', label: '主日崇拜', href: '#worship' },
-  { id: 'ministry', label: '精彩瞬间', href: '#ministry' },
+  { id: 'moments', label: '精彩瞬间', href: '#moments' },
   { id: 'announcements', label: '聚会公告', href: '#announcements' },
 ];
 
@@ -16,7 +16,7 @@ const TRACKED_SECTIONS = [
   'intro',
   'pastors',
   'worship',
-  'ministry',
+  'moments',
   'announcements',
   'contact',
 ];
