@@ -10,9 +10,7 @@ type CategoryFilter = '全部' | AnnouncementItem['category'];
 const CATEGORIES: CategoryFilter[] = [
   '全部',
   '特别聚会',
-  '洗礼与课程',
-  '诗班与事奉',
-  '社区关怀',
+  '家事注意',
 ];
 
 interface AnnouncementsSectionProps {
@@ -102,7 +100,7 @@ export function AnnouncementsSection({
               <div className="w-48 h-9 bg-[var(--theme-ink)]/15 rounded animate-pulse" />
             </div>
             <div className="flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1, 2, 3].map((i) => (
                 <div key={i} className="w-20 h-8 bg-[var(--theme-ink)]/10 rounded-md animate-pulse" />
               ))}
             </div>
@@ -150,7 +148,7 @@ export function AnnouncementsSection({
               06. 近期动态与家事报道
             </p>
             <h2 className="font-editorial text-3xl md:text-4xl font-semibold text-[var(--theme-ink)] tracking-tight">
-              最新聚会公告
+              最新家事公告
             </h2>
           </div>
 
@@ -198,13 +196,26 @@ export function AnnouncementsSection({
                   {featuredItem.summary}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--theme-ink-muted)] mb-4">
-                  <span className="tabular-nums">时间：{featuredItem.time}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>地点：{featuredItem.location}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>联系：{featuredItem.contact}</span>
-                </div>
+                {(() => {
+                  const metaParts = [
+                    featuredItem.time ? { key: 'time', text: `时间：${featuredItem.time}`, tabular: true } : null,
+                    featuredItem.location ? { key: 'location', text: `地点：${featuredItem.location}`, tabular: false } : null,
+                    featuredItem.contact ? { key: 'contact', text: `联系：${featuredItem.contact}`, tabular: false } : null,
+                  ].filter((part): part is { key: string; text: string; tabular: boolean } => part !== null);
+
+                  if (metaParts.length === 0) return null;
+
+                  return (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--theme-ink-muted)] mb-4">
+                      {metaParts.map((part, idx) => (
+                        <span key={part.key} className="inline-flex items-center gap-4">
+                          {idx > 0 && <span aria-hidden="true">·</span>}
+                          <span className={part.tabular ? 'tabular-nums' : undefined}>{part.text}</span>
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <button
                   type="button"
@@ -277,7 +288,7 @@ export function AnnouncementsSection({
 
                 <div className="pt-4 border-t border-[var(--theme-surface-alt)] flex items-center justify-between gap-4">
                   <span className="text-xs text-[var(--theme-ink-subtle)] truncate tabular-nums">
-                    {item.time} · {item.location}
+                    {[item.time, item.location].filter(Boolean).join(' · ')}
                   </span>
                   <button
                     type="button"
@@ -349,47 +360,73 @@ export function AnnouncementsSection({
           </div>
 
           {/* Detailed Time & Venue Schedule */}
-          <dl className="mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs">
+          {(() => {
+            const visibleCount = [
+              activeAnnouncement.time,
+              activeAnnouncement.location,
+              activeAnnouncement.contact,
+            ].filter((val) => Boolean(val && val.trim())).length;
 
-            <div className="flex items-start gap-2.5">
-              <CalendarClock
-                aria-hidden="true"
-                className="w-4 h-4 text-[var(--theme-gold)] shrink-0 mt-0.5"
-              />
-              <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">具体时间安排</dt>
-                <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
-                  {activeAnnouncement.time}
-                </dd>
-              </div>
-            </div>
+            if (visibleCount === 0) return null;
 
-            <div className="flex items-start gap-2.5">
-              <MapPin
-                aria-hidden="true"
-                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
-              />
-              <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">聚会地点</dt>
-                <dd className="text-[var(--theme-ink)] font-medium">
-                  {activeAnnouncement.location}
-                </dd>
-              </div>
-            </div>
+            const gridColsClass =
+              visibleCount === 1
+                ? 'sm:grid-cols-1'
+                : visibleCount === 2
+                  ? 'sm:grid-cols-2'
+                  : 'sm:grid-cols-3';
 
-            <div className="flex items-start gap-2.5">
-              <UserCheck
-                aria-hidden="true"
-                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
-              />
-              <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">负责联系人</dt>
-                <dd className="text-[var(--theme-ink)] font-medium">
-                  {activeAnnouncement.contact}
-                </dd>
-              </div>
-            </div>
-          </dl>
+            return (
+              <dl
+                className={`mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 ${gridColsClass} gap-x-6 gap-y-3.5 text-xs`}
+              >
+                {activeAnnouncement.time && (
+                  <div className="flex items-start gap-2.5">
+                    <CalendarClock
+                      aria-hidden="true"
+                      className="w-4 h-4 text-[var(--theme-gold)] shrink-0 mt-0.5"
+                    />
+                    <div>
+                      <dt className="text-[var(--theme-ink-subtle)] mb-0.5">具体时间安排</dt>
+                      <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
+                        {activeAnnouncement.time}
+                      </dd>
+                    </div>
+                  </div>
+                )}
+
+                {activeAnnouncement.location && (
+                  <div className="flex items-start gap-2.5">
+                    <MapPin
+                      aria-hidden="true"
+                      className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+                    />
+                    <div>
+                      <dt className="text-[var(--theme-ink-subtle)] mb-0.5">聚会地点</dt>
+                      <dd className="text-[var(--theme-ink)] font-medium">
+                        {activeAnnouncement.location}
+                      </dd>
+                    </div>
+                  </div>
+                )}
+
+                {activeAnnouncement.contact && (
+                  <div className="flex items-start gap-2.5">
+                    <UserCheck
+                      aria-hidden="true"
+                      className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+                    />
+                    <div>
+                      <dt className="text-[var(--theme-ink-subtle)] mb-0.5">负责联系人</dt>
+                      <dd className="text-[var(--theme-ink)] font-medium">
+                        {activeAnnouncement.contact}
+                      </dd>
+                    </div>
+                  </div>
+                )}
+              </dl>
+            );
+          })()}
 
           {/* Full Description */}
           <div className="py-5 space-y-3 text-[15px] text-[var(--theme-ink-body)] leading-relaxed">

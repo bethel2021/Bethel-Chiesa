@@ -85,6 +85,7 @@ import {
   clampStr,
   cleanWeekdayMinistry,
   makeDocId,
+  normalizeAnnouncementCategory,
   normalizeAnnouncements,
   normalizeChurchInfo,
   normalizeCoworkers,
@@ -312,7 +313,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       : WEEKDAY_MINISTRIES
   );
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
-    initialBundle?.announcements?.length ? initialBundle.announcements : ANNOUNCEMENTS
+    initialBundle?.announcements?.length
+      ? normalizeAnnouncements(initialBundle.announcements)
+      : ANNOUNCEMENTS
   );
 
   const [visitorRequests, setVisitorRequests] = useState<VisitorRequestItem[]>([]);
@@ -1373,15 +1376,18 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           ? await persistLosslessImageIfNeeded(item.image, 60_000)
           : '';
         const cleanDate = clampStr(item.date, L.date);
+        const cleanTime = clampStr(item.time, L.time);
+        const cleanLocation = clampStr(item.location, L.location);
+        const cleanContact = clampStr(item.contact, L.contact);
         cleaned = {
           id,
-          category: item.category,
+          category: normalizeAnnouncementCategory(item.category),
           ...(cleanDate ? { date: cleanDate } : {}),
           title: clampStr(item.title, L.title),
           summary: clampStr(item.summary, L.summary),
-          time: clampStr(item.time, L.time),
-          location: clampStr(item.location, L.location),
-          contact: clampStr(item.contact, L.contact),
+          ...(cleanTime ? { time: cleanTime } : {}),
+          ...(cleanLocation ? { location: cleanLocation } : {}),
+          ...(cleanContact ? { contact: cleanContact } : {}),
           image: sanitizeImageRef(resolvedImage, L.image),
           isFeatured: Boolean(item.isFeatured),
           details: item.details

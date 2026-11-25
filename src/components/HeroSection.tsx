@@ -124,7 +124,7 @@ export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
               onClick={(e) => handleAnchorClick(e, '#announcements')}
               className="text-xs font-semibold tracking-wider text-[var(--theme-accent)] whitespace-nowrap shrink-0 pr-4 border-r border-[var(--theme-border-strong)] hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] rounded-sm"
             >
-              最新聚会公告
+              最新家事公告
             </a>
 
             <div className="marquee-viewport relative flex-1 min-w-0 overflow-hidden">

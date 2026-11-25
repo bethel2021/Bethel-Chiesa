@@ -7,8 +7,9 @@ const NAV_LINKS = [
   { id: 'intro', label: '教会简介', href: '#intro' },
   { id: 'pastors', label: '牧者同工', href: '#pastors' },
   { id: 'worship', label: '主日崇拜', href: '#worship' },
+  { id: 'ministry', label: '周间事工', href: '#ministry' },
   { id: 'moments', label: '精彩瞬间', href: '#moments' },
-  { id: 'announcements', label: '聚会公告', href: '#announcements' },
+  { id: 'announcements', label: '家事公告', href: '#announcements' },
 ];
 
 const TRACKED_SECTIONS = [
@@ -16,6 +17,7 @@ const TRACKED_SECTIONS = [
   'intro',
   'pastors',
   'worship',
+  'ministry',
   'moments',
   'announcements',
   'contact',
@@ -148,10 +150,10 @@ export function Navbar({ onOpenAdmin }: NavbarProps) {
           {churchInfo.name}
         </a>
 
-        {/* Zone 2: 5 concise single-line text navigation links */}
+        {/* Zone 2: 6 concise single-line text navigation links */}
         <nav
           aria-label="主导航"
-          className="hidden md:flex items-center gap-7 text-sm font-medium text-[var(--theme-ink-muted)]"
+          className="hidden md:flex items-center gap-4 lg:gap-7 text-sm font-medium text-[var(--theme-ink-muted)]"
         >
           {NAV_LINKS.map((link) => {
             const isActive = activeSection === link.id;

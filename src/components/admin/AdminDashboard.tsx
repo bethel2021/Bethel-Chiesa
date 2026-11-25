@@ -59,7 +59,7 @@ const SIDEBAR_ITEMS: {
   { id: 'songs', label: '主日崇拜歌曲', icon: Music },
   { id: 'weekday', label: '周间事工安排', icon: CalendarDays },
   { id: 'roster', label: '精彩瞬间展示', icon: Image },
-  { id: 'announcements', label: '最新聚会公告', icon: Bell },
+  { id: 'announcements', label: '最新家事公告', icon: Bell },
   { id: 'visitors', label: '来访留言与权限', icon: ShieldCheck },
   {
     id: 'visitor-stats',
@@ -546,7 +546,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   },
                   {
                     tab: 'announcements' as AdminTab,
-                    label: '最新聚会公告',
+                    label: '最新家事公告',
                     count: `${announcements.length} 条公告`,
                     sub: '置顶重点与分类发布',
                   },

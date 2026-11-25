@@ -78,6 +78,9 @@ export function sanitizeYoutubeUrl(val: string | undefined): string {
   return trimmed;
 }
 
+const EVANGELISM_DEFAULT_DESC =
+  '领受主的大使命，借着福音聚会与生活见证向同胞及社区传扬基督救恩与盼望。';
+
 export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): ChurchInfo {
   const base = raw ? { ...CHURCH_INFO, ...raw } : { ...CHURCH_INFO };
   let themeVerseRef = clampStr(base.themeVerseRef, FIELD_LIMITS.churchInfo.themeVerseRef);
@@ -87,8 +90,19 @@ export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): Churc
   if (!themeVerseRef) {
     themeVerseRef = CHURCH_INFO.themeVerseRef;
   }
+  const coreValues = Array.isArray(base.coreValues)
+    ? base.coreValues.map((cv) => {
+        const title = String(cv.title ?? '').trim();
+        const description = String(cv.description ?? '').trim();
+        if (title === '广传福音' && !description) {
+          return { ...cv, description: EVANGELISM_DEFAULT_DESC };
+        }
+        return cv;
+      })
+    : CHURCH_INFO.coreValues;
   return {
     ...base,
+    coreValues,
     themeVerseRef,
     heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
     fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
@@ -223,12 +237,12 @@ export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
   };
 }
 
-const ANNOUNCEMENT_CATEGORIES: ReadonlySet<AnnouncementItem['category']> = new Set([
-  '特别聚会',
-  '洗礼与课程',
-  '社区关怀',
-  '诗班与事奉',
-]);
+export function normalizeAnnouncementCategory(raw: unknown): AnnouncementItem['category'] {
+  if (raw === '家事注意' || raw === '社区关怀') {
+    return '家事注意';
+  }
+  return '特别聚会';
+}
 
 const DEFAULT_ANNOUNCEMENT_IMAGE_MAP: Record<string, string> = Object.fromEntries(
   ANNOUNCEMENTS.filter((item) => item.image).map((item) => [item.id, item.image as string])
@@ -238,9 +252,7 @@ export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): Annou
   const L = FIELD_LIMITS.announcement;
   return list.map((item, idx) => {
     const id = String(item.id || `ann-${idx + 1}`);
-    const category = ANNOUNCEMENT_CATEGORIES.has(item.category as AnnouncementItem['category'])
-      ? (item.category as AnnouncementItem['category'])
-      : '特别聚会';
+    const category = normalizeAnnouncementCategory(item.category);
     const rawImage =
       typeof item.image === 'string'
         ? filterSafeImageSrc(item.image)
@@ -253,6 +265,9 @@ export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): Annou
       : [];
 
     const cleanDate = clampStr(item.date, L.date);
+    const cleanTime = clampStr(item.time, L.time);
+    const cleanLocation = clampStr(item.location, L.location);
+    const cleanContact = clampStr(item.contact, L.contact);
 
     return {
       id,
@@ -260,9 +275,9 @@ export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): Annou
       ...(cleanDate ? { date: cleanDate } : {}),
       title: clampStr(item.title, L.title),
       summary: clampStr(item.summary, L.summary),
-      time: clampStr(item.time, L.time),
-      location: clampStr(item.location, L.location),
-      contact: clampStr(item.contact, L.contact),
+      ...(cleanTime ? { time: cleanTime } : {}),
+      ...(cleanLocation ? { location: cleanLocation } : {}),
+      ...(cleanContact ? { contact: cleanContact } : {}),
       ...(typeof item.image === 'string' || rawImage ? { image: rawImage } : {}),
       isFeatured: Boolean(item.isFeatured),
       details,

@@ -253,17 +253,17 @@ service cloud.firestore {
 
     function isValidAnnouncement(data) {
       return data.keys().hasAll([
-        'category', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
+        'category', 'title', 'summary', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
         'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'image', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ])
-      && data.category in ['特别聚会', '洗礼与课程', '社区关怀', '诗班与事奉']
+      && data.category in ['特别聚会', '家事注意']
       && (!('date' in data) || isStringBounds(data.date, 0, 80))
       && isStringBounds(data.title, 1, 160)
       && isStringBounds(data.summary, 1, 400)
-      && isStringBounds(data.time, 1, 100)
-      && isStringBounds(data.location, 1, 160)
-      && isStringBounds(data.contact, 1, 120)
+      && (!('time' in data) || isStringBounds(data.time, 0, 100))
+      && (!('location' in data) || isStringBounds(data.location, 0, 160))
+      && (!('contact' in data) || isStringBounds(data.contact, 0, 120))
       && (!('image' in data) || isValidImageRef(data.image, 0, 80000))
       && data.isFeatured is bool
       && isValidStringList(data.details, 20)

@@ -156,20 +156,20 @@
       "description": "Church gathering announcement or notice",
       "type": "object",
       "properties": {
-        "category": { "type": "string", "enum": ["特别聚会", "洗礼与课程", "社区关怀", "诗班与事奉"] },
+        "category": { "type": "string", "enum": ["特别聚会", "家事注意"] },
         "date": { "type": "string", "maxLength": 80 },
         "title": { "type": "string", "minLength": 1, "maxLength": 160 },
         "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
-        "time": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "location": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "contact": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "time": { "type": "string", "maxLength": 100 },
+        "location": { "type": "string", "maxLength": 160 },
+        "contact": { "type": "string", "maxLength": 120 },
         "image": { "type": "string", "maxLength": 80000 },
         "isFeatured": { "type": "boolean" },
         "details": { "type": "array", "description": "Up to 20 detail paragraphs" },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["category", "title", "summary", "time", "location", "contact", "isFeatured", "details", "sortOrder", "updatedAt"]
+      "required": ["category", "title", "summary", "isFeatured", "details", "sortOrder", "updatedAt"]
     },
     "VisitorRequestDoc": {
       "title": "VisitorRequestDoc",

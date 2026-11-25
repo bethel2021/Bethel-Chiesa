@@ -139,13 +139,13 @@ export interface WeekdayMinistry {
 
 export interface AnnouncementItem {
   id: string;
-  category: '特别聚会' | '洗礼与课程' | '社区关怀' | '诗班与事奉';
+  category: '特别聚会' | '家事注意';
   date?: string;
   title: string;
   summary: string;
-  time: string;
-  location: string;
-  contact: string;
+  time?: string;
+  location?: string;
+  contact?: string;
   image?: string;
   isFeatured: boolean;
   details: string[];
@@ -235,8 +235,8 @@ export const CHURCH_INFO: ChurchInfo = {
     },
     {
       index: '04',
-      title: '邻舍关怀',
-      description: '走入社区探访孤寡长者、服事新市民家庭，以基督的怜悯见证福音的大能。',
+      title: '广传福音',
+      description: '领受主的大使命，借着福音聚会与生活见证向同胞及社区传扬基督救恩与盼望。',
     },
   ],
 };
@@ -638,7 +638,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   },
   {
     id: 'ann-baptism',
-    category: '洗礼与课程',
+    category: '特别聚会',
     title: '圣诞季洗礼暨坚信礼预备班招生通知',
     summary: '拟于圣诞节前夕举行下半年洗礼，凡清楚得救并稳定参加慕道班满三个月者均可报名面谈。',
     time: '12月06日起连续三个主日 13:00',
@@ -654,7 +654,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   },
   {
     id: 'ann-choir',
-    category: '诗班与事奉',
+    category: '家事注意',
     title: '圣诞夜烛光崇拜诗班招募与联合练唱',
     summary: '为预备 12 月 24 日平安夜圣乐崇拜，伯特利圣诗班现诚邀识简谱或五线谱的受洗信徒加入献唱。',
     time: '每周四晚 19:30 – 21:15',
@@ -670,7 +670,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   },
   {
     id: 'ann-care',
-    category: '社区关怀',
+    category: '家事注意',
     title: '冬日暖阳·社区独居长者探访与物资募集',
     summary: '入冬降温之际，慈惠事工组拟于月底周六走访周边 18 户高龄独居长者家庭，现征集全新保暖围巾与探访志工。',
     time: '11月28日（周六）09:00 集合',
@@ -686,7 +686,7 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   },
   {
     id: 'ann-seekers',
-    category: '洗礼与课程',
+    category: '家事注意',
     title: '《认识信仰的起点》慕道小组持续欢迎新朋友',
     summary: '对基督教信仰感到好奇或心中有疑问的朋友，欢迎参加每周日下午的开放式慕道对谈小组。',
     time: '每周主日 13:00 – 14:15',

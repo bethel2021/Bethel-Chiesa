@@ -6,6 +6,7 @@ import {
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
 import type { AnnouncementItem } from '../../data/churchData';
+import { normalizeAnnouncementCategory } from '../../utils/churchNormalization';
 import { ModalDialog } from '../ModalDialog';
 import { SafeImage } from '../SafeImage';
 import {
@@ -45,7 +46,7 @@ export function AdminAnnouncementsEditor() {
         details: details.length > 0 ? details : [editing.summary],
       });
       setEditing(null);
-      setStatus({ type: 'success', message: '聚会公告已保存并同步发布。' });
+      setStatus({ type: 'success', message: '家事公告已保存并同步发布。' });
     } catch (err) {
       setStatus({
         type: 'error',
@@ -59,8 +60,8 @@ export function AdminAnnouncementsEditor() {
   return (
     <div className="space-y-8">
       <AdminPanelHeader
-        title="最新聚会公告管理"
-        description="发布特别聚会、洗礼课程、诗班招募或社区关怀公告，支持设定置顶「重点公告」。"
+        title="最新家事公告管理"
+        description="发布特别聚会或家事注意公告，支持设定置顶「重点公告」。"
         action={
           <button
             type="button"
@@ -116,9 +117,16 @@ export function AdminAnnouncementsEditor() {
                 </div>
                 <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">{item.title}</h3>
                 <p className="text-xs text-[#57534E]">{item.summary}</p>
-                <p className="text-xs text-[#78716C]">
-                  时间：{item.time} · 地点：{item.location} · 联系：{item.contact}
-                </p>
+                {(() => {
+                  const meta = [
+                    item.time ? `时间：${item.time}` : '',
+                    item.location ? `地点：${item.location}` : '',
+                    item.contact ? `联系：${item.contact}` : '',
+                  ].filter(Boolean);
+                  return meta.length > 0 ? (
+                    <p className="text-xs text-[#78716C]">{meta.join(' · ')}</p>
+                  ) : null;
+                })()}
               </div>
             </div>
 
@@ -126,7 +134,10 @@ export function AdminAnnouncementsEditor() {
               <button
                 type="button"
                 onClick={() => {
-                  setEditing(item);
+                  setEditing({
+                    ...item,
+                    category: normalizeAnnouncementCategory(item.category),
+                  });
                   setDetailsText(item.details.join('\n'));
                 }}
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
@@ -168,7 +179,7 @@ export function AdminAnnouncementsEditor() {
                 id="announcement-editor-modal-title"
                 className="font-editorial text-xl font-semibold text-[#1C1917]"
               >
-                {editing.id ? '编辑聚会公告' : '发布新公告'}
+                {editing.id ? '编辑家事公告' : '发布新公告'}
               </h3>
               <button
                 type="button"
@@ -193,9 +204,7 @@ export function AdminAnnouncementsEditor() {
                   className={inputClass}
                 >
                   <option value="特别聚会">特别聚会</option>
-                  <option value="洗礼与课程">洗礼与课程</option>
-                  <option value="诗班与事奉">诗班与事奉</option>
-                  <option value="社区关怀">社区关怀</option>
+                  <option value="家事注意">家事注意</option>
                 </select>
               </FieldLabel>
               <FieldLabel label="排序权重">
@@ -233,32 +242,29 @@ export function AdminAnnouncementsEditor() {
             </FieldLabel>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <FieldLabel label="聚会时间 *">
+              <FieldLabel label="聚会时间（可选）">
                 <input
                   type="text"
-                  required
                   maxLength={FIELD_LIMITS.announcement.time}
-                  value={editing.time}
+                  value={editing.time ?? ''}
                   onChange={(e) => setEditing({ ...editing, time: e.target.value })}
                   className={inputClass}
                 />
               </FieldLabel>
-              <FieldLabel label="聚会地点 *">
+              <FieldLabel label="聚会地点（可选）">
                 <input
                   type="text"
-                  required
                   maxLength={FIELD_LIMITS.announcement.location}
-                  value={editing.location}
+                  value={editing.location ?? ''}
                   onChange={(e) => setEditing({ ...editing, location: e.target.value })}
                   className={inputClass}
                 />
               </FieldLabel>
-              <FieldLabel label="负责联系人 *">
+              <FieldLabel label="负责联系人（可选）">
                 <input
                   type="text"
-                  required
                   maxLength={FIELD_LIMITS.announcement.contact}
-                  value={editing.contact}
+                  value={editing.contact ?? ''}
                   onChange={(e) => setEditing({ ...editing, contact: e.target.value })}
                   className={inputClass}
                 />
