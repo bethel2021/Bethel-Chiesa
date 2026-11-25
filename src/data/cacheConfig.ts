@@ -62,9 +62,10 @@ export const FIELD_LIMITS = {
     youtubeUrl: 500,
   },
   ministryRoster: {
-    role: 140,
-    thisWeek: 200,
-    nextWeek: 200,
+    title: 140,
+    image: 480_000,
+    schedule: 140,
+    description: 500,
   },
   weekdayMinistry: {
     day: 20,

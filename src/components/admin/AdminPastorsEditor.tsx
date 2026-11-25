@@ -265,6 +265,7 @@ export function AdminPastorsEditor() {
       {/* Pastor Editor Modal */}
       {editingPastor && (
         <ModalDialog
+          disableDismiss
           labelledBy="pastor-modal-title"
           maxWidthClass="max-w-xl"
           overlayClassName="bg-[#141210]/55"
@@ -423,6 +424,7 @@ export function AdminPastorsEditor() {
       {/* Coworker Editor Modal */}
       {editingCoworker && (
         <ModalDialog
+          disableDismiss
           labelledBy="coworker-modal-title"
           maxWidthClass="max-w-lg"
           overlayClassName="bg-[#141210]/55"

@@ -8,14 +8,12 @@ import { parsePastoralPhoneEntries } from '../utils/phone';
 interface FormState {
   name: string;
   contact: string;
-  intent: string;
   message: string;
 }
 
 const INITIAL_FORM: FormState = {
   name: '',
   contact: '',
-  intent: '主日初次来访',
   message: '',
 };
 
@@ -43,7 +41,6 @@ export function ContactSection() {
       await submitVisitorRequest({
         name: form.name,
         contact: form.contact,
-        intent: form.intent,
         message: form.message,
       });
       setSubmitted(true);
@@ -162,7 +159,7 @@ export function ContactSection() {
                     已收到您的来访留言
                   </h4>
                   <p className="text-sm text-[var(--theme-ink-muted)] max-w-md mx-auto leading-relaxed">
-                    感谢「{form.name}」，教会迎新与教牧同工已记录您的「{form.intent}」信息，将于两个工作日内与您联系，主日欢迎您来到伯特利堂！
+                    感谢「{form.name}」，教会迎新与教牧同工已记录您的来访登记信息，将于两个工作日内与您联系，主日欢迎您来到伯特利堂！
                   </p>
                   <div className="pt-4">
                     <button
@@ -215,27 +212,6 @@ export function ContactSection() {
                         className="w-full px-3.5 py-2.5 text-sm bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] placeholder:text-[var(--theme-ink-faint)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="visitor-intent"
-                      className="block text-xs font-medium text-[var(--theme-ink-body)] mb-1.5"
-                    >
-                      联系事项
-                    </label>
-                    <select
-                      id="visitor-intent"
-                      value={form.intent}
-                      onChange={(e) => setForm({ ...form, intent: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-sm bg-[var(--theme-card)] border border-[var(--theme-border-input)] rounded-md text-[var(--theme-ink)] focus:outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
-                    >
-                      <option value="主日初次来访">主日初次来访（预约迎新接待）</option>
-                      <option value="报名慕道班或洗礼班">报名慕道班 / 洗礼预备班</option>
-                      <option value="加入周间小组或团契">希望加入周间查经小组 / 团契</option>
-                      <option value="代祷请求与教牧辅导">代祷请求与教牧关怀面谈</option>
-                      <option value="诗班或事工服事咨询">圣诗班招募或主日事工咨询</option>
-                    </select>
                   </div>
 
                   <div>

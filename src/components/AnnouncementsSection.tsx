@@ -2,7 +2,6 @@ import { useMemo, useState, type KeyboardEvent } from 'react';
 import { ArrowUpRight, CalendarClock, MapPin, UserCheck, X } from 'lucide-react';
 import { usePublicChurchData } from '../context/ChurchDataContext';
 import type { AnnouncementItem } from '../data/churchData';
-import { handleAnchorClick } from '../utils/scroll';
 import { ModalDialog } from './ModalDialog';
 import { SafeImage } from './SafeImage';
 
@@ -189,8 +188,12 @@ export function AnnouncementsSection({
                   <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
                   <span aria-hidden="true">·</span>
                   <span>{featuredItem.category}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="tabular-nums">{featuredItem.date}</span>
+                  {featuredItem.date && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="tabular-nums">{featuredItem.date}</span>
+                    </>
+                  )}
                 </div>
 
                 <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
@@ -224,12 +227,13 @@ export function AnnouncementsSection({
 
               {featuredItem.image && (
                 <div className="lg:col-span-5">
-                  <div className="aspect-[16/10] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)]">
+                  <div className="aspect-[16/10] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)]">
                     <SafeImage
                       src={featuredItem.image}
                       alt={featuredItem.title}
                       fallbackLabel={featuredItem.title}
-                      className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                      fitMode="auto-contain-portrait"
+                      className="w-full h-full group-hover:scale-[1.02] transition-transform duration-300"
                     />
                   </div>
                 </div>
@@ -253,20 +257,25 @@ export function AnnouncementsSection({
               >
                 <div>
                   {item.image && (
-                    <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)] mb-3">
+                    <div className="aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface)]/45 mb-3">
                       <SafeImage
                         src={item.image}
                         alt={item.title}
                         fallbackLabel={item.title}
-                        className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                        fitMode="auto-contain-portrait"
+                        className="w-full h-full group-hover:scale-[1.02] transition-transform duration-300"
                       />
                     </div>
                   )}
 
                   <div className="flex items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-1.5">
                     <span className="text-[var(--theme-accent)] font-medium">{item.category}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="tabular-nums">{item.date}</span>
+                    {item.date && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="tabular-nums">{item.date}</span>
+                      </>
+                    )}
                   </div>
 
                   <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
@@ -321,8 +330,12 @@ export function AnnouncementsSection({
                 <span className="font-medium text-[var(--theme-accent)]">
                   {activeAnnouncement.category}
                 </span>
-                <span aria-hidden="true">·</span>
-                <span className="tabular-nums">{activeAnnouncement.date}</span>
+                {activeAnnouncement.date && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="tabular-nums">{activeAnnouncement.date}</span>
+                  </>
+                )}
               </p>
               <h3
                 id="announcement-modal-title"
@@ -342,30 +355,37 @@ export function AnnouncementsSection({
           </div>
 
           {/* Activity Photo */}
-          <div className="mt-5 aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface-alt)]">
+          <div className="mt-5 aspect-[16/9] w-full overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface)]/45">
             <SafeImage
               src={activeAnnouncement.image || ''}
               alt={activeAnnouncement.title}
               fallbackLabel={activeAnnouncement.title}
               priority
-              className="w-full h-full object-cover object-center"
+              fitMode="auto-contain-portrait"
+              className="w-full h-full"
             />
           </div>
 
           {/* Detailed Date, Time & Venue Schedule */}
-          <dl className="mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-            <div className="flex items-start gap-2.5">
-              <CalendarClock
-                aria-hidden="true"
-                className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
-              />
-              <div>
-                <dt className="text-[var(--theme-ink-subtle)] mb-0.5">活动日期标示</dt>
-                <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
-                  {activeAnnouncement.date}
-                </dd>
+          <dl
+            className={`mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 ${
+              activeAnnouncement.date ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+            } gap-x-6 gap-y-3.5 text-xs`}
+          >
+            {activeAnnouncement.date && (
+              <div className="flex items-start gap-2.5">
+                <CalendarClock
+                  aria-hidden="true"
+                  className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
+                />
+                <div>
+                  <dt className="text-[var(--theme-ink-subtle)] mb-0.5">活动日期标示</dt>
+                  <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
+                    {activeAnnouncement.date}
+                  </dd>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-start gap-2.5">
               <CalendarClock
@@ -416,31 +436,14 @@ export function AnnouncementsSection({
             ))}
           </div>
 
-          <div className="pt-4 border-t border-[var(--theme-border)] flex flex-wrap items-center justify-between gap-3">
-            <a
-              href="#announcements"
-              onClick={(e) => handleAnchorClick(e, '#announcements', closeAnnouncement)}
-              className="text-xs font-medium text-[var(--theme-ink-muted)] hover:text-[var(--theme-accent)] hover:underline underline-offset-4 whitespace-nowrap"
+          <div className="pt-4 border-t border-[var(--theme-border)] flex items-center justify-end">
+            <button
+              type="button"
+              onClick={closeAnnouncement}
+              className="px-4 py-2 text-xs font-medium text-white bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
             >
-              查看全部聚会公告
-            </a>
-
-            <div className="flex items-center gap-3">
-              <a
-                href="#contact"
-                onClick={(e) => handleAnchorClick(e, '#contact', closeAnnouncement)}
-                className="px-4 py-2 text-xs font-medium text-[var(--theme-accent)] border border-[var(--theme-accent)]/30 hover:bg-[var(--theme-accent)]/5 rounded-md transition-colors whitespace-nowrap"
-              >
-                前往来访登记咨询
-              </a>
-              <button
-                type="button"
-                onClick={closeAnnouncement}
-                className="px-4 py-2 text-xs font-medium text-white bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)] rounded-md transition-colors whitespace-nowrap cursor-pointer"
-              >
-                我知道了
-              </button>
-            </div>
+              我知道了
+            </button>
           </div>
         </ModalDialog>
       )}

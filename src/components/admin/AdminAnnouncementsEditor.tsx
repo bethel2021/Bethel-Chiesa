@@ -41,6 +41,7 @@ export function AdminAnnouncementsEditor() {
         .slice(0, FIELD_LIMITS.announcement.detailsMaxCount);
       await saveAnnouncement({
         ...editing,
+        date: '',
         details: details.length > 0 ? details : [editing.summary],
       });
       setEditing(null);
@@ -67,7 +68,6 @@ export function AdminAnnouncementsEditor() {
               setEditing({
                 id: '',
                 category: '特别聚会',
-                date: '',
                 title: '',
                 summary: '',
                 time: '',
@@ -98,12 +98,13 @@ export function AdminAnnouncementsEditor() {
           >
             <div className="flex items-start gap-4 flex-1 min-w-0">
               {item.image && (
-                <div className="hidden sm:block w-24 h-16 rounded border border-[#E5DFD3] overflow-hidden bg-[#EFEAE0] shrink-0 mt-0.5">
+                <div className="hidden sm:block w-24 h-16 rounded border border-[#E5DFD3] overflow-hidden bg-[#FAF8F4] shrink-0 mt-0.5">
                   <SafeImage
                     src={item.image}
                     alt={item.title}
                     fallbackLabel={item.title}
-                    className="w-full h-full object-cover object-center"
+                    fitMode="auto-contain-portrait"
+                    className="w-full h-full"
                   />
                 </div>
               )}
@@ -112,8 +113,12 @@ export function AdminAnnouncementsEditor() {
                   <span className="font-mono tabular-nums">#{item.sortOrder}</span>
                   {item.isFeatured && <span className="font-medium text-[#8B5E34]">重点置顶</span>}
                   <span>{item.category}</span>
-                  <span>·</span>
-                  <span className="tabular-nums">{item.date}</span>
+                  {item.date && (
+                    <>
+                      <span>·</span>
+                      <span className="tabular-nums">{item.date}</span>
+                    </>
+                  )}
                 </div>
                 <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">{item.title}</h3>
                 <p className="text-xs text-[#57534E]">{item.summary}</p>
@@ -156,6 +161,7 @@ export function AdminAnnouncementsEditor() {
 
       {editing && (
         <ModalDialog
+          disableDismiss
           labelledBy="announcement-editor-modal-title"
           maxWidthClass="max-w-xl"
           overlayClassName="bg-[#141210]/55"
@@ -180,7 +186,7 @@ export function AdminAnnouncementsEditor() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FieldLabel label="公告分类">
                 <select
                   value={editing.category}
@@ -197,16 +203,6 @@ export function AdminAnnouncementsEditor() {
                   <option value="诗班与事奉">诗班与事奉</option>
                   <option value="社区关怀">社区关怀</option>
                 </select>
-              </FieldLabel>
-              <FieldLabel label="发布/截止日期标示 *">
-                <input
-                  type="text"
-                  required
-                  maxLength={FIELD_LIMITS.announcement.date}
-                  value={editing.date}
-                  onChange={(e) => setEditing({ ...editing, date: e.target.value })}
-                  className={inputClass}
-                />
               </FieldLabel>
               <FieldLabel label="排序权重">
                 <input
@@ -281,7 +277,8 @@ export function AdminAnnouncementsEditor() {
               onChange={(nextValue) => setEditing({ ...editing, image: nextValue })}
               allowClear
               previewAspect="landscape"
-              hint="点击公告详情弹窗顶部展示"
+              fitMode="auto-contain-portrait"
+              hint="点击公告详情弹窗顶部展示，纵向海报自动居中留白适配"
             />
 
             <FieldLabel label="公告正文详情（每段一行）" hint="点击查看详情弹窗内展示">

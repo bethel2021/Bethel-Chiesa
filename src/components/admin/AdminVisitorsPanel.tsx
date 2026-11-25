@@ -126,8 +126,12 @@ export function AdminVisitorsPanel() {
                     <span className="font-semibold text-[#1C1917]">{req.name}</span>
                     <span className="text-[#78716C]">·</span>
                     <span className="text-[#1E3A5F] font-medium">{req.contact}</span>
-                    <span className="text-[#78716C]">·</span>
-                    <span className="text-xs text-[#57534E]">{req.intent}</span>
+                    {req.intent && (
+                      <>
+                        <span className="text-[#78716C]">·</span>
+                        <span className="text-xs text-[#57534E]">{req.intent}</span>
+                      </>
+                    )}
                   </div>
                   <span
                     className={`text-xs font-medium ${

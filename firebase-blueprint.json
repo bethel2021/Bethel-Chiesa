@@ -119,27 +119,21 @@
     },
     "MinistryRosterDoc": {
       "title": "MinistryRosterDoc",
-      "description": "Sunday ministry duty, Sunday school class, fellowship, tech, hospitality, or outreach assignment",
+      "description": "Church ministry highlights photo, title, schedule, and description",
       "type": "object",
       "properties": {
         "category": {
           "type": "string",
-          "enum": [
-            "worship",
-            "sunday-school-fellowship",
-            "prayer-bible",
-            "media-tech",
-            "hospitality-logistics",
-            "outreach"
-          ]
+          "enum": ["choir", "small-group", "youth", "sunday-school"]
         },
-        "role": { "type": "string", "minLength": 1, "maxLength": 140 },
-        "thisWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "nextWeek": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "image": { "type": "string", "minLength": 1, "maxLength": 480000 },
+        "schedule": { "type": "string", "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 500 },
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["category", "role", "thisWeek", "nextWeek", "sortOrder", "updatedAt"]
+      "required": ["category", "title", "image", "schedule", "description", "sortOrder", "updatedAt"]
     },
     "WeekdayMinistryDoc": {
       "title": "WeekdayMinistryDoc",
@@ -163,7 +157,7 @@
       "type": "object",
       "properties": {
         "category": { "type": "string", "enum": ["特别聚会", "洗礼与课程", "社区关怀", "诗班与事奉"] },
-        "date": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "date": { "type": "string", "maxLength": 80 },
         "title": { "type": "string", "minLength": 1, "maxLength": 160 },
         "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
         "time": { "type": "string", "minLength": 1, "maxLength": 100 },
@@ -175,7 +169,7 @@
         "sortOrder": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["category", "date", "title", "summary", "time", "location", "contact", "isFeatured", "details", "sortOrder", "updatedAt"]
+      "required": ["category", "title", "summary", "time", "location", "contact", "isFeatured", "details", "sortOrder", "updatedAt"]
     },
     "VisitorRequestDoc": {
       "title": "VisitorRequestDoc",
@@ -184,13 +178,13 @@
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 80 },
         "contact": { "type": "string", "minLength": 5, "maxLength": 140 },
-        "intent": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "intent": { "type": "string", "maxLength": 100 },
         "message": { "type": "string", "maxLength": 1000 },
         "status": { "type": "string", "enum": ["pending", "contacted", "archived"] },
         "adminNote": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "contact", "intent", "message", "status", "createdAt"]
+      "required": ["name", "contact", "message", "status", "createdAt"]
     },
     "PublicBundleDoc": {
       "title": "PublicBundleDoc",

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 interface ModalDialogProps {
   onClose: () => void;
+  disableDismiss?: boolean;
   labelledBy?: string;
   maxWidthClass?: string;
   overlayClassName?: string;
@@ -11,6 +12,7 @@ interface ModalDialogProps {
 
 export const ModalDialog: React.FC<ModalDialogProps> = ({
   onClose,
+  disableDismiss = false,
   labelledBy,
   maxWidthClass = 'max-w-lg',
   overlayClassName = 'bg-[#101c2c]/65 backdrop-blur-sm',
@@ -26,7 +28,7 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
     document.body.style.overflow = 'hidden';
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !disableDismiss) {
         event.preventDefault();
         onCloseRef.current();
       }
@@ -40,12 +42,12 @@ export const ModalDialog: React.FC<ModalDialogProps> = ({
         previousActiveElement.focus();
       }
     };
-  }, []);
+  }, [disableDismiss]);
 
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto ${overlayClassName}`}
-      onClick={onClose}
+      onClick={disableDismiss ? undefined : onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}

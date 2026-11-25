@@ -75,63 +75,54 @@ export interface WorshipSong {
 }
 
 export type MinistryRosterCategory =
-  | 'worship'
-  | 'sunday-school-fellowship'
-  | 'prayer-bible'
-  | 'media-tech'
-  | 'hospitality-logistics'
-  | 'outreach';
+  | 'choir'
+  | 'small-group'
+  | 'youth'
+  | 'sunday-school';
 
 export const MINISTRY_CATEGORY_OPTIONS: { id: MinistryRosterCategory; label: string }[] = [
-  { id: 'worship', label: '讲台与敬拜' },
-  { id: 'prayer-bible', label: '祷告献诗读经' },
-  { id: 'media-tech', label: '音画影音技术' },
-  { id: 'hospitality-logistics', label: '接待与后勤' },
-  { id: 'sunday-school-fellowship', label: '主日学与团契' },
-  { id: 'outreach', label: '外派事工' },
+  { id: 'choir', label: '敬拜诗班' },
+  { id: 'small-group', label: '幸福小组' },
+  { id: 'youth', label: '青年团契' },
+  { id: 'sunday-school', label: '主日学' },
 ];
 
 export const MINISTRY_CATEGORY_ORDER: Record<MinistryRosterCategory, number> = {
-  worship: 0,
-  'prayer-bible': 1,
-  'media-tech': 2,
-  'hospitality-logistics': 3,
-  'sunday-school-fellowship': 4,
-  outreach: 5,
+  choir: 0,
+  'small-group': 1,
+  youth: 2,
+  'sunday-school': 3,
 };
 
 export const MINISTRY_CATEGORY_LABELS: Record<MinistryRosterCategory, string> = {
-  worship: '讲台与敬拜',
-  'prayer-bible': '祷告献诗读经',
-  'media-tech': '音画影音技术',
-  'hospitality-logistics': '接待与后勤',
-  'sunday-school-fellowship': '主日学与团契',
-  outreach: '外派事工',
+  choir: '敬拜诗班',
+  'small-group': '幸福小组',
+  youth: '青年团契',
+  'sunday-school': '主日学',
 };
 
 export function normalizeMinistryCategory(category: unknown): MinistryRosterCategory {
   switch (category) {
-    case 'worship':
-    case 'sunday-school-fellowship':
-    case 'prayer-bible':
-    case 'media-tech':
-    case 'hospitality-logistics':
-    case 'outreach':
-      return category;
+    case 'choir':
+    case 'small-group':
+    case 'youth':
     case 'sunday-school':
+      return category;
     case 'fellowship':
-      return 'sunday-school-fellowship';
+    case 'care':
+      return 'small-group';
     default:
-      return 'worship';
+      return 'choir';
   }
 }
 
 export interface MinistryRosterItem {
   id: string;
   category: MinistryRosterCategory;
-  role: string;
-  thisWeek: string;
-  nextWeek: string;
+  title: string;
+  image: string;
+  schedule: string;
+  description: string;
   sortOrder: number;
 }
 
@@ -149,7 +140,7 @@ export interface WeekdayMinistry {
 export interface AnnouncementItem {
   id: string;
   category: '特别聚会' | '洗礼与课程' | '社区关怀' | '诗班与事奉';
-  date: string;
+  date?: string;
   title: string;
   summary: string;
   time: string;
@@ -165,7 +156,7 @@ export interface VisitorRequestItem {
   id: string;
   name: string;
   contact: string;
-  intent: string;
+  intent?: string;
   message: string;
   status: 'pending' | 'contacted' | 'archived';
   adminNote?: string;
@@ -493,140 +484,58 @@ export const WORSHIP_SONGS: WorshipSong[] = [
 
 export const SUNDAY_MINISTRY_ROSTER: MinistryRosterItem[] = [
   {
-    id: 'w1',
-    category: 'worship',
-    role: '讲台证道',
-    thisWeek: '林恩典 牧师',
-    nextWeek: '赵信义 长老',
+    id: 'moment-1',
+    category: 'choir',
+    title: '诗班献诗与声部排练',
+    image: CHURCH_IMAGES.annChoir,
+    schedule: '每周主日 13:15 圣殿诗班排练室',
+    description: '主日崇拜前，诗班弟兄姊妹同心合意进行声部练习与灵命预备，用歌声与赞美荣耀主圣名，带领会众进入神至圣的同在。',
     sortOrder: 1,
   },
   {
-    id: 'w2',
-    category: 'worship',
-    role: '主日司会 / 领祷',
-    thisWeek: '周以撒 传道',
-    nextWeek: '许保罗 长老',
+    id: 'moment-2',
+    category: 'small-group',
+    title: '恩典查经与生命交通',
+    image: CHURCH_IMAGES.annSeekers,
+    schedule: '每周三 / 周五晚 20:00 线上与副堂',
+    description: '周间晚上，弟兄姊妹围坐在一起深入查考圣经话语，结合生活实际分享信仰领悟，彼此代祷、互相担当。',
     sortOrder: 2,
   },
   {
-    id: 'w3',
-    category: 'worship',
-    role: '敬拜领诗与赞美小组',
-    thisWeek: '苏米利暗 姊妹（领诗）· 诗班一组',
-    nextWeek: '李约拿 弟兄（领诗）· 敬拜二组',
+    id: 'moment-3',
+    category: 'youth',
+    title: '青年团契信仰分享会',
+    image: CHURCH_IMAGES.fellowshipIntro,
+    schedule: '隔周六下午 16:30 青年活动中心',
+    description: '年轻一代在基督里畅谈信仰与人生抉择，在真道上互相造就，建立充满活力与属灵支持的青春伙伴关系。',
     sortOrder: 3,
   },
   {
-    id: 'w4',
-    category: 'worship',
-    role: '司琴与乐队配搭',
-    thisWeek: '钢琴：王路得 · 大提琴：陈约瑟',
-    nextWeek: '钢琴：吴以斯帖 · 吉他：郑马可',
+    id: 'moment-4',
+    category: 'sunday-school',
+    title: '主日学儿童圣经课堂',
+    image: CHURCH_IMAGES.annBaptism,
+    schedule: '每周主日 14:30 幼小部教室',
+    description: '在活泼生动的圣经故事、诗歌与手工活动中，引导下一代从小认识创造宇宙真神，在主爱中扎根成长。',
     sortOrder: 4,
   },
   {
-    id: 'p1',
-    category: 'prayer-bible',
-    role: '主日晨更祷告与代祷守望',
-    thisWeek: '陈雅惠 牧师 · 李约拿 弟兄',
-    nextWeek: '许保罗 长老 · 苏米利暗 姊妹',
+    id: 'moment-5',
+    category: 'small-group',
+    title: '幸福小组聚会与交通',
+    image: CHURCH_IMAGES.annThanksgiving,
+    schedule: '每周主日崇拜后 16:00 餐厅',
+    description: '主日崇拜结束后，大家一同在幸福小组中享用爱宴交通，在轻松喜乐的氛围中嘘寒问暖，增进基督里一灵同体的深厚情谊。',
     sortOrder: 5,
   },
   {
-    id: 'p2',
-    category: 'prayer-bible',
-    role: '会众读经与启应经文领读',
-    thisWeek: '张书亚 弟兄',
-    nextWeek: '王路得 姊妹',
+    id: 'moment-6',
+    category: 'youth',
+    title: '教会事工与爱心关怀',
+    image: CHURCH_IMAGES.annCare,
+    schedule: '每月第四周六爱心行动',
+    description: '践行基督舍己的爱心，同工与青年团队定期关怀社区长者与有需要的家庭，送去祝福与切实的帮助。',
     sortOrder: 6,
-  },
-  {
-    id: 'w5',
-    category: 'media-tech',
-    role: '音控、字幕与直播同工',
-    thisWeek: '音控：刘巴拿巴 · 投影：沈马利亚',
-    nextWeek: '音控：郭提摩太 · 投影：林百基拉',
-    sortOrder: 7,
-  },
-  {
-    id: 'w6',
-    category: 'hospitality-logistics',
-    role: '迎新招待与奉献统计',
-    thisWeek: '高亚居拉 夫妇 · 孙马大 姊妹',
-    nextWeek: '杨腓力 弟兄 · 蔡吕底亚 姊妹',
-    sortOrder: 8,
-  },
-  {
-    id: 'w7',
-    category: 'hospitality-logistics',
-    role: '主日爱筵膳食预备',
-    thisWeek: '迦南一组（负责人：何司提反）',
-    nextWeek: '恩慈小组（负责人：徐多加）',
-    sortOrder: 9,
-  },
-  {
-    id: 's1',
-    category: 'sunday-school-fellowship',
-    role: '成人主日学（《罗马书》研经班）',
-    thisWeek: '张书亚 弟兄（第 7 课：圣灵里的生命）',
-    nextWeek: '张书亚 弟兄（第 8 课：神的拣选与怜悯）',
-    sortOrder: 10,
-  },
-  {
-    id: 's2',
-    category: 'sunday-school-fellowship',
-    role: '新生命慕道班（福音初探）',
-    thisWeek: '陈雅惠 牧师（第 3 课：认识耶稣是谁）',
-    nextWeek: '陈雅惠 牧师（第 4 课：十字架与复活）',
-    sortOrder: 11,
-  },
-  {
-    id: 's3',
-    category: 'sunday-school-fellowship',
-    role: '青少年主日学（12–17 岁）',
-    thisWeek: '周以撒 传道 · 助教：陆约书亚',
-    nextWeek: '周以撒 传道 · 助教：方以琳',
-    sortOrder: 12,
-  },
-  {
-    id: 's4',
-    category: 'sunday-school-fellowship',
-    role: '儿童主日学（小羊班 7–11 岁 / 幼幼班 3–6 岁）',
-    thisWeek: '小羊班：唐哈拿 · 幼幼班：袁拉结 / 潘撒母耳',
-    nextWeek: '小羊班：钱以利沙伯 · 幼幼班：董底波拉 / 马提多',
-    sortOrder: 13,
-  },
-  {
-    id: 'f1',
-    category: 'sunday-school-fellowship',
-    role: '常青长辈团契（60 岁以上）',
-    thisWeek: '领会：许保罗 长老（诗歌见证与代祷）',
-    nextWeek: '领会：冯伯妮基 姊妹（冬季养生与属灵操练）',
-    sortOrder: 14,
-  },
-  {
-    id: 'f2',
-    category: 'sunday-school-fellowship',
-    role: '迦南夫妻家庭团契',
-    thisWeek: '带领：林恩典 牧师夫妇（家庭祭坛实操）',
-    nextWeek: '本月休会一次（各家庭回家探亲与亲子时光）',
-    sortOrder: 15,
-  },
-  {
-    id: 'f3',
-    category: 'sunday-school-fellowship',
-    role: '以勒青年与职场团契',
-    thisWeek: '赵信义 长老（职场伦理：工作与召命）',
-    nextWeek: '周以撒 传道（小组分享与户外徒步预告）',
-    sortOrder: 16,
-  },
-  {
-    id: 'o1',
-    category: 'outreach',
-    role: '外派证道与友会宣教配搭',
-    thisWeek: '赵信义 长老（佛罗伦萨堂点证道）',
-    nextWeek: '周以撒 传道（周边学生团契服事）',
-    sortOrder: 17,
   },
 ];
 

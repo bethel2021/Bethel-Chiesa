@@ -202,21 +202,20 @@ service cloud.firestore {
 
     function isValidMinistryRoster(data) {
       return data.keys().hasAll([
-        'category', 'role', 'thisWeek', 'nextWeek', 'sortOrder', 'updatedAt'
+        'category', 'title', 'image', 'schedule', 'description', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'category', 'role', 'thisWeek', 'nextWeek', 'sortOrder', 'updatedAt'
+        'category', 'title', 'image', 'schedule', 'description', 'sortOrder', 'updatedAt'
       ])
       && data.category in [
-        'worship',
-        'sunday-school-fellowship',
-        'prayer-bible',
-        'media-tech',
-        'hospitality-logistics',
-        'outreach'
+        'choir',
+        'small-group',
+        'youth',
+        'sunday-school'
       ]
-      && isStringBounds(data.role, 1, 140)
-      && isStringBounds(data.thisWeek, 1, 200)
-      && isStringBounds(data.nextWeek, 1, 200)
+      && isStringBounds(data.title, 1, 140)
+      && isValidImageRef(data.image, 1, 480000)
+      && isStringBounds(data.schedule, 0, 140)
+      && isStringBounds(data.description, 0, 500)
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000
       && data.updatedAt == request.time;
     }
@@ -239,12 +238,12 @@ service cloud.firestore {
 
     function isValidAnnouncement(data) {
       return data.keys().hasAll([
-        'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
+        'category', 'title', 'summary', 'time', 'location', 'contact', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
         'category', 'date', 'title', 'summary', 'time', 'location', 'contact', 'image', 'isFeatured', 'details', 'sortOrder', 'updatedAt'
       ])
       && data.category in ['特别聚会', '洗礼与课程', '社区关怀', '诗班与事奉']
-      && isStringBounds(data.date, 1, 80)
+      && (!('date' in data) || isStringBounds(data.date, 0, 80))
       && isStringBounds(data.title, 1, 160)
       && isStringBounds(data.summary, 1, 400)
       && isStringBounds(data.time, 1, 100)
@@ -258,22 +257,22 @@ service cloud.firestore {
     }
 
     function isValidVisitorRequestCreate(data) {
-      return data.keys().hasAll(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
+      return data.keys().hasAll(['name', 'contact', 'message', 'status', 'createdAt'])
       && data.keys().hasOnly(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
       && isStringBounds(data.name, 1, 80)
       && isStringBounds(data.contact, 5, 140)
-      && isStringBounds(data.intent, 1, 100)
+      && (!('intent' in data) || isStringBounds(data.intent, 0, 100))
       && data.message is string && data.message.size() <= 1000
       && data.status == 'pending'
       && data.createdAt == request.time;
     }
 
     function isValidVisitorRequestUpdate(data) {
-      return data.keys().hasAll(['name', 'contact', 'intent', 'message', 'status', 'createdAt'])
+      return data.keys().hasAll(['name', 'contact', 'message', 'status', 'createdAt'])
       && data.keys().hasOnly(['name', 'contact', 'intent', 'message', 'status', 'adminNote', 'createdAt'])
       && isStringBounds(data.name, 1, 80)
       && isStringBounds(data.contact, 5, 140)
-      && isStringBounds(data.intent, 1, 100)
+      && (!('intent' in data) || isStringBounds(data.intent, 0, 100))
       && data.message is string && data.message.size() <= 1000
       && data.status in ['pending', 'contacted', 'archived']
       && (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 500))

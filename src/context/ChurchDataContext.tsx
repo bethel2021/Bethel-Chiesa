@@ -118,7 +118,7 @@ export interface PublicChurchDataValue {
   submitVisitorRequest: (payload: {
     name: string;
     contact: string;
-    intent: string;
+    intent?: string;
     message: string;
   }) => Promise<void>;
   refreshPublicSnapshot: () => Promise<void>;
@@ -1170,21 +1170,39 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: MinistryRosterItem) => {
       const L = FIELD_LIMITS.ministryRoster;
       const id = item.id || makeDocId('roster');
-      await saveSortedCollectionDoc('ministry_roster', 'ministryRoster', {
+      const prevMoment = latestStateRef.current.ministryRoster.find((m) => m.id === id);
+      let cleaned: MinistryRosterItem = {
         id,
         category: normalizeMinistryCategory(item.category),
-        role: clampStr(item.role, L.role),
-        thisWeek: clampStr(item.thisWeek, L.thisWeek),
-        nextWeek: clampStr(item.nextWeek, L.nextWeek),
+        title: clampStr(item.title, L.title),
+        image: '',
+        schedule: clampStr(item.schedule, L.schedule),
+        description: clampStr(item.description, L.description),
         sortOrder: clampSortOrder(item.sortOrder, 0),
-      });
+      };
+      try {
+        const resolvedImage = item.image
+          ? await persistLosslessImageIfNeeded(item.image, 200_000)
+          : '';
+        cleaned = {
+          ...cleaned,
+          image: sanitizeImageRef(resolvedImage, L.image),
+        };
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `ministry_roster/${id}`);
+      }
+      await saveSortedCollectionDoc('ministry_roster', 'ministryRoster', cleaned);
+      cleanupReplacedMediaUri(prevMoment?.image, cleaned.image);
     },
     [saveSortedCollectionDoc]
   );
 
   const deleteMinistryRoster = useCallback(
-    (id: string) =>
-      deleteSortedCollectionDoc<MinistryRosterItem>('ministry_roster', 'ministryRoster', id),
+    async (id: string) => {
+      const prevMoment = latestStateRef.current.ministryRoster.find((m) => m.id === id);
+      await deleteSortedCollectionDoc<MinistryRosterItem>('ministry_roster', 'ministryRoster', id);
+      cleanupReplacedMediaUri(prevMoment?.image, '');
+    },
     [deleteSortedCollectionDoc]
   );
 
@@ -1277,10 +1295,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         const resolvedImage = item.image
           ? await persistLosslessImageIfNeeded(item.image, 60_000)
           : '';
+        const cleanDate = clampStr(item.date, L.date);
         cleaned = {
           id,
           category: item.category,
-          date: clampStr(item.date, L.date),
+          ...(cleanDate ? { date: cleanDate } : {}),
           title: clampStr(item.title, L.title),
           summary: clampStr(item.summary, L.summary),
           time: clampStr(item.time, L.time),
@@ -1313,13 +1332,14 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   );
 
   const submitVisitorRequest = useCallback(
-    async (payload: { name: string; contact: string; intent: string; message: string }) => {
+    async (payload: { name: string; contact: string; intent?: string; message: string }) => {
       const L = FIELD_LIMITS.visitorRequest;
+      const cleanIntent = payload.intent ? clampStr(payload.intent, L.intent) : '';
       try {
         await addDoc(collection(db, 'visitor_requests'), {
           name: clampStr(payload.name, L.name),
           contact: clampStr(payload.contact, L.contact),
-          intent: clampStr(payload.intent, L.intent),
+          ...(cleanIntent ? { intent: cleanIntent } : {}),
           message: clampStr(payload.message, L.message),
           status: 'pending',
           createdAt: serverTimestamp(),

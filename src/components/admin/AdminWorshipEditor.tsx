@@ -191,6 +191,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
 
         {editingSong && (
           <ModalDialog
+            disableDismiss
             labelledBy="song-modal-title"
             maxWidthClass="max-w-lg"
             overlayClassName="bg-[#141210]/55"
@@ -485,6 +486,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       {/* Time Editor Modal */}
       {editingTime && (
         <ModalDialog
+          disableDismiss
           labelledBy="time-modal-title"
           maxWidthClass="max-w-lg"
           overlayClassName="bg-[#141210]/55"
@@ -585,6 +587,7 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       {/* Step Editor Modal */}
       {editingStep && (
         <ModalDialog
+          disableDismiss
           labelledBy="step-modal-title"
           maxWidthClass="max-w-lg"
           overlayClassName="bg-[#141210]/55"

@@ -15,6 +15,7 @@ interface SafeImageProps {
   fallbackLabel?: string;
   priority?: boolean;
   defer?: boolean;
+  fitMode?: 'cover' | 'contain' | 'auto-contain-portrait';
 }
 
 function isSafeDirectImageSrc(src: string): boolean {
@@ -30,6 +31,7 @@ export function SafeImage({
   fallbackLabel,
   priority = false,
   defer = false,
+  fitMode,
 }: SafeImageProps) {
   const trimmed = defer ? '' : String(src ?? '').trim();
   const mediaRef = isMediaUri(trimmed) ? trimmed : '';
@@ -41,6 +43,7 @@ export function SafeImage({
     mediaRef ? getCachedMediaObjectUrl(mediaRef) || '' : ''
   );
   const [hasError, setHasError] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
 
   useEffect(() => {
     if (priority || inView) return;
@@ -65,6 +68,7 @@ export function SafeImage({
 
   useEffect(() => {
     setHasError(false);
+    setIsPortrait(false);
 
     if (!mediaRef) {
       setResolvedMediaUrl('');
@@ -138,16 +142,38 @@ export function SafeImage({
     );
   }
 
+  const resolvedFitClass =
+    fitMode === 'contain' || (fitMode === 'auto-contain-portrait' && isPortrait)
+      ? 'object-contain object-center'
+      : fitMode
+      ? 'object-cover object-center'
+      : '';
+
+  const imgClassName = resolvedFitClass
+    ? `${resolvedFitClass} ${className}`
+    : className;
+
+  const updateOrientation = (img: HTMLImageElement | null) => {
+    if (!img || !img.naturalWidth || !img.naturalHeight) return;
+    setIsPortrait(img.naturalHeight > img.naturalWidth);
+  };
+
   return (
     <img
+      ref={(node) => {
+        if (node?.complete) {
+          updateOrientation(node);
+        }
+      }}
       src={effectiveSrc}
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}
       decoding={priority ? 'sync' : 'async'}
       fetchPriority={priority ? 'high' : 'low'}
       referrerPolicy="no-referrer"
+      onLoad={(e) => updateOrientation(e.currentTarget)}
       onError={() => setHasError(true)}
-      className={className}
+      className={imgClassName}
     />
   );
 }

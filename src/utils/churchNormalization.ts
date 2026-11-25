@@ -138,14 +138,19 @@ export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCowor
 
 export function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
   const L = FIELD_LIMITS.ministryRoster;
-  return list.map((item, idx) => ({
-    id: String(item.id || `roster-${idx + 1}`),
-    category: normalizeMinistryCategory(item.category),
-    role: clampStr(item.role, L.role),
-    thisWeek: clampStr(item.thisWeek, L.thisWeek),
-    nextWeek: clampStr(item.nextWeek, L.nextWeek),
-    sortOrder: clampSortOrder(item.sortOrder, idx + 1),
-  }));
+  return list.map((item, idx) => {
+    const rawImg = String(item.image || '');
+    const safeImg = filterSafeImageSrc(rawImg);
+    return {
+      id: String(item.id || `moment-${idx + 1}`),
+      category: normalizeMinistryCategory(item.category),
+      title: clampStr(String(item.title || (item as any).role || ''), L.title),
+      image: safeImg || '/src/assets/images/ann_christmas_choir_1795542572912.jpg',
+      schedule: clampStr(item.schedule, L.schedule),
+      description: clampStr(String(item.description || (item as any).thisWeek || ''), L.description),
+      sortOrder: clampSortOrder(item.sortOrder, idx + 1),
+    };
+  });
 }
 
 export function cleanWeekdayMinistry(
@@ -247,10 +252,12 @@ export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): Annou
           .filter(Boolean)
       : [];
 
+    const cleanDate = clampStr(item.date, L.date);
+
     return {
       id,
       category,
-      date: clampStr(item.date, L.date),
+      ...(cleanDate ? { date: cleanDate } : {}),
       title: clampStr(item.title, L.title),
       summary: clampStr(item.summary, L.summary),
       time: clampStr(item.time, L.time),

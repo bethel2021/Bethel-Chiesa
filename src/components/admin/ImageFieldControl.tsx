@@ -13,6 +13,7 @@ interface ImageFieldControlProps {
   defaultValue?: string;
   allowClear?: boolean;
   previewAspect?: 'landscape' | 'portrait' | 'square';
+  fitMode?: 'cover' | 'contain' | 'auto-contain-portrait';
   hint?: string;
   required?: boolean;
 }
@@ -89,6 +90,7 @@ export function ImageFieldControl({
   defaultValue,
   allowClear = false,
   previewAspect = 'landscape',
+  fitMode = 'cover',
   hint,
   required = false,
 }: ImageFieldControlProps) {
@@ -149,14 +151,15 @@ export function ImageFieldControl({
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3.5">
         <div
-          className={`${previewFrameClass} overflow-hidden border border-[#DFD8C8] bg-[#EFEAE0] shrink-0`}
+          className={`${previewFrameClass} overflow-hidden border border-[#DFD8C8] bg-[#FAF8F4] shrink-0`}
         >
           {value ? (
             <SafeImage
               src={value}
               alt={label}
               fallbackLabel="暂无预览"
-              className="w-full h-full object-cover object-center"
+              fitMode={fitMode}
+              className="w-full h-full"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-[11px] text-[#78716C]">

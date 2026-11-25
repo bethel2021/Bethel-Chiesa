@@ -6,6 +6,7 @@ import {
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
 import {
+  CHURCH_IMAGES,
   MINISTRY_CATEGORY_LABELS,
   MINISTRY_CATEGORY_OPTIONS,
   MINISTRY_CATEGORY_ORDER,
@@ -14,6 +15,7 @@ import {
   type WeekdayMinistry,
 } from '../../data/churchData';
 import { ModalDialog } from '../ModalDialog';
+import { ImageFieldControl } from './ImageFieldControl';
 import {
   AdminPanelHeader,
   ConfirmDeleteButton,
@@ -25,9 +27,8 @@ import {
 } from './AdminSharedUI';
 
 export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
-  const { churchInfo, ministryRoster, weekdayMinistries } = usePublicChurchData();
+  const { ministryRoster, weekdayMinistries } = usePublicChurchData();
   const {
-    saveChurchInfo,
     saveMinistryRoster,
     deleteMinistryRoster,
     saveWeekdayMinistry,
@@ -39,14 +40,11 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
   );
   const [saving, setSaving] = useState(false);
 
-  const [thisWeekLabel, setThisWeekLabel] = useState(churchInfo.thisWeekLabel);
-  const [nextWeekLabel, setNextWeekLabel] = useState(churchInfo.nextWeekLabel);
-
   const [filterCat, setFilterCat] = useState<'all' | MinistryRosterCategory>('all');
   const [editingRoster, setEditingRoster] = useState<MinistryRosterItem | null>(null);
   const [editingWeekday, setEditingWeekday] = useState<WeekdayMinistry | null>(null);
 
-  const sortedRoster = useMemo(
+  const sortedMoments = useMemo(
     () =>
       [...ministryRoster].sort((a, b) => {
         const catDiff =
@@ -57,31 +55,13 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     [ministryRoster]
   );
 
-  const visibleRoster = useMemo(
+  const visibleMoments = useMemo(
     () =>
       filterCat === 'all'
-        ? sortedRoster
-        : sortedRoster.filter((item) => item.category === filterCat),
-    [filterCat, sortedRoster]
+        ? sortedMoments
+        : sortedMoments.filter((item) => item.category === filterCat),
+    [filterCat, sortedMoments]
   );
-
-  useEffect(() => {
-    setThisWeekLabel(churchInfo.thisWeekLabel);
-    setNextWeekLabel(churchInfo.nextWeekLabel);
-  }, [churchInfo]);
-
-  const handleSaveLabels = async (e: FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await saveChurchInfo({ ...churchInfo, thisWeekLabel, nextWeekLabel });
-      setStatus({ type: 'success', message: '本周与下周轮值日期标签已更新。' });
-    } catch (err) {
-      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请重试。') });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSaveRoster = async (e: FormEvent) => {
     e.preventDefault();
@@ -90,7 +70,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     try {
       await saveMinistryRoster(editingRoster);
       setEditingRoster(null);
-      setStatus({ type: 'success', message: '主日事工岗位安排已保存。' });
+      setStatus({ type: 'success', message: '精彩瞬间照片与说明已保存。' });
     } catch (err) {
       setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请重试。') });
     } finally {
@@ -118,7 +98,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       <div className="space-y-8">
         <AdminPanelHeader
           title="周间事工管理"
-          description="编辑守望祷告、乐队排练、诗班学习、查经聚会、敬拜练习及迦南诗班等聚会安排。"
+          description="编辑守望祷告、乐队排练、诗班学习、查经聚会及团契活动等聚会安排。"
           action={
             <button
               type="button"
@@ -207,6 +187,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
 
         {editingWeekday && (
           <ModalDialog
+            disableDismiss
             labelledBy="weekday-modal-title"
             maxWidthClass="max-w-lg"
             overlayClassName="bg-[#141210]/55"
@@ -345,75 +326,36 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
   return (
     <div className="space-y-8">
       <AdminPanelHeader
-        title="主日事工岗位安排（含主日学与团契）"
-        description="管理讲台与敬拜、祷告献诗读经、音画影音技术、接待与后勤、主日学与团契及外派事工轮值表，并可每周更新轮值日期标题。"
+        title="精彩瞬间展示与照片管理"
+        description="管理教会小组、诗班、团契及主日学等活动精彩瞬间照片、标题、时间与文字说明。"
         action={
           <button
             type="button"
             onClick={() =>
               setEditingRoster({
                 id: '',
-                category: filterCat === 'all' ? 'worship' : filterCat,
-                role: '',
-                thisWeek: '',
-                nextWeek: '',
+                category: filterCat === 'all' ? 'choir' : filterCat,
+                title: '',
+                image: CHURCH_IMAGES.annChoir,
+                schedule: '每周主日',
+                description: '',
                 sortOrder: ministryRoster.length + 1,
               })
             }
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            新增岗位 / 班级
+            新增精彩瞬间照片
           </button>
         }
       />
 
       <StatusBanner status={status} onClear={() => setStatus(null)} />
 
-      {/* Week Label Quick Bar */}
-      <form
-        onSubmit={handleSaveLabels}
-        className="bg-white border border-[#E5DFD3] rounded-lg p-5 grid grid-cols-1 md:grid-cols-12 gap-4 items-end"
-      >
-        <div className="md:col-span-5">
-          <FieldLabel label="本周轮值日期标题">
-            <input
-              type="text"
-              required
-              maxLength={FIELD_LIMITS.churchInfo.thisWeekLabel}
-              value={thisWeekLabel}
-              onChange={(e) => setThisWeekLabel(e.target.value)}
-              className={inputClass}
-            />
-          </FieldLabel>
-        </div>
-        <div className="md:col-span-5">
-          <FieldLabel label="下周轮值日期标题">
-            <input
-              type="text"
-              required
-              maxLength={FIELD_LIMITS.churchInfo.nextWeekLabel}
-              value={nextWeekLabel}
-              onChange={(e) => setNextWeekLabel(e.target.value)}
-              className={inputClass}
-            />
-          </FieldLabel>
-        </div>
-        <div className="md:col-span-2 flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
-          >
-            更新日期标签
-          </button>
-        </div>
-      </form>
-
       {/* Category Tabs */}
       <div className="flex flex-wrap gap-1.5">
         {(
-          [{ id: 'all', label: '全部岗位' }, ...MINISTRY_CATEGORY_OPTIONS] as {
+          [{ id: 'all', label: '全部精彩瞬间' }, ...MINISTRY_CATEGORY_OPTIONS] as {
             id: 'all' | MinistryRosterCategory;
             label: string;
           }[]
@@ -433,27 +375,40 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
         ))}
       </div>
 
-      {/* Roster Table */}
+      {/* Moments List Table */}
       <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
-        {visibleRoster.length === 0 ? (
+        {visibleMoments.length === 0 ? (
           <div className="px-6 py-8 text-center text-xs text-[#78716C]">
-            当前分类暂无岗位记录，点击右上角“新增岗位 / 班级”添加。
+            当前分类暂无精彩瞬间照片，点击右上角“新增精彩瞬间照片”添加。
           </div>
         ) : (
-          visibleRoster.map((item) => (
+          visibleMoments.map((item) => (
             <div
               key={item.id}
-              className="px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+              className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
-              <div className="space-y-1 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
-                  <span className="font-mono tabular-nums">#{item.sortOrder}</span>
-                  <span>{MINISTRY_CATEGORY_LABELS[item.category] ?? '讲台与敬拜'}</span>
+              <div className="flex items-center gap-4 flex-1">
+                <div className="w-20 h-14 rounded-md overflow-hidden bg-[#EFEAE0] shrink-0 border border-[#D6CFC2]">
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-                <h3 className="text-sm font-semibold text-[#1C1917]">{item.role}</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                  <p className="text-[#1E3A5F]">本周：{item.thisWeek}</p>
-                  <p className="text-[#57534E]">下周：{item.nextWeek}</p>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
+                    <span className="font-mono tabular-nums">#{item.sortOrder}</span>
+                    <span className="px-2 py-0.5 bg-[#F3EFE6] text-[#1E3A5F] rounded font-medium">
+                      {MINISTRY_CATEGORY_LABELS[item.category] ?? '精彩瞬间'}
+                    </span>
+                    {item.schedule && (
+                      <span className="font-mono text-[11px] text-[#57534E]">{item.schedule}</span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-semibold text-[#1C1917]">{item.title}</h3>
+                  {item.description && (
+                    <p className="text-xs text-[#57534E] line-clamp-2">{item.description}</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -470,11 +425,11 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                     setStatus(null);
                     try {
                       await deleteMinistryRoster(item.id);
-                      setStatus({ type: 'success', message: `已删除「${item.role}」。` });
+                      setStatus({ type: 'success', message: `已删除「${item.title}」。` });
                     } catch (err) {
                       setStatus({
                         type: 'error',
-                        message: getFriendlyAdminError(err, '删除事工岗位失败，请重试。'),
+                        message: getFriendlyAdminError(err, '删除照片失败，请重试。'),
                       });
                     }
                   }}
@@ -487,7 +442,8 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
 
       {editingRoster && (
         <ModalDialog
-          labelledBy="roster-modal-title"
+          disableDismiss
+          labelledBy="moment-modal-title"
           maxWidthClass="max-w-lg"
           overlayClassName="bg-[#141210]/55"
           containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
@@ -496,10 +452,10 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
           <form onSubmit={handleSaveRoster} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
               <h3
-                id="roster-modal-title"
+                id="moment-modal-title"
                 className="font-editorial text-xl font-semibold text-[#1C1917]"
               >
-                {editingRoster.id ? '编辑事工岗位' : '新增事工岗位'}
+                {editingRoster.id ? '编辑精彩瞬间照片' : '新增精彩瞬间照片'}
               </h3>
               <button
                 type="button"
@@ -512,7 +468,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <FieldLabel label="事工分类">
+              <FieldLabel label="活动分类">
                 <select
                   value={editingRoster.category}
                   onChange={(e) =>
@@ -547,36 +503,46 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               </FieldLabel>
             </div>
 
-            <FieldLabel label="岗位 / 班级 / 团契名称 *">
+            <FieldLabel label="照片标题 *">
               <input
                 type="text"
                 required
-                maxLength={FIELD_LIMITS.ministryRoster.role}
-                value={editingRoster.role}
-                onChange={(e) => setEditingRoster({ ...editingRoster, role: e.target.value })}
+                maxLength={FIELD_LIMITS.ministryRoster.title}
+                value={editingRoster.title}
+                onChange={(e) => setEditingRoster({ ...editingRoster, title: e.target.value })}
+                placeholder="例如：诗班献诗与声部排练"
                 className={inputClass}
               />
             </FieldLabel>
 
-            <FieldLabel label={`本周服事人员（${thisWeekLabel}） *`}>
+            <FieldLabel label="时间 / 地点标签（可选）" hint="例如：每周主日 13:15 圣殿">
               <input
                 type="text"
-                required
-                maxLength={FIELD_LIMITS.ministryRoster.thisWeek}
-                value={editingRoster.thisWeek}
-                onChange={(e) => setEditingRoster({ ...editingRoster, thisWeek: e.target.value })}
+                maxLength={FIELD_LIMITS.ministryRoster.schedule}
+                value={editingRoster.schedule}
+                onChange={(e) => setEditingRoster({ ...editingRoster, schedule: e.target.value })}
+                placeholder="例如：每周主日 13:15 圣殿"
                 className={inputClass}
               />
             </FieldLabel>
 
-            <FieldLabel label={`下周服事人员（${nextWeekLabel}） *`}>
-              <input
-                type="text"
-                required
-                maxLength={FIELD_LIMITS.ministryRoster.nextWeek}
-                value={editingRoster.nextWeek}
-                onChange={(e) => setEditingRoster({ ...editingRoster, nextWeek: e.target.value })}
-                className={inputClass}
+            <ImageFieldControl
+              label="活动照片"
+              value={editingRoster.image}
+              onChange={(nextImg) => setEditingRoster({ ...editingRoster, image: nextImg })}
+              previewAspect="landscape"
+              required
+              hint="支持本地原图上传（自动优化）或输入外链网址"
+            />
+
+            <FieldLabel label="活动说明 / 见证文字（可选）">
+              <textarea
+                rows={3}
+                maxLength={FIELD_LIMITS.ministryRoster.description}
+                value={editingRoster.description}
+                onChange={(e) => setEditingRoster({ ...editingRoster, description: e.target.value })}
+                placeholder="记录活动背后的美好见证或说明…"
+                className={textareaClass}
               />
             </FieldLabel>
 
