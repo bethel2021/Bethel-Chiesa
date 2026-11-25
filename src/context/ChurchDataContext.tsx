@@ -1417,19 +1417,36 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const submitVisitorRequest = useCallback(
     async (payload: { name: string; contact: string; intent?: string; message: string }) => {
       const L = FIELD_LIMITS.visitorRequest;
+      const cleanName = clampStr(payload.name, L.name);
+      const cleanContact = clampStr(payload.contact, L.contact);
       const cleanIntent = payload.intent ? clampStr(payload.intent, L.intent) : '';
+      const cleanMessage = clampStr(payload.message, L.message);
       try {
         await addDoc(collection(db, 'visitor_requests'), {
-          name: clampStr(payload.name, L.name),
-          contact: clampStr(payload.contact, L.contact),
+          name: cleanName,
+          contact: cleanContact,
           ...(cleanIntent ? { intent: cleanIntent } : {}),
-          message: clampStr(payload.message, L.message),
+          message: cleanMessage,
           status: 'pending',
           createdAt: serverTimestamp(),
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.CREATE, 'visitor_requests');
       }
+
+      // Non-blocking server email push: Firestore persistence has already succeeded
+      void fetch('/api/notify-visitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          contact: cleanContact,
+          ...(cleanIntent ? { intent: cleanIntent } : {}),
+          message: cleanMessage,
+        }),
+      }).catch(() => {
+        // Ignore network/notification errors so visitor submission experience stays seamless
+      });
     },
     []
   );

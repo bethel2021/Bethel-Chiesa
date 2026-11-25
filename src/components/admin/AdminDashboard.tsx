@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
@@ -106,6 +106,10 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const currentCloudTheme = normalizeSiteTheme(churchInfo.siteTheme);
   const currentThemeName =
     SITE_THEMES.find((item) => item.id === currentCloudTheme)?.name ?? '经典';
+  const pendingVisitorCount = useMemo(
+    () => visitorRequests.filter((req) => req.status === 'pending').length,
+    [visitorRequests]
+  );
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -334,19 +338,31 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           {visibleSidebarItems.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
+            const showPendingBadge = item.id === 'visitors' && pendingVisitorCount > 0;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
                   active
                     ? 'bg-[#1E3A5F] text-white'
                     : 'text-[#57534E] hover:bg-[#E7E0D3]/60 hover:text-[#1C1917]'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {showPendingBadge && (
+                  <span
+                    className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full tabular-nums shrink-0 ${
+                      active ? 'bg-white text-[#1E3A5F]' : 'bg-[#9A3412] text-white'
+                    }`}
+                  >
+                    {pendingVisitorCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -412,6 +428,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           <div className="lg:hidden bg-[#F3EFE6] border-b border-[#E5DFD3] px-6 py-4 space-y-1">
             {visibleSidebarItems.map((item) => {
               const Icon = item.icon;
+              const showPendingBadge = item.id === 'visitors' && pendingVisitorCount > 0;
               return (
                 <button
                   key={item.id}
@@ -420,14 +437,25 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     setActiveTab(item.id);
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-md ${
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-medium rounded-md ${
                     activeTab === item.id
                       ? 'bg-[#1E3A5F] text-white'
                       : 'text-[#57534E] hover:bg-[#E7E0D3]'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
+                  <span className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </span>
+                  {showPendingBadge && (
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full tabular-nums ${
+                        activeTab === item.id ? 'bg-white text-[#1E3A5F]' : 'bg-[#9A3412] text-white'
+                      }`}
+                    >
+                      {pendingVisitorCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -553,8 +581,11 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   {
                     tab: 'visitors' as AdminTab,
                     label: '来访与代祷留言',
-                    count: `${visitorRequests.length} 条记录`,
-                    sub: '待跟进与权限分配',
+                    count:
+                      pendingVisitorCount > 0
+                        ? `${pendingVisitorCount} 条待跟进 · 共 ${visitorRequests.length} 条`
+                        : `${visitorRequests.length} 条记录`,
+                    sub: '邮件即时提醒 · 权限分配',
                   },
                   ...(canViewVisitorStats
                     ? [

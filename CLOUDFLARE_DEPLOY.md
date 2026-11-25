@@ -49,6 +49,11 @@ npx wrangler pages deploy dist --project-name=bethel-church
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_FIRESTORE_DATABASE_ID`
 
+如需开启“新访客登记自动发送邮件提醒”，请在 Cloudflare Pages 的 **Settings → Environment variables** 中额外添加服务端环境变量（请勿加 `VITE_` 前缀）：
+- `RESEND_API_KEY`（必填，Resend API 密钥）
+- `VISITOR_NOTIFY_TO`（可选，接收提醒的同工邮箱，多个邮箱以英文逗号分隔；留空时默认发往主管理员邮箱）
+- `VISITOR_NOTIFY_FROM`（可选，发件人地址；未绑定自定义发信域名时可留空，默认使用 `onboarding@resend.dev`）
+
 ---
 
 ## 四、已内置的 Cloudflare Pages 架构适配

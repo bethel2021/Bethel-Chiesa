@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { Plus } from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Mail, Plus, Send } from 'lucide-react';
 import {
   useChurchAdminActions,
   useChurchAuth,
@@ -22,7 +22,7 @@ const STATUS_LABELS: Record<VisitorRequestItem['status'], string> = {
 };
 
 export function AdminVisitorsPanel() {
-  const { isMainAdmin, visitorRequests, adminUsers } = useChurchAuth();
+  const { user, isMainAdmin, visitorRequests, adminUsers } = useChurchAuth();
   const {
     updateVisitorRequestStatus,
     deleteVisitorRequest,
@@ -38,10 +38,103 @@ export function AdminVisitorsPanel() {
   } | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
+  const [emailConfig, setEmailConfig] = useState<{
+    loading: boolean;
+    configured: boolean;
+    recipients: string[];
+    fromAddress: string;
+  }>({
+    loading: true,
+    configured: false,
+    recipients: [],
+    fromAddress: '',
+  });
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+
   const [newUid, setNewUid] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newCanViewVisitorStats, setNewCanViewVisitorStats] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadEmailStatus = async () => {
+      if (!user) {
+        if (active) {
+          setEmailConfig((prev) => ({ ...prev, loading: false }));
+        }
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/notify-visitor-status', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('status failed');
+        const data = (await res.json()) as {
+          configured?: boolean;
+          recipients?: string[];
+          fromAddress?: string;
+        };
+        if (active) {
+          setEmailConfig({
+            loading: false,
+            configured: Boolean(data.configured),
+            recipients: Array.isArray(data.recipients) ? data.recipients : [],
+            fromAddress: typeof data.fromAddress === 'string' ? data.fromAddress : '',
+          });
+        }
+      } catch {
+        if (active) {
+          setEmailConfig((prev) => ({ ...prev, loading: false }));
+        }
+      }
+    };
+    void loadEmailStatus();
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const handleSendTestEmail = async () => {
+    if (!user) return;
+    setStatusMsg(null);
+    setSendingTestEmail(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/notify-visitor-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        recipients?: string[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setStatusMsg({
+          type: 'error',
+          message: data.error || '发送测试邮件失败，请检查邮件服务配置。',
+        });
+        return;
+      }
+      setStatusMsg({
+        type: 'success',
+        message: `测试提醒邮件已发送至：${(data.recipients ?? emailConfig.recipients).join('、')}，请查收邮箱（含垃圾箱）。`,
+      });
+    } catch {
+      setStatusMsg({
+        type: 'error',
+        message: '请求发送测试邮件时遇到网络问题，请稍后重试。',
+      });
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
 
   const statusCounts = useMemo(() => {
     const counts = { all: visitorRequests.length, pending: 0, contacted: 0, archived: 0 };
@@ -236,6 +329,69 @@ export function AdminVisitorsPanel() {
             );
           })
         )}
+      </div>
+
+      {/* Visitor Email Notification Status & Test */}
+      <div className="bg-white border border-[#E5DFD3] rounded-lg p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#EFEAE0]">
+          <div className="flex items-start gap-2.5">
+            <Mail className="w-4 h-4 text-[#1E3A5F] shrink-0 mt-0.5" />
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">
+                  来访登记邮件即时提醒
+                </h3>
+                {!emailConfig.loading && (
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                      emailConfig.configured
+                        ? 'bg-[#EEF2EC] text-[#14532D]'
+                        : 'bg-[#FEF3C7] text-[#92400E]'
+                    }`}
+                  >
+                    {emailConfig.configured ? '已就绪 · 自动推送中' : '待配置邮件密钥'}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#57534E] mt-1">
+                访客在首页提交登记后，服务端会立即向以下同工邮箱发送包含联系方式与后台直达链接的提醒邮件。
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={sendingTestEmail || emailConfig.loading}
+            onClick={handleSendTestEmail}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {sendingTestEmail ? '发送中…' : '发送测试提醒邮件'}
+          </button>
+        </div>
+
+        <div className="text-xs text-[#57534E] space-y-2">
+          <p>
+            <span className="font-medium text-[#1C1917]">接收提醒邮箱：</span>
+            {emailConfig.loading
+              ? '正在读取配置…'
+              : emailConfig.recipients.length > 0
+                ? emailConfig.recipients.join('、')
+                : '默认主管理员邮箱'}
+          </p>
+          {!emailConfig.loading && !emailConfig.configured && (
+            <div className="bg-[#FAF8F4] border border-[#EFEAE0] rounded-md p-3.5 text-xs text-[#57534E] leading-relaxed space-y-1">
+              <p className="font-medium text-[#1C1917]">开通步骤（仅需 2 分钟）：</p>
+              <p>1. 前往 Resend（resend.com）免费注册并生成一个 API Key。</p>
+              <p>
+                2. 在应用运行环境（Secrets / Cloudflare Pages 环境变量）中填入{' '}
+                <code className="px-1 py-0.5 bg-[#EFEAE0] rounded text-[#1C1917]">RESEND_API_KEY</code>；如需抄送多位同工，可一并设置{' '}
+                <code className="px-1 py-0.5 bg-[#EFEAE0] rounded text-[#1C1917]">VISITOR_NOTIFY_TO</code>（多个邮箱用英文逗号分隔）与{' '}
+                <code className="px-1 py-0.5 bg-[#EFEAE0] rounded text-[#1C1917]">VISITOR_NOTIFY_FROM</code>。
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Admin RBAC Management */}

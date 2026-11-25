@@ -9,12 +9,14 @@ interface FormState {
   name: string;
   contact: string;
   message: string;
+  website: string;
 }
 
 const INITIAL_FORM: FormState = {
   name: '',
   contact: '',
   message: '',
+  website: '',
 };
 
 export function ContactSection() {
@@ -26,6 +28,10 @@ export function ContactSection() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (form.website.trim()) {
+      setSubmitted(true);
+      return;
+    }
     if (!form.name.trim()) {
       setError('请填写您的姓名或称呼。');
       return;
@@ -175,7 +181,22 @@ export function ContactSection() {
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                <form onSubmit={handleSubmit} noValidate className="relative space-y-4">
+                  <div
+                    aria-hidden="true"
+                    className="absolute -left-[9999px] w-px h-px overflow-hidden opacity-0 pointer-events-none"
+                  >
+                    <label htmlFor="visitor-website">Website</label>
+                    <input
+                      id="visitor-website"
+                      name="website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.website}
+                      onChange={(e) => setForm({ ...form, website: e.target.value })}
+                    />
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label

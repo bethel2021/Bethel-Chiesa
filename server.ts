@@ -3,7 +3,18 @@ import fs from 'node:fs';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import {
+  buildVisitorNotificationEmail,
+  isSameOriginRequest,
+  parseRecipients,
+  resolveAdminPortalUrl,
+  resolveSenderAddress,
+  sanitizeMultiline,
+  sanitizeSingleLine,
+  sendResendEmail,
+  verifyAdminBearerToken,
+} from './functions/api/_visitorNotify.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -297,6 +308,42 @@ async function startServer(): Promise<void> {
   app.set('trust proxy', true);
   app.disable('x-powered-by');
 
+  const notifyIpWindowMap = new Map<string, number[]>();
+  const notifyGlobalTimestamps: number[] = [];
+  const NOTIFY_IP_WINDOW_MS = 10 * 60 * 1000;
+  const NOTIFY_MAX_PER_IP = 2;
+  const NOTIFY_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
+  const NOTIFY_MAX_GLOBAL = 30;
+
+  const isNotifyRateLimited = (ipHash: string): boolean => {
+    const now = Date.now();
+    const ipRecent = (notifyIpWindowMap.get(ipHash) ?? []).filter(
+      (ts) => now - ts < NOTIFY_IP_WINDOW_MS
+    );
+    if (ipRecent.length >= NOTIFY_MAX_PER_IP) {
+      notifyIpWindowMap.set(ipHash, ipRecent);
+      return true;
+    }
+
+    while (notifyGlobalTimestamps.length > 0 && now - notifyGlobalTimestamps[0] >= NOTIFY_GLOBAL_WINDOW_MS) {
+      notifyGlobalTimestamps.shift();
+    }
+    if (notifyGlobalTimestamps.length >= NOTIFY_MAX_GLOBAL) {
+      return true;
+    }
+
+    ipRecent.push(now);
+    if (notifyIpWindowMap.size > 2000) {
+      const oldestKey = notifyIpWindowMap.keys().next().value;
+      if (oldestKey) notifyIpWindowMap.delete(oldestKey);
+    }
+    notifyIpWindowMap.set(ipHash, ipRecent);
+    notifyGlobalTimestamps.push(now);
+    return false;
+  };
+
+  const jsonBodyParser = express.json({ limit: '16kb' });
+
   app.get('/api/client-ip', async (req: Request, res: Response) => {
     const clientIp = extractClientIp(req);
     const ipHash = hashClientIp(clientIp);
@@ -307,6 +354,183 @@ async function startServer(): Promise<void> {
       country: geo.country,
       region: geo.region,
     });
+  });
+
+  app.post('/api/notify-visitor', jsonBodyParser, async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    const hostHeader = req.get('x-forwarded-host') || req.get('host');
+    if (!isSameOriginRequest(req.get('origin'), hostHeader)) {
+      res.status(403).json({ ok: false, error: 'Forbidden origin' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown> | undefined;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      res.status(400).json({ ok: false, error: 'Invalid payload' });
+      return;
+    }
+
+    if (typeof body.honeypot === 'string' && body.honeypot.trim().length > 0) {
+      res.json({ ok: true, skipped: true });
+      return;
+    }
+
+    const name = sanitizeSingleLine(body.name, 80);
+    const contact = sanitizeSingleLine(body.contact, 140);
+    const intent = sanitizeSingleLine(body.intent, 100);
+    const message = sanitizeMultiline(body.message, 1000);
+
+    if (!name || contact.length < 5) {
+      res.status(400).json({ ok: false, error: 'Missing required fields' });
+      return;
+    }
+
+    const clientIp = extractClientIp(req);
+    const ipHash = hashClientIp(clientIp);
+    if (isNotifyRateLimited(ipHash)) {
+      res.status(429).json({ ok: false, skipped: true, reason: 'rate_limited' });
+      return;
+    }
+
+    const apiKey = (process.env.RESEND_API_KEY || '').trim();
+    if (!apiKey) {
+      res.json({ ok: true, configured: false, sent: false });
+      return;
+    }
+
+    const to = parseRecipients(process.env.VISITOR_NOTIFY_TO);
+    const from = resolveSenderAddress(process.env.VISITOR_NOTIFY_FROM);
+    const adminUrl = resolveAdminPortalUrl(process.env.APP_URL, {
+      host: hostHeader || undefined,
+      proto: req.get('x-forwarded-proto') || req.protocol,
+    });
+
+    const email = buildVisitorNotificationEmail({
+      payload: { name, contact, intent, message },
+      adminUrl,
+    });
+
+    const result = await sendResendEmail({
+      apiKey,
+      from,
+      to,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    });
+
+    if (!result.ok) {
+      res.status(502).json({ ok: false, configured: true, sent: false });
+      return;
+    }
+
+    res.json({ ok: true, configured: true, sent: true });
+  });
+
+  app.get('/api/notify-visitor-status', async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    const authCheck = await verifyAdminBearerToken({
+      authHeader: req.get('authorization'),
+      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY,
+      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+    });
+
+    if (authCheck.ok === false) {
+      res.status(authCheck.status).json({ error: authCheck.message });
+      return;
+    }
+
+    const configured = Boolean((process.env.RESEND_API_KEY || '').trim());
+    const recipients = parseRecipients(process.env.VISITOR_NOTIFY_TO);
+    const fromAddress = resolveSenderAddress(process.env.VISITOR_NOTIFY_FROM);
+
+    res.json({
+      configured,
+      provider: 'Resend',
+      recipients,
+      fromAddress,
+    });
+  });
+
+  app.post('/api/notify-visitor-test', jsonBodyParser, async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    const hostHeader = req.get('x-forwarded-host') || req.get('host');
+    if (!isSameOriginRequest(req.get('origin'), hostHeader)) {
+      res.status(403).json({ ok: false, error: '非法请求来源' });
+      return;
+    }
+
+    const authCheck = await verifyAdminBearerToken({
+      authHeader: req.get('authorization'),
+      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY,
+      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+    });
+
+    if (authCheck.ok === false) {
+      res.status(authCheck.status).json({ ok: false, error: authCheck.message });
+      return;
+    }
+
+    const apiKey = (process.env.RESEND_API_KEY || '').trim();
+    if (!apiKey) {
+      res.status(400).json({
+        ok: false,
+        configured: false,
+        error: '尚未配置服务端环境变量 RESEND_API_KEY，请先在环境变量或 Secrets 中配置后再测试。',
+      });
+      return;
+    }
+
+    const recipients = parseRecipients(process.env.VISITOR_NOTIFY_TO);
+    const fromAddress = resolveSenderAddress(process.env.VISITOR_NOTIFY_FROM);
+    const adminUrl = resolveAdminPortalUrl(process.env.APP_URL, {
+      host: hostHeader || undefined,
+      proto: req.get('x-forwarded-proto') || req.protocol,
+    });
+
+    const email = buildVisitorNotificationEmail({
+      payload: {
+        name: '测试来访者（后台验证）',
+        contact: authCheck.email,
+        message: '这是一条来自「来访留言与权限」后台的邮件推送测试记录。',
+      },
+      adminUrl,
+      isTest: true,
+    });
+
+    const result = await sendResendEmail({
+      apiKey,
+      from: fromAddress,
+      to: recipients,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    });
+
+    if (!result.ok) {
+      res.status(502).json({
+        ok: false,
+        configured: true,
+        error: `邮件服务返回错误（${result.errorMessage || '发送失败'}），请检查 RESEND_API_KEY 与发件域名验证状态。`,
+      });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      configured: true,
+      recipients,
+    });
+  });
+
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err && typeof err === 'object' && 'type' in err && (err as { type?: string }).type === 'entity.parse.failed') {
+      res.status(400).json({ ok: false, error: 'Invalid JSON body' });
+      return;
+    }
+    next(err);
   });
 
   if (process.env.NODE_ENV !== 'production') {
