@@ -11,6 +11,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidSha256Id(id) {
+      return id is string && id.size() == 64 && id.matches('^[a-f0-9]{64}$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -36,6 +40,17 @@ service cloud.firestore {
         isVerifiedUser() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
+    }
+
+    function hasAdminVisitorStatsPermission() {
+      return isVerifiedUser()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && 'canViewVisitorStats' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.canViewVisitorStats == true;
+    }
+
+    function canViewVisitorStats() {
+      return isBootstrappedAdmin() || hasAdminVisitorStatsPermission();
     }
 
     function isStringBounds(val, minLen, maxLen) {
@@ -281,11 +296,21 @@ service cloud.firestore {
 
     function isValidAdminUser(data) {
       return data.keys().hasAll(['email', 'displayName', 'addedAt'])
-      && data.keys().hasOnly(['email', 'displayName', 'addedAt'])
+      && data.keys().hasOnly(['email', 'displayName', 'canViewVisitorStats', 'addedAt'])
       && isStringBounds(data.email, 3, 160)
       && data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
       && isStringBounds(data.displayName, 1, 80)
+      && (!('canViewVisitorStats' in data) || data.canViewVisitorStats is bool)
       && data.addedAt == request.time;
+    }
+
+    function isValidAdminUserUpdate(data) {
+      return data.keys().hasAll(['email', 'displayName', 'canViewVisitorStats', 'addedAt'])
+      && data.keys().hasOnly(['email', 'displayName', 'canViewVisitorStats', 'addedAt'])
+      && data.email == existing().email
+      && data.displayName == existing().displayName
+      && data.canViewVisitorStats is bool
+      && data.addedAt == existing().addedAt;
     }
 
     function isValidMediaChunk(data) {
@@ -296,6 +321,32 @@ service cloud.firestore {
       && data.totalChunks is number && data.totalChunks >= 1 && data.totalChunks <= 30
       && data.chunkIndex < data.totalChunks
       && isStringBounds(data.data, 1, 750000)
+      && data.updatedAt == request.time;
+    }
+
+    function isValidVisitorIp(data) {
+      return data.keys().hasAll(['countedAt'])
+      && data.keys().hasOnly(['countedAt', 'country', 'region'])
+      && (!('country' in data) || isStringBounds(data.country, 0, 80))
+      && (!('region' in data) || isStringBounds(data.region, 0, 100))
+      && data.countedAt == request.time;
+    }
+
+    function isValidVisitorIpGeoBackfill(data) {
+      return data.keys().hasAll(['countedAt', 'country', 'region'])
+      && data.keys().hasOnly(['countedAt', 'country', 'region'])
+      && data.countedAt == existing().countedAt
+      && isStringBounds(data.country, 1, 80)
+      && data.country != '未知国家/地区'
+      && isStringBounds(data.region, 1, 100);
+    }
+
+    function isValidVisitorCounter(data) {
+      return data.keys().hasAll(['totalVisitors', 'lastVisitorId', 'updatedAt'])
+      && data.keys().hasOnly(['totalVisitors', 'lastVisitorId', 'updatedAt'])
+      && data.totalVisitors is int
+      && data.totalVisitors >= 1
+      && isValidSha256Id(data.lastVisitorId)
       && data.updatedAt == request.time;
     }
 
@@ -400,7 +451,10 @@ service cloud.firestore {
       );
       allow list: if isBootstrappedAdmin();
       allow create: if isValidId(adminUid) && isValidAdminUser(incoming()) && isBootstrappedAdmin();
-      allow update: if false;
+      allow update: if isValidId(adminUid)
+        && isValidAdminUserUpdate(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['canViewVisitorStats'])
+        && isBootstrappedAdmin();
       allow delete: if isValidId(adminUid) && isBootstrappedAdmin() && adminUid != request.auth.uid;
     }
 
@@ -411,6 +465,41 @@ service cloud.firestore {
       allow create: if isValidId(chunkId) && isValidMediaChunk(incoming()) && isAdmin();
       allow update: if isValidId(chunkId) && isValidMediaChunk(incoming()) && isAdmin();
       allow delete: if isValidId(chunkId) && isAdmin();
+    }
+
+    // Unique-IP visitor counter: atomic +1 increment paired with immutable SHA-256 IP marker
+    match /site_stats/{statId} {
+      allow get: if isValidId(statId) && statId == 'visitor_counter';
+      allow list: if canViewVisitorStats();
+      allow create: if isValidId(statId)
+        && statId == 'visitor_counter'
+        && isValidVisitorCounter(incoming())
+        && incoming().totalVisitors == 1
+        && !exists(/databases/$(database)/documents/visitor_ips/$(incoming().lastVisitorId))
+        && existsAfter(/databases/$(database)/documents/visitor_ips/$(incoming().lastVisitorId));
+      allow update: if isValidId(statId)
+        && statId == 'visitor_counter'
+        && isValidVisitorCounter(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['totalVisitors', 'lastVisitorId', 'updatedAt'])
+        && incoming().totalVisitors == existing().totalVisitors + 1
+        && !exists(/databases/$(database)/documents/visitor_ips/$(incoming().lastVisitorId))
+        && existsAfter(/databases/$(database)/documents/visitor_ips/$(incoming().lastVisitorId));
+      allow delete: if false;
+    }
+
+    match /visitor_ips/{ipHash} {
+      allow get: if isValidSha256Id(ipHash);
+      allow list: if canViewVisitorStats();
+      allow create: if isValidSha256Id(ipHash)
+        && isValidVisitorIp(incoming())
+        && !exists(/databases/$(database)/documents/visitor_ips/$(ipHash))
+        && getAfter(/databases/$(database)/documents/site_stats/visitor_counter).data.lastVisitorId == ipHash
+        && getAfter(/databases/$(database)/documents/site_stats/visitor_counter).data.updatedAt == request.time;
+      allow update: if isValidSha256Id(ipHash)
+        && isValidVisitorIpGeoBackfill(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['country', 'region'])
+        && (!('country' in existing()) || existing().country == '' || existing().country == '未知国家/地区');
+      allow delete: if false;
     }
   }
 }

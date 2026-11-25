@@ -16,6 +16,7 @@ import {
   doc,
   getDocFromServer,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -47,7 +48,9 @@ import {
   type MinistryRosterItem,
   type PastorProfile,
   type PulpitCoworker,
+  type VisitorIpRecord,
   type VisitorRequestItem,
+  type VisitorStatsSummary,
   type WeekdayMinistry,
   type WorshipSong,
   type WorshipTimeSlot,
@@ -129,8 +132,11 @@ export interface ChurchAuthValue {
   authReady: boolean;
   isAdmin: boolean;
   isMainAdmin: boolean;
+  canViewVisitorStats: boolean;
   visitorRequests: VisitorRequestItem[];
   adminUsers: AdminUserItem[];
+  visitorStats: VisitorStatsSummary | null;
+  visitorIpRecords: VisitorIpRecord[];
   activateAdminSession: () => void;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -163,7 +169,16 @@ export interface ChurchAdminActionsValue {
     adminNote: string
   ) => Promise<void>;
   deleteVisitorRequest: (id: string) => Promise<void>;
-  addAdminUser: (uid: string, email: string, displayName: string) => Promise<void>;
+  addAdminUser: (
+    uid: string,
+    email: string,
+    displayName: string,
+    canViewVisitorStats?: boolean
+  ) => Promise<void>;
+  updateAdminVisitorStatsPermission: (
+    uid: string,
+    canViewVisitorStats: boolean
+  ) => Promise<void>;
   removeAdminUser: (uid: string) => Promise<void>;
 }
 
@@ -226,6 +241,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState<boolean>(() => !resolveInitialAdminRoute());
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMainAdmin, setIsMainAdmin] = useState(false);
+  const [canViewVisitorStats, setCanViewVisitorStats] = useState(false);
 
   const [cloudLoading, setCloudLoading] = useState(!freshCache && !initialEarlyBundle);
   const [hasCloudData, setHasCloudData] = useState(
@@ -301,6 +317,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const [visitorRequests, setVisitorRequests] = useState<VisitorRequestItem[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
+  const [visitorStats, setVisitorStats] = useState<VisitorStatsSummary | null>(null);
+  const [visitorIpRecords, setVisitorIpRecords] = useState<VisitorIpRecord[]>([]);
 
   const latestStateRef = useRef({
     churchInfo,
@@ -559,6 +577,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           setUser(state.user);
           setIsAdmin(state.isAdmin);
           setIsMainAdmin(state.isMainAdmin);
+          setCanViewVisitorStats(state.canViewVisitorStats);
           setAuthReady(state.authReady);
         });
       })
@@ -566,6 +585,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setIsAdmin(false);
         setIsMainAdmin(false);
+        setCanViewVisitorStats(false);
         setAuthReady(true);
       });
 
@@ -597,6 +617,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       legacyCloudWeekdayIdsRef.current = [];
       setVisitorRequests([]);
       setAdminUsers([]);
+      setVisitorStats(null);
+      setVisitorIpRecords([]);
       if (wasAdminRef.current) {
         wasAdminRef.current = false;
         void loadSingleDocPublicBundle(false);
@@ -772,10 +794,65 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       setAdminUsers([]);
     }
 
+    if (canViewVisitorStats) {
+      unsubs.push(
+        onSnapshot(
+          doc(db, 'site_stats', 'visitor_counter'),
+          (snap) => {
+            if (snap.exists()) {
+              const data = snap.data() as Partial<VisitorStatsSummary>;
+              setVisitorStats({
+                totalVisitors: Number(data.totalVisitors ?? 0),
+                lastVisitorId: String(data.lastVisitorId ?? ''),
+                updatedAt: data.updatedAt,
+              });
+            } else {
+              setVisitorStats(null);
+            }
+          },
+          (error) => {
+            try {
+              handleFirestoreError(error, OperationType.GET, 'site_stats/visitor_counter');
+            } catch {
+              // Logged
+            }
+          }
+        )
+      );
+
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'visitor_ips'), orderBy('countedAt', 'desc'), limit(500)),
+          (snap) => {
+            const items: VisitorIpRecord[] = snap.docs.map((d) => {
+              const data = d.data();
+              return {
+                id: d.id,
+                country: typeof data?.country === 'string' ? data.country : '',
+                region: typeof data?.region === 'string' ? data.region : '',
+                countedAt: data?.countedAt,
+              };
+            });
+            setVisitorIpRecords(items);
+          },
+          (error) => {
+            try {
+              handleFirestoreError(error, OperationType.LIST, 'visitor_ips');
+            } catch {
+              // Logged
+            }
+          }
+        )
+      );
+    } else {
+      setVisitorStats(null);
+      setVisitorIpRecords([]);
+    }
+
     return () => {
       unsubs.forEach((fn) => fn());
     };
-  }, [authReady, isAdmin, isMainAdmin, loadSingleDocPublicBundle]);
+  }, [authReady, isAdmin, isMainAdmin, canViewVisitorStats, loadSingleDocPublicBundle]);
 
   const signInWithGoogle = useCallback(async () => {
     setAdminSessionRequested(true);
@@ -1374,7 +1451,12 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addAdminUser = useCallback(
-    async (uid: string, email: string, displayName: string) => {
+    async (
+      uid: string,
+      email: string,
+      displayName: string,
+      allowVisitorStats = false
+    ) => {
       const L = FIELD_LIMITS.adminUser;
       const cleanUid = clampStr(uid, L.uid);
       if (!/^[a-zA-Z0-9_\-]+$/.test(cleanUid)) {
@@ -1392,10 +1474,24 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         await setDoc(doc(db, 'admins', cleanUid), {
           email: cleanEmail,
           displayName: cleanDisplayName,
+          canViewVisitorStats: Boolean(allowVisitorStats),
           addedAt: serverTimestamp(),
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `admins/${cleanUid}`);
+      }
+    },
+    []
+  );
+
+  const updateAdminVisitorStatsPermission = useCallback(
+    async (uid: string, allowVisitorStats: boolean) => {
+      try {
+        await updateDoc(doc(db, 'admins', uid), {
+          canViewVisitorStats: Boolean(allowVisitorStats),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `admins/${uid}`);
       }
     },
     []
@@ -1460,8 +1556,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       authReady,
       isAdmin,
       isMainAdmin,
+      canViewVisitorStats,
       visitorRequests,
       adminUsers,
+      visitorStats,
+      visitorIpRecords,
       activateAdminSession,
       signInWithGoogle,
       signOutUser,
@@ -1471,8 +1570,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       authReady,
       isAdmin,
       isMainAdmin,
+      canViewVisitorStats,
       visitorRequests,
       adminUsers,
+      visitorStats,
+      visitorIpRecords,
       activateAdminSession,
       signInWithGoogle,
       signOutUser,
@@ -1504,6 +1606,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       updateVisitorRequestStatus,
       deleteVisitorRequest,
       addAdminUser,
+      updateAdminVisitorStatsPermission,
       removeAdminUser,
     }),
     [
@@ -1530,6 +1633,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       updateVisitorRequestStatus,
       deleteVisitorRequest,
       addAdminUser,
+      updateAdminVisitorStatsPermission,
       removeAdminUser,
     ]
   );

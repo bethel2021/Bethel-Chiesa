@@ -113,12 +113,6 @@ export function AdminAnnouncementsEditor() {
                   <span className="font-mono tabular-nums">#{item.sortOrder}</span>
                   {item.isFeatured && <span className="font-medium text-[#8B5E34]">重点置顶</span>}
                   <span>{item.category}</span>
-                  {item.date && (
-                    <>
-                      <span>·</span>
-                      <span className="tabular-nums">{item.date}</span>
-                    </>
-                  )}
                 </div>
                 <h3 className="font-editorial text-lg font-semibold text-[#1C1917]">{item.title}</h3>
                 <p className="text-xs text-[#57534E]">{item.summary}</p>

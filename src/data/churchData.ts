@@ -167,7 +167,21 @@ export interface AdminUserItem {
   uid: string;
   email: string;
   displayName: string;
+  canViewVisitorStats?: boolean;
   addedAt?: unknown;
+}
+
+export interface VisitorStatsSummary {
+  totalVisitors: number;
+  lastVisitorId: string;
+  updatedAt?: unknown;
+}
+
+export interface VisitorIpRecord {
+  id: string;
+  country?: string;
+  region?: string;
+  countedAt?: unknown;
 }
 
 export const CHURCH_IMAGES = {
@@ -608,7 +622,6 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'ann-thanksgiving',
     category: '特别聚会',
-    date: '2026年11月22日（下主日）',
     title: '2026 年感恩节联合主日崇拜暨岁末爱筵',
     summary: '下主日上午 09:30 将举行一年一度感恩节联合崇拜，诗班献唱感恩组曲，会后全堂共享感恩爱筵。',
     time: '11月22日（主日）09:30 – 13:30',
@@ -626,7 +639,6 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'ann-baptism',
     category: '洗礼与课程',
-    date: '即日起至 12月06日报名',
     title: '圣诞季洗礼暨坚信礼预备班招生通知',
     summary: '拟于圣诞节前夕举行下半年洗礼，凡清楚得救并稳定参加慕道班满三个月者均可报名面谈。',
     time: '12月06日起连续三个主日 13:00',
@@ -643,7 +655,6 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'ann-choir',
     category: '诗班与事奉',
-    date: '2026年11月19日（周四）起',
     title: '圣诞夜烛光崇拜诗班招募与联合练唱',
     summary: '为预备 12 月 24 日平安夜圣乐崇拜，伯特利圣诗班现诚邀识简谱或五线谱的受洗信徒加入献唱。',
     time: '每周四晚 19:30 – 21:15',
@@ -660,7 +671,6 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'ann-care',
     category: '社区关怀',
-    date: '2026年11月28日（周六）',
     title: '冬日暖阳·社区独居长者探访与物资募集',
     summary: '入冬降温之际，慈惠事工组拟于月底周六走访周边 18 户高龄独居长者家庭，现征集全新保暖围巾与探访志工。',
     time: '11月28日（周六）09:00 集合',
@@ -677,7 +687,6 @@ export const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'ann-seekers',
     category: '洗礼与课程',
-    date: '每周主日 13:00 滚动开班',
     title: '《认识信仰的起点》慕道小组持续欢迎新朋友',
     summary: '对基督教信仰感到好奇或心中有疑问的朋友，欢迎参加每周日下午的开放式慕道对谈小组。',
     time: '每周主日 13:00 – 14:15',

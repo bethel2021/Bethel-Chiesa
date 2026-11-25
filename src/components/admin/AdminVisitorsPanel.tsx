@@ -27,6 +27,7 @@ export function AdminVisitorsPanel() {
     updateVisitorRequestStatus,
     deleteVisitorRequest,
     addAdminUser,
+    updateAdminVisitorStatsPermission,
     removeAdminUser,
   } = useChurchAdminActions();
 
@@ -40,6 +41,7 @@ export function AdminVisitorsPanel() {
   const [newUid, setNewUid] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
+  const [newCanViewVisitorStats, setNewCanViewVisitorStats] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts = { all: visitorRequests.length, pending: 0, contacted: 0, archived: 0 };
@@ -63,10 +65,11 @@ export function AdminVisitorsPanel() {
     e.preventDefault();
     setStatusMsg(null);
     try {
-      await addAdminUser(newUid, newEmail, newDisplayName);
+      await addAdminUser(newUid, newEmail, newDisplayName, newCanViewVisitorStats);
       setNewUid('');
       setNewEmail('');
       setNewDisplayName('');
+      setNewCanViewVisitorStats(false);
       setStatusMsg({ type: 'success', message: '已添加新的同工管理员权限。' });
     } catch (err) {
       setStatusMsg({
@@ -299,45 +302,96 @@ export function AdminVisitorsPanel() {
                   授权
                 </button>
               </div>
+              <div className="md:col-span-12">
+                <label className="inline-flex items-center gap-2 text-xs text-[#292524] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newCanViewVisitorStats}
+                    onChange={(e) => setNewCanViewVisitorStats(e.target.checked)}
+                    className="rounded border-[#D6CFC2]"
+                  />
+                  <span>同时授予「访客统计数据查看权限」（默认关闭，仅勾选后可查阅访客计数与脱敏记录）</span>
+                </label>
+              </div>
             </form>
 
             {adminUsers.length > 0 && (
               <div className="divide-y divide-[#EFEAE0] border-t border-[#EFEAE0]">
-                {adminUsers.map((adm) => (
-                  <div
-                    key={adm.uid}
-                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                  >
-                    <div>
-                      <span className="font-semibold text-[#1C1917]">{adm.displayName}</span>
-                      <span className="text-[#78716C] mx-2">·</span>
-                      <span className="text-[#57534E]">{adm.email}</span>
-                      <span className="text-[#78716C] mx-2">·</span>
-                      <span className="font-mono text-[#78716C]">UID: {adm.uid}</span>
+                {adminUsers.map((adm) => {
+                  const hasStatsAccess = adm.canViewVisitorStats === true;
+                  return (
+                    <div
+                      key={adm.uid}
+                      className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-semibold text-[#1C1917]">{adm.displayName}</span>
+                        <span className="text-[#78716C]">·</span>
+                        <span className="text-[#57534E]">{adm.email}</span>
+                        <span className="text-[#78716C]">·</span>
+                        <span className="font-mono text-[#78716C]">UID: {adm.uid}</span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                            hasStatsAccess
+                              ? 'bg-[#EEF2EC] text-[#14532D]'
+                              : 'bg-[#FAF8F4] text-[#78716C] border border-[#E5DFD3]'
+                          }`}
+                        >
+                          {hasStatsAccess ? '可查看访客统计' : '无访客统计权限'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setStatusMsg(null);
+                            try {
+                              await updateAdminVisitorStatsPermission(adm.uid, !hasStatsAccess);
+                              setStatusMsg({
+                                type: 'success',
+                                message: !hasStatsAccess
+                                  ? `已为「${adm.displayName}」开通访客统计查看权限。`
+                                  : `已收回「${adm.displayName}」的访客统计查看权限。`,
+                              });
+                            } catch (err) {
+                              setStatusMsg({
+                                type: 'error',
+                                message: getFriendlyAdminError(
+                                  err,
+                                  '更新访客统计查看权限失败，请重试。'
+                                ),
+                              });
+                            }
+                          }}
+                          className="text-[#1E3A5F] hover:underline cursor-pointer"
+                        >
+                          {hasStatsAccess ? '收回访客统计权限' : '授权查看访客统计'}
+                        </button>
+                        <ConfirmDeleteButton
+                          label="撤销权限"
+                          confirmLabel="确认撤销"
+                          showIcon={false}
+                          className="text-[#9A3412] hover:underline cursor-pointer"
+                          onConfirm={async () => {
+                            setStatusMsg(null);
+                            try {
+                              await removeAdminUser(adm.uid);
+                              setStatusMsg({
+                                type: 'success',
+                                message: `已撤销「${adm.displayName}」的后台管理权限。`,
+                              });
+                            } catch (err) {
+                              setStatusMsg({
+                                type: 'error',
+                                message: getFriendlyAdminError(err, '撤销管理员权限失败，请重试。'),
+                              });
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
-                    <ConfirmDeleteButton
-                      label="撤销权限"
-                      confirmLabel="确认撤销"
-                      showIcon={false}
-                      className="text-[#9A3412] hover:underline cursor-pointer self-start sm:self-auto"
-                      onConfirm={async () => {
-                        setStatusMsg(null);
-                        try {
-                          await removeAdminUser(adm.uid);
-                          setStatusMsg({
-                            type: 'success',
-                            message: `已撤销「${adm.displayName}」的后台管理权限。`,
-                          });
-                        } catch (err) {
-                          setStatusMsg({
-                            type: 'error',
-                            message: getFriendlyAdminError(err, '撤销管理员权限失败，请重试。'),
-                          });
-                        }
-                      }}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

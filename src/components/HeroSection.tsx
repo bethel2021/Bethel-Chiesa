@@ -11,6 +11,7 @@ interface HeroSectionProps {
 
 export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
   const { churchInfo, announcements, cloudLoading, activeTheme } = usePublicChurchData();
+
   const normalizedChurchName = churchInfo.name.trim();
   const splitNameMatch = normalizedChurchName.match(/^(基督教意大利)\s*(伯特利华人教会.*)$/);
   const repeatPerHalf = useMemo(() => {

@@ -95,6 +95,7 @@ export function subscribeAdminAuthAndRbac(
     user: User | null;
     isAdmin: boolean;
     isMainAdmin: boolean;
+    canViewVisitorStats: boolean;
     authReady: boolean;
   }) => void
 ): () => void {
@@ -125,6 +126,7 @@ export function subscribeAdminAuthAndRbac(
         user: currentUser,
         isAdmin: false,
         isMainAdmin: false,
+        canViewVisitorStats: false,
         authReady: true,
       });
       return;
@@ -138,6 +140,7 @@ export function subscribeAdminAuthAndRbac(
         user: currentUser,
         isAdmin: true,
         isMainAdmin: true,
+        canViewVisitorStats: true,
         authReady: true,
       });
       return;
@@ -147,6 +150,7 @@ export function subscribeAdminAuthAndRbac(
       user: currentUser,
       isAdmin: false,
       isMainAdmin: false,
+      canViewVisitorStats: false,
       authReady: false,
     });
 
@@ -154,10 +158,14 @@ export function subscribeAdminAuthAndRbac(
       doc(db, 'admins', currentUser.uid),
       (adminDoc) => {
         if (currentEpoch !== authEpoch) return;
+        const verifiedAdmin = adminDoc.exists() && currentUser.emailVerified;
+        const canViewStats =
+          verifiedAdmin && adminDoc.data()?.canViewVisitorStats === true;
         onUpdate({
           user: currentUser,
-          isAdmin: adminDoc.exists() && currentUser.emailVerified,
+          isAdmin: verifiedAdmin,
           isMainAdmin: false,
+          canViewVisitorStats: canViewStats,
           authReady: true,
         });
       },
@@ -167,6 +175,7 @@ export function subscribeAdminAuthAndRbac(
           user: currentUser,
           isAdmin: false,
           isMainAdmin: false,
+          canViewVisitorStats: false,
           authReady: true,
         });
       }

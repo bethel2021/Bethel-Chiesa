@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   BookOpen,
   CalendarDays,
-  ClipboardList,
   Database,
   FileText,
   Image,
@@ -30,6 +30,7 @@ import { AdminPastorsEditor } from './AdminPastorsEditor';
 import { getFriendlyAdminError, StatusBanner } from './AdminSharedUI';
 import { AdminThemeEditor } from './AdminThemeEditor';
 import { AdminVisitorsPanel } from './AdminVisitorsPanel';
+import { AdminVisitorStatsPanel } from './AdminVisitorStatsPanel';
 import { AdminWorshipEditor } from './AdminWorshipEditor';
 
 type AdminTab =
@@ -42,12 +43,14 @@ type AdminTab =
   | 'roster'
   | 'weekday'
   | 'announcements'
-  | 'visitors';
+  | 'visitors'
+  | 'visitor-stats';
 
 const SIDEBAR_ITEMS: {
   id: AdminTab;
   label: string;
   icon: typeof FileText;
+  requiresVisitorStatsPermission?: boolean;
 }[] = [
   { id: 'overview', label: '后台总览与同步', icon: Database },
   { id: 'info', label: '教会简介与联系', icon: FileText },
@@ -58,6 +61,12 @@ const SIDEBAR_ITEMS: {
   { id: 'roster', label: '精彩瞬间展示', icon: Image },
   { id: 'announcements', label: '最新聚会公告', icon: Bell },
   { id: 'visitors', label: '来访留言与权限', icon: ShieldCheck },
+  {
+    id: 'visitor-stats',
+    label: '访客统计数据',
+    icon: BarChart3,
+    requiresVisitorStatsPermission: true,
+  },
   { id: 'theme', label: '主题样式选择', icon: Palette },
 ];
 
@@ -81,7 +90,9 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     user,
     authReady,
     isAdmin,
+    canViewVisitorStats,
     visitorRequests,
+    visitorStats,
     activateAdminSession,
     signInWithGoogle,
     signOutUser,
@@ -157,6 +168,9 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
       })
     : '尚未生成';
 
+  const visibleSidebarItems = SIDEBAR_ITEMS.filter(
+    (item) => !item.requiresVisitorStatsPermission || canViewVisitorStats
+  );
   const activeLabel = SIDEBAR_ITEMS.find((t) => t.id === activeTab)?.label ?? '后台总览';
 
   // Loading state while auth initializes
@@ -317,7 +331,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
         </div>
 
         <nav aria-label="后台模块导航" className="flex-1 p-4 space-y-1">
-          {SIDEBAR_ITEMS.map((item) => {
+          {visibleSidebarItems.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
             return (
@@ -396,7 +410,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
         {/* Mobile Sidebar Drawer */}
         {sidebarOpen && (
           <div className="lg:hidden bg-[#F3EFE6] border-b border-[#E5DFD3] px-6 py-4 space-y-1">
-            {SIDEBAR_ITEMS.map((item) => {
+            {visibleSidebarItems.map((item) => {
               const Icon = item.icon;
               return (
                 <button
@@ -542,6 +556,16 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     count: `${visitorRequests.length} 条记录`,
                     sub: '待跟进与权限分配',
                   },
+                  ...(canViewVisitorStats
+                    ? [
+                        {
+                          tab: 'visitor-stats' as AdminTab,
+                          label: '访客统计数据',
+                          count: `${visitorStats ? visitorStats.totalVisitors : 0} 位独立访客`,
+                          sub: '同 IP 去重 · SHA-256 脱敏记录',
+                        },
+                      ]
+                    : []),
                   {
                     tab: 'theme' as AdminTab,
                     label: '主题样式选择',
@@ -575,6 +599,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           {activeTab === 'weekday' && <AdminMinistryEditor mode="weekday" />}
           {activeTab === 'announcements' && <AdminAnnouncementsEditor />}
           {activeTab === 'visitors' && <AdminVisitorsPanel />}
+          {activeTab === 'visitor-stats' && <AdminVisitorStatsPanel />}
         </main>
       </div>
     </div>

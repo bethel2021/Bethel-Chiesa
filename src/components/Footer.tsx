@@ -1,14 +1,28 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePublicChurchData } from '../context/ChurchDataContext';
 import { SUNDAY_SUMMARY_SCHEDULE } from '../data/cacheConfig';
 import { parsePastoralPhoneEntries } from '../utils/phone';
+import { trackUniqueVisitor } from '../utils/visitorCounter';
 
 export function Footer() {
   const { churchInfo } = usePublicChurchData();
+  const [visitorCount, setVisitorCount] = useState<number | null>(null);
   const phoneEntries = useMemo(
     () => parsePastoralPhoneEntries(churchInfo.pastoralPhone),
     [churchInfo.pastoralPhone]
   );
+
+  useEffect(() => {
+    let active = true;
+    trackUniqueVisitor().then((count) => {
+      if (active && typeof count === 'number') {
+        setVisitorCount(count);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <footer className="bg-[var(--theme-bg)] border-t border-[var(--theme-border)] transition-colors duration-300">
@@ -67,7 +81,12 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="pt-6 text-center text-xs text-[var(--theme-ink-subtle)]">
+        <div className="pt-6 text-center text-xs text-[var(--theme-ink-subtle)] space-y-1.5">
+          {visitorCount !== null && (
+            <p className="text-[var(--theme-ink-muted)] tabular-nums">
+              您是第<span className="font-semibold text-[var(--theme-ink)]">{visitorCount}</span>位访客！
+            </p>
+          )}
           <p>© 2026 基督教意大利伯特利华人教会</p>
         </div>
       </div>

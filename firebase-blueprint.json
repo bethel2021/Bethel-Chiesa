@@ -224,6 +224,7 @@
       "properties": {
         "email": { "type": "string", "minLength": 3, "maxLength": 160 },
         "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "canViewVisitorStats": { "type": "boolean" },
         "addedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "displayName", "addedAt"]
@@ -240,6 +241,28 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["mediaId", "chunkIndex", "totalChunks", "data", "updatedAt"]
+    },
+    "SiteVisitorCounterDoc": {
+      "title": "SiteVisitorCounterDoc",
+      "description": "Unique-IP visitor counter summary document",
+      "type": "object",
+      "properties": {
+        "totalVisitors": { "type": "number" },
+        "lastVisitorId": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["totalVisitors", "lastVisitorId", "updatedAt"]
+    },
+    "VisitorIpHashDoc": {
+      "title": "VisitorIpHashDoc",
+      "description": "Deduplication marker keyed by SHA-256 hash of visitor IP with country/province geolocation (zero raw IP PII)",
+      "type": "object",
+      "properties": {
+        "country": { "type": "string", "maxLength": 80 },
+        "region": { "type": "string", "maxLength": 100 },
+        "countedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["countedAt"]
     }
   },
   "firestore": {
@@ -290,6 +313,14 @@
     "/media_chunks/{chunkId}": {
       "schema": { "$ref": "#/entities/MediaChunkDoc" },
       "description": "Chunked lossless original image documents addressed by deterministic mediaId__index ID"
+    },
+    "/site_stats/{statId}": {
+      "schema": { "$ref": "#/entities/SiteVisitorCounterDoc" },
+      "description": "Site-wide unique-IP visitor counter ('visitor_counter')"
+    },
+    "/visitor_ips/{ipHash}": {
+      "schema": { "$ref": "#/entities/VisitorIpHashDoc" },
+      "description": "SHA-256 IP hash deduplication markers preventing repeat counting for the same IP"
     }
   }
 }

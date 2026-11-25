@@ -188,12 +188,6 @@ export function AnnouncementsSection({
                   <span className="font-medium text-[var(--theme-gold)]">重点公告</span>
                   <span aria-hidden="true">·</span>
                   <span>{featuredItem.category}</span>
-                  {featuredItem.date && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span className="tabular-nums">{featuredItem.date}</span>
-                    </>
-                  )}
                 </div>
 
                 <h3 className="font-editorial text-2xl md:text-3xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
@@ -270,12 +264,6 @@ export function AnnouncementsSection({
 
                   <div className="flex items-center gap-2 text-xs text-[var(--theme-ink-subtle)] mb-1.5">
                     <span className="text-[var(--theme-accent)] font-medium">{item.category}</span>
-                    {item.date && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span className="tabular-nums">{item.date}</span>
-                      </>
-                    )}
                   </div>
 
                   <h3 className="font-editorial text-xl font-semibold text-[var(--theme-ink)] group-hover:text-[var(--theme-accent)] transition-colors mb-2">
@@ -330,12 +318,6 @@ export function AnnouncementsSection({
                 <span className="font-medium text-[var(--theme-accent)]">
                   {activeAnnouncement.category}
                 </span>
-                {activeAnnouncement.date && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span className="tabular-nums">{activeAnnouncement.date}</span>
-                  </>
-                )}
               </p>
               <h3
                 id="announcement-modal-title"
@@ -366,26 +348,8 @@ export function AnnouncementsSection({
             />
           </div>
 
-          {/* Detailed Date, Time & Venue Schedule */}
-          <dl
-            className={`mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 ${
-              activeAnnouncement.date ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
-            } gap-x-6 gap-y-3.5 text-xs`}
-          >
-            {activeAnnouncement.date && (
-              <div className="flex items-start gap-2.5">
-                <CalendarClock
-                  aria-hidden="true"
-                  className="w-4 h-4 text-[var(--theme-accent)] shrink-0 mt-0.5"
-                />
-                <div>
-                  <dt className="text-[var(--theme-ink-subtle)] mb-0.5">活动日期标示</dt>
-                  <dd className="text-[var(--theme-ink)] font-medium tabular-nums">
-                    {activeAnnouncement.date}
-                  </dd>
-                </div>
-              </div>
-            )}
+          {/* Detailed Time & Venue Schedule */}
+          <dl className="mt-5 bg-[var(--theme-surface)]/70 border border-[var(--theme-border)] rounded-md p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs">
 
             <div className="flex items-start gap-2.5">
               <CalendarClock
