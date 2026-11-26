@@ -160,7 +160,8 @@ export function AdminInfoEditor() {
             onChange={(nextUrl) => setForm({ ...form, heroImage: nextUrl })}
             defaultValue={CHURCH_IMAGES.heroSanctuary}
             previewAspect="landscape"
-            hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
+            preset="hero"
+            hint="自动缩放至 1920px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"
             required
           />
           <ImageFieldControl
@@ -169,7 +170,8 @@ export function AdminInfoEditor() {
             onChange={(nextUrl) => setForm({ ...form, fellowshipImage: nextUrl })}
             defaultValue={CHURCH_IMAGES.fellowshipIntro}
             previewAspect="landscape"
-            hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
+            preset="banner"
+            hint="自动缩放至 1440px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"
             required
           />
           <ImageFieldControl
@@ -178,7 +180,8 @@ export function AdminInfoEditor() {
             onChange={(nextUrl) => setForm({ ...form, churchTeamImage: nextUrl })}
             defaultValue={CHURCH_IMAGES.churchTeam}
             previewAspect="landscape"
-            hint="支持 JPG / PNG / WebP 原图无损直传（15 MB 内），或填写外链网址"
+            preset="banner"
+            hint="自动缩放至 1440px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"
             required
           />
         </div>

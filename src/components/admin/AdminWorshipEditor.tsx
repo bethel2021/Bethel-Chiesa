@@ -5,8 +5,7 @@ import {
   usePublicChurchData,
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
-import type { LiturgyStep, WorshipSong, WorshipTimeSlot } from '../../data/churchData';
-import { isSafeYoutubeUrl } from '../../utils/urlSafety';
+import type { LiturgyStep, WorshipTimeSlot } from '../../data/churchData';
 import { ModalDialog } from '../ModalDialog';
 import {
   AdminPanelHeader,
@@ -18,15 +17,13 @@ import {
   textareaClass,
 } from './AdminSharedUI';
 
-export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
-  const { worshipTimes, liturgySteps, worshipSongs } = usePublicChurchData();
+export function AdminWorshipEditor() {
+  const { worshipTimes, liturgySteps } = usePublicChurchData();
   const {
     saveWorshipTime,
     deleteWorshipTime,
     saveLiturgyStep,
     deleteLiturgyStep,
-    saveWorshipSong,
-    deleteWorshipSong,
   } = useChurchAdminActions();
 
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(
@@ -36,7 +33,6 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
 
   const [editingTime, setEditingTime] = useState<WorshipTimeSlot | null>(null);
   const [editingStep, setEditingStep] = useState<LiturgyStep | null>(null);
-  const [editingSong, setEditingSong] = useState<WorshipSong | null>(null);
   const [liturgyFilter, setLiturgyFilter] = useState<'standard' | 'communion'>('standard');
 
   const filteredSteps = useMemo(
@@ -73,225 +69,6 @@ export function AdminWorshipEditor({ mode }: { mode: 'worship' | 'songs' }) {
       setSaving(false);
     }
   };
-
-  const handleSaveSong = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!editingSong) return;
-    setSaving(true);
-    setStatus(null);
-    try {
-      await saveWorshipSong(editingSong);
-      setEditingSong(null);
-      setStatus({ type: 'success', message: '主日崇拜歌曲与 YouTube 链接已保存。' });
-    } catch (err) {
-      setStatus({ type: 'error', message: getFriendlyAdminError(err, '保存失败，请稍后重试。') });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (mode === 'songs') {
-    return (
-      <div className="space-y-8">
-        <AdminPanelHeader
-          title="主日崇拜歌曲管理"
-          description="管理本周主日敬拜诗歌清单，每首歌曲可维护诗歌名字及最多两条 YouTube 视频链接。"
-          action={
-            <button
-              type="button"
-              onClick={() =>
-                setEditingSong({
-                  id: '',
-                  title: '',
-                  youtubeUrl: '',
-                  youtubeUrl2: '',
-                  sortOrder: worshipSongs.length + 1,
-                })
-              }
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              新增崇拜歌曲
-            </button>
-          }
-        />
-
-        <StatusBanner status={status} onClear={() => setStatus(null)} />
-
-        <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
-          {worshipSongs.map((song) => {
-            const links = [song.youtubeUrl, song.youtubeUrl2].filter(isSafeYoutubeUrl);
-            return (
-              <div
-                key={song.id}
-                className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-baseline gap-2.5">
-                    <span className="font-mono text-xs text-[#78716C] tabular-nums shrink-0">
-                      #{song.sortOrder}
-                    </span>
-                    <h3 className="font-editorial text-lg font-semibold text-[#1C1917] truncate">
-                      {song.title}
-                    </h3>
-                  </div>
-                  {links.length > 0 ? (
-                    <div className="space-y-0.5">
-                      {links.map((url, idx) => (
-                        <a
-                          key={`${song.id}-link-${idx}`}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block text-xs text-[#1E3A5F] hover:underline truncate"
-                        >
-                          {links.length > 1 ? `链接 ${idx + 1}：` : ''}
-                          {url}
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[#78716C]">暂未设置 YouTube 视频链接</p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingSong({
-                        ...song,
-                        youtubeUrl2: song.youtubeUrl2 ?? '',
-                      })
-                    }
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    编辑
-                  </button>
-                  <ConfirmDeleteButton
-                    onConfirm={async () => {
-                      setStatus(null);
-                      try {
-                        await deleteWorshipSong(song.id);
-                        setStatus({ type: 'success', message: `已删除「${song.title}」。` });
-                      } catch (err) {
-                        setStatus({
-                          type: 'error',
-                          message: getFriendlyAdminError(err, '删除歌曲失败，请重试。'),
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {editingSong && (
-          <ModalDialog
-            disableDismiss
-            labelledBy="song-modal-title"
-            maxWidthClass="max-w-lg"
-            overlayClassName="bg-[#141210]/55"
-            containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
-            onClose={() => setEditingSong(null)}
-          >
-            <form onSubmit={handleSaveSong} className="p-6 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
-                <h3
-                  id="song-modal-title"
-                  className="font-editorial text-xl font-semibold text-[#1C1917]"
-                >
-                  {editingSong.id ? '编辑敬拜诗歌' : '新增敬拜诗歌'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setEditingSong(null)}
-                  aria-label="关闭弹窗"
-                  className="p-1.5 text-[#57534E] cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <FieldLabel label="诗歌名字 *">
-                <input
-                  type="text"
-                  required
-                  maxLength={FIELD_LIMITS.worshipSong.title}
-                  value={editingSong.title}
-                  onChange={(e) => setEditingSong({ ...editingSong, title: e.target.value })}
-                  placeholder="例如：《奇异恩典》（Amazing Grace）"
-                  className={inputClass}
-                />
-              </FieldLabel>
-
-              <FieldLabel label="YouTube 视频链接 1" hint="支持 youtube.com 或 youtu.be 链接">
-                <input
-                  type="text"
-                  maxLength={FIELD_LIMITS.worshipSong.youtubeUrl}
-                  value={editingSong.youtubeUrl}
-                  onChange={(e) =>
-                    setEditingSong({ ...editingSong, youtubeUrl: e.target.value })
-                  }
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  className={inputClass}
-                />
-              </FieldLabel>
-
-              <FieldLabel
-                label="YouTube 视频链接 2（可选）"
-                hint="可用于添加第二条伴奏、合唱示范或不同版本链接"
-              >
-                <input
-                  type="text"
-                  maxLength={FIELD_LIMITS.worshipSong.youtubeUrl}
-                  value={editingSong.youtubeUrl2 ?? ''}
-                  onChange={(e) =>
-                    setEditingSong({ ...editingSong, youtubeUrl2: e.target.value })
-                  }
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  className={inputClass}
-                />
-              </FieldLabel>
-
-              <FieldLabel label="排序权重">
-                <input
-                  type="number"
-                  min={0}
-                  max={1000}
-                  value={editingSong.sortOrder}
-                  onChange={(e) =>
-                    setEditingSong({ ...editingSong, sortOrder: Number(e.target.value) })
-                  }
-                  className={inputClass}
-                />
-              </FieldLabel>
-
-              <div className="pt-3 border-t border-[#E5DFD3] flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingSong(null)}
-                  className="px-4 py-2 text-xs font-medium text-[#57534E] border border-[#D6CFC2] rounded-md cursor-pointer"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
-                >
-                  {saving ? '保存中…' : '确认保存'}
-                </button>
-              </div>
-            </form>
-          </ModalDialog>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-10">

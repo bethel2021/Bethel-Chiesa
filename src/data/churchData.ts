@@ -56,14 +56,6 @@ export interface LiturgyStep {
   sortOrder: number;
 }
 
-export interface WorshipSong {
-  id: string;
-  title: string;
-  youtubeUrl: string;
-  youtubeUrl2?: string;
-  sortOrder: number;
-}
-
 export type MinistryRosterCategory =
   | 'choir'
   | 'small-group'
@@ -439,37 +431,6 @@ export const LITURGY_COMMUNION: LiturgyStep[] = [
     leader: '牧师 · 司会',
     note: '崇拜结束后欢迎至一楼交谊厅参与圣餐主日爱筵。',
     sortOrder: 5,
-  },
-];
-
-export const WORSHIP_SONGS: WorshipSong[] = [
-  {
-    id: 'song-1',
-    title: '《圣哉三一》（Holy, Holy, Holy）',
-    youtubeUrl: 'https://www.youtube.com/results?search_query=Holy+Holy+Holy+%E5%9C%A3%E5%93%89%E4%B8%89%E4%B8%80+%E8%B5%9E%E7%BE%8E%E8%AF%97',
-    youtubeUrl2: '',
-    sortOrder: 1,
-  },
-  {
-    id: 'song-2',
-    title: '《奇异恩典》（Amazing Grace）',
-    youtubeUrl: 'https://www.youtube.com/results?search_query=Amazing+Grace+%E5%A5%87%E5%BC%82%E6%81%A9%E5%85%B8+%E8%B5%9E%E7%BE%8E%E8%AF%97',
-    youtubeUrl2: '',
-    sortOrder: 2,
-  },
-  {
-    id: 'song-3',
-    title: '《耶稣恩友》（What a Friend We Have in Jesus）',
-    youtubeUrl: 'https://www.youtube.com/results?search_query=What+a+Friend+We+Have+in+Jesus+%E8%80%B6%E7%A8%A3%E6%81%A9%E5%8F%8B',
-    youtubeUrl2: '',
-    sortOrder: 3,
-  },
-  {
-    id: 'song-4',
-    title: '《愿主赐福看顾你》（The Lord Bless You and Keep You）',
-    youtubeUrl: 'https://www.youtube.com/results?search_query=The+Lord+Bless+You+and+Keep+You+%E6%84%BF%E4%B8%BB%E8%B5%90%E7%A6%8F%E7%9C%8B%E9%A1%BE%E4%BD%A0',
-    youtubeUrl2: '',
-    sortOrder: 4,
   },
 ];
 

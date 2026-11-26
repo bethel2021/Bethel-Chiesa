@@ -39,7 +39,6 @@ import {
   SUNDAY_MINISTRY_ROSTER,
   SUNDAY_WORSHIP_TIMES,
   WEEKDAY_MINISTRIES,
-  WORSHIP_SONGS,
   type AdminUserItem,
   type AnnouncementItem,
   type ChurchInfo,
@@ -50,7 +49,6 @@ import {
   type VisitorRequestItem,
   type VisitorStatsSummary,
   type WeekdayMinistry,
-  type WorshipSong,
   type WorshipTimeSlot,
 } from '../data/churchData';
 import { normalizeSiteTheme, type SiteThemeId } from '../data/themes';
@@ -89,15 +87,12 @@ import {
   normalizeChurchInfo,
   normalizeCoworkers,
   normalizeMinistryRoster,
-  normalizeWorshipSongs,
   removeById,
   sanitizeImageRef,
-  sanitizeYoutubeUrl,
   toWeekdayFirestoreBody,
   upsertSorted,
   type LegacyPastorLike,
 } from '../utils/churchNormalization';
-import { filterSafeYoutubeUrl } from '../utils/urlSafety';
 
 export type { PublicBundleData };
 export type DataSourceMode = 'local-cache' | 'cloud-bundle' | 'admin-live' | 'default';
@@ -107,7 +102,6 @@ export interface PublicChurchDataValue {
   coworkers: PulpitCoworker[];
   worshipTimes: WorshipTimeSlot[];
   liturgySteps: LiturgyStep[];
-  worshipSongs: WorshipSong[];
   ministryRoster: MinistryRosterItem[];
   weekdayMinistries: WeekdayMinistry[];
   announcements: AnnouncementItem[];
@@ -152,8 +146,6 @@ export interface ChurchAdminActionsValue {
   deleteWorshipTime: (id: string) => Promise<void>;
   saveLiturgyStep: (item: LiturgyStep) => Promise<void>;
   deleteLiturgyStep: (id: string) => Promise<void>;
-  saveWorshipSong: (item: WorshipSong) => Promise<void>;
-  deleteWorshipSong: (id: string) => Promise<void>;
   saveMinistryRoster: (item: MinistryRosterItem) => Promise<void>;
   deleteMinistryRoster: (id: string) => Promise<void>;
   saveWeekdayMinistry: (item: WeekdayMinistry) => Promise<void>;
@@ -292,11 +284,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       ? initialBundle.liturgySteps
       : [...LITURGY_STANDARD, ...LITURGY_COMMUNION]
   );
-  const [worshipSongs, setWorshipSongs] = useState<WorshipSong[]>(
-    initialBundle?.worshipSongs?.length
-      ? normalizeWorshipSongs(initialBundle.worshipSongs)
-      : WORSHIP_SONGS
-  );
   const [ministryRoster, setMinistryRoster] = useState<MinistryRosterItem[]>(
     initialBundle?.ministryRoster?.length
       ? normalizeMinistryRoster(initialBundle.ministryRoster)
@@ -323,7 +310,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     coworkers,
     worshipTimes,
     liturgySteps,
-    worshipSongs,
     ministryRoster,
     weekdayMinistries,
     announcements,
@@ -335,7 +321,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       coworkers,
       worshipTimes,
       liturgySteps,
-      worshipSongs,
       ministryRoster,
       weekdayMinistries,
       announcements,
@@ -345,7 +330,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     coworkers,
     worshipTimes,
     liturgySteps,
-    worshipSongs,
     ministryRoster,
     weekdayMinistries,
     announcements,
@@ -363,7 +347,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
     if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
-    if (bundle.worshipSongs?.length) setWorshipSongs(normalizeWorshipSongs(bundle.worshipSongs));
     if (bundle.ministryRoster?.length) {
       setMinistryRoster(normalizeMinistryRoster(bundle.ministryRoster));
     }
@@ -381,7 +364,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       coworkers: PulpitCoworker[];
       worshipTimes: WorshipTimeSlot[];
       liturgySteps: LiturgyStep[];
-      worshipSongs: WorshipSong[];
       ministryRoster: MinistryRosterItem[];
       weekdayMinistries: WeekdayMinistry[];
       announcements: AnnouncementItem[];
@@ -390,7 +372,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       coworkers: normalizeCoworkers(snapshot.coworkers).slice(0, 50),
       worshipTimes: snapshot.worshipTimes.slice(0, 20),
       liturgySteps: snapshot.liturgySteps.slice(0, 40),
-      worshipSongs: normalizeWorshipSongs(snapshot.worshipSongs).slice(0, 30),
       ministryRoster: normalizeMinistryRoster(snapshot.ministryRoster).slice(0, 80),
       weekdayMinistries: normalizeWeekdayMinistries(snapshot.weekdayMinistries)
         .slice(0, 30)
@@ -493,7 +474,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             coworkersRawList,
             worshipTimesList,
             liturgyList,
-            songsList,
             rosterList,
             weekdayList,
             annList,
@@ -502,7 +482,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             fetchOptionalDocs<PulpitCoworker>('coworkers'),
             fetchSorted<WorshipTimeSlot>('worship_times', SUNDAY_WORSHIP_TIMES),
             fetchSorted<LiturgyStep>('liturgy_steps', [...LITURGY_STANDARD, ...LITURGY_COMMUNION]),
-            fetchSorted<WorshipSong>('worship_songs', WORSHIP_SONGS),
             fetchSorted<MinistryRosterItem>('ministry_roster', SUNDAY_MINISTRY_ROSTER),
             fetchSorted<WeekdayMinistry>('weekday_ministries', WEEKDAY_MINISTRIES),
             fetchSorted<AnnouncementItem>('announcements', ANNOUNCEMENTS),
@@ -518,7 +497,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             coworkers: mergedCoworkers,
             worshipTimes: worshipTimesList,
             liturgySteps: liturgyList,
-            worshipSongs: songsList,
             ministryRoster: normalizeMinistryRoster(rosterList),
             weekdayMinistries: normalizeWeekdayMinistries(weekdayList),
             announcements: normalizeAnnouncements(annList),
@@ -536,7 +514,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             coworkers: PULPIT_COWORKERS,
             worshipTimes: SUNDAY_WORSHIP_TIMES,
             liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
-            worshipSongs: WORSHIP_SONGS,
             ministryRoster: SUNDAY_MINISTRY_ROSTER,
             weekdayMinistries: WEEKDAY_MINISTRIES,
             announcements: ANNOUNCEMENTS,
@@ -777,11 +754,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       ...LITURGY_STANDARD,
       ...LITURGY_COMMUNION,
     ]);
-    subscribeSorted<WorshipSong>(
-      'worship_songs',
-      (items) => setWorshipSongs(normalizeWorshipSongs(items)),
-      WORSHIP_SONGS
-    );
     subscribeSorted<MinistryRosterItem>(
       'ministry_roster',
       (items) => setMinistryRoster(normalizeMinistryRoster(items)),
@@ -996,19 +968,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             data: {
               ...body,
               ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
-              updatedAt: serverTimestamp(),
-            },
-          });
-        }
-
-        for (const song of current.worshipSongs) {
-          ops.push({
-            ref: doc(db, 'worship_songs', song.id),
-            data: {
-              title: clampStr(song.title, FIELD_LIMITS.worshipSong.title),
-              youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
-              youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
-              sortOrder: clampSortOrder(song.sortOrder, 0),
               updatedAt: serverTimestamp(),
             },
           });
@@ -1294,26 +1253,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [deleteSortedCollectionDoc]
   );
 
-  const saveWorshipSong = useCallback(
-    async (item: WorshipSong) => {
-      const L = FIELD_LIMITS.worshipSong;
-      const id = item.id || makeDocId('song');
-      await saveSortedCollectionDoc('worship_songs', 'worshipSongs', {
-        id,
-        title: clampStr(item.title, L.title),
-        youtubeUrl: sanitizeYoutubeUrl(item.youtubeUrl),
-        youtubeUrl2: sanitizeYoutubeUrl(item.youtubeUrl2),
-        sortOrder: clampSortOrder(item.sortOrder, 0),
-      });
-    },
-    [saveSortedCollectionDoc]
-  );
-
-  const deleteWorshipSong = useCallback(
-    (id: string) => deleteSortedCollectionDoc<WorshipSong>('worship_songs', 'worshipSongs', id),
-    [deleteSortedCollectionDoc]
-  );
-
   const saveMinistryRoster = useCallback(
     async (item: MinistryRosterItem) => {
       const L = FIELD_LIMITS.ministryRoster;
@@ -1330,7 +1269,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       };
       try {
         const resolvedImage = item.image
-          ? await persistLosslessImageIfNeeded(item.image, 200_000)
+          ? await persistLosslessImageIfNeeded(item.image, 65_000)
           : '';
         cleaned = {
           ...cleaned,
@@ -1606,7 +1545,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       coworkers,
       worshipTimes,
       liturgySteps,
-      worshipSongs,
       ministryRoster,
       weekdayMinistries,
       announcements,
@@ -1624,7 +1562,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       coworkers,
       worshipTimes,
       liturgySteps,
-      worshipSongs,
       ministryRoster,
       weekdayMinistries,
       announcements,
@@ -1682,8 +1619,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       deleteWorshipTime,
       saveLiturgyStep,
       deleteLiturgyStep,
-      saveWorshipSong,
-      deleteWorshipSong,
       saveMinistryRoster,
       deleteMinistryRoster,
       saveWeekdayMinistry,
@@ -1707,8 +1642,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       deleteWorshipTime,
       saveLiturgyStep,
       deleteLiturgyStep,
-      saveWorshipSong,
-      deleteWorshipSong,
       saveMinistryRoster,
       deleteMinistryRoster,
       saveWeekdayMinistry,

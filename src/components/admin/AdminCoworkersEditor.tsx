@@ -216,7 +216,8 @@ export function AdminCoworkersEditor() {
                 }
                 defaultValue=""
                 previewAspect="square"
-                hint="支持 JPG / PNG / WebP 原图无损直传（10 MB 内），或留空使用首字母默认头像"
+                preset="avatar"
+                hint="自动缩放到头像尺寸并压缩为轻量 WebP，或留空使用首字母默认头像"
               />
 
               <FieldLabel label="排序号（数字越小越靠前）">

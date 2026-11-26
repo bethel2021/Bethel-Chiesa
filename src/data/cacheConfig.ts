@@ -49,10 +49,6 @@ export const FIELD_LIMITS = {
     leader: 100,
     note: 500,
   },
-  worshipSong: {
-    title: 140,
-    youtubeUrl: 500,
-  },
   ministryRoster: {
     title: 140,
     image: 480_000,

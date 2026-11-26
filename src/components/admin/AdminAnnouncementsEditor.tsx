@@ -277,8 +277,9 @@ export function AdminAnnouncementsEditor() {
               onChange={(nextValue) => setEditing({ ...editing, image: nextValue })}
               allowClear
               previewAspect="landscape"
+              preset="poster"
               fitMode="auto-contain-portrait"
-              hint="点击公告详情弹窗顶部展示，纵向海报自动居中留白适配"
+              hint="自动缩放压缩后展示于详情顶部，纵向海报自动居中适配"
             />
 
             <FieldLabel label="公告正文详情（每段一行）" hint="点击查看详情弹窗内展示">

@@ -1,10 +1,13 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Link2, RotateCcw, Trash2, Upload } from 'lucide-react';
-import { DATA_IMAGE_URI_REGEX, isMediaUri } from '../../lib/mediaStorage';
+import { isMediaUri } from '../../lib/mediaStorage';
+import {
+  optimizeUploadedImage,
+  type ImageOptimizationPreset,
+  type OptimizedImageResult,
+} from '../../utils/imageOptimizer';
 import { SafeImage } from '../SafeImage';
 import { inputClass } from './AdminSharedUI';
-
-const MAX_ORIGINAL_IMAGE_BYTES = 12 * 1024 * 1024; // 12 MB original lossless file limit
 
 interface ImageFieldControlProps {
   label: string;
@@ -13,16 +16,10 @@ interface ImageFieldControlProps {
   defaultValue?: string;
   allowClear?: boolean;
   previewAspect?: 'landscape' | 'portrait' | 'square';
+  preset?: ImageOptimizationPreset;
   fitMode?: 'cover' | 'contain' | 'auto-contain-portrait';
   hint?: string;
   required?: boolean;
-}
-
-interface OriginalImageResult {
-  dataUrl: string;
-  width: number;
-  height: number;
-  bytes: number;
 }
 
 function formatFileSize(bytes: number): string {
@@ -32,57 +29,6 @@ function formatFileSize(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function readOriginalImageFile(file: File): Promise<OriginalImageResult> {
-  const allowedMimes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-  const normalizedMime = file.type.toLowerCase();
-  if (!allowedMimes.has(normalizedMime)) {
-    throw new Error('请选择 JPG、PNG 或 WebP 格式的原图文件。');
-  }
-  if (file.size > MAX_ORIGINAL_IMAGE_BYTES) {
-    throw new Error('原图文件超过 12 MB 上限，请选用 12 MB 以内的原图或填写外链网址。');
-  }
-
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-
-    img.onload = () => {
-      const width = img.naturalWidth;
-      const height = img.naturalHeight;
-      URL.revokeObjectURL(objectUrl);
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result !== 'string') {
-          reject(new Error('无法读取图片文件内容，请重试。'));
-          return;
-        }
-        // Normalize data:image/jpg -> data:image/jpeg if needed; base64 payload stays identical
-        const rawResult = reader.result.replace(/^data:image\/jpg;base64,/, 'data:image/jpeg;base64,');
-        if (!DATA_IMAGE_URI_REGEX.test(rawResult)) {
-          reject(new Error('图片编码格式不支持，请上传标准 JPG、PNG 或 WebP 原图。'));
-          return;
-        }
-        resolve({
-          dataUrl: rawResult,
-          width,
-          height,
-          bytes: file.size,
-        });
-      };
-      reader.onerror = () => reject(new Error('读取原图文件失败，请重试。'));
-      reader.readAsDataURL(file);
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('无法解析该图片文件，请确认文件未损坏。'));
-    };
-
-    img.src = objectUrl;
-  });
-}
-
 export function ImageFieldControl({
   label,
   value,
@@ -90,19 +36,24 @@ export function ImageFieldControl({
   defaultValue,
   allowClear = false,
   previewAspect = 'landscape',
+  preset,
   fitMode = 'cover',
   hint,
   required = false,
 }: ImageFieldControlProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [reading, setReading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [forceUrlMode, setForceUrlMode] = useState(false);
-  const [uploadMeta, setUploadMeta] = useState<{
-    width: number;
-    height: number;
-    bytes: number;
-  } | null>(null);
+  const [uploadMeta, setUploadMeta] = useState<OptimizedImageResult | null>(null);
+
+  const resolvedPreset: ImageOptimizationPreset =
+    preset ??
+    (previewAspect === 'square'
+      ? 'avatar'
+      : previewAspect === 'portrait'
+      ? 'poster'
+      : 'banner');
 
   const isDataUri = value.startsWith('data:image/');
   const isCloudMedia = isMediaUri(value);
@@ -122,22 +73,29 @@ export function ImageFieldControl({
     if (!file) return;
 
     setErrorMsg('');
-    setReading(true);
+    setProcessing(true);
     try {
-      const result = await readOriginalImageFile(file);
+      const result = await optimizeUploadedImage(file, resolvedPreset);
       setForceUrlMode(false);
-      setUploadMeta({
-        width: result.width,
-        height: result.height,
-        bytes: result.bytes,
-      });
+      setUploadMeta(result);
       onChange(result.dataUrl);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : '原图读取失败，请重试。');
+      setErrorMsg(err instanceof Error ? err.message : '图片优化处理失败，请重试。');
     } finally {
-      setReading(false);
+      setProcessing(false);
     }
   };
+
+  const savedPercent =
+    uploadMeta && uploadMeta.originalBytes > 0
+      ? Math.max(
+          0,
+          Math.round(
+            ((uploadMeta.originalBytes - uploadMeta.optimizedBytes) / uploadMeta.originalBytes) *
+              100
+          )
+        )
+      : 0;
 
   return (
     <div className="space-y-2.5 bg-[#FAF8F4] border border-[#E5DFD3] rounded-md p-3.5">
@@ -180,11 +138,11 @@ export function ImageFieldControl({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={reading}
+              disabled={processing}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
-              {reading ? '读取原图中…' : '上传原图（无损直传）'}
+              {processing ? '正在缩放与压缩…' : '上传并优化图片'}
             </button>
 
             {isUploadedBinary && !forceUrlMode && (
@@ -234,10 +192,22 @@ export function ImageFieldControl({
           {isUploadedBinary && !forceUrlMode ? (
             <p className="text-xs text-[#14532D] bg-[#EEF5F0] border border-[#B7D4C0] rounded px-3 py-1.5 tabular-nums">
               {isCloudMedia
-                ? '已保存云端无损原图，主页与后台均按原始分辨率清晰展示。'
+                ? '已保存云端优化图片，主页与后台均可快速清晰加载。'
                 : uploadMeta
-                ? `已选择原图（${uploadMeta.width}×${uploadMeta.height}，${formatFileSize(uploadMeta.bytes)} · 零压缩无损直传），请点击保存同步到主页。`
-                : `已选择原图（约 ${formatFileSize(approxBytes)} · 无损直传），请点击保存同步到主页。`}
+                ? uploadMeta.wasResized || uploadMeta.wasCompressed
+                  ? `已自动优化：${
+                      uploadMeta.wasResized
+                        ? `${uploadMeta.originalWidth}×${uploadMeta.originalHeight} → ${uploadMeta.width}×${uploadMeta.height}`
+                        : `${uploadMeta.width}×${uploadMeta.height}`
+                    } · ${formatFileSize(uploadMeta.originalBytes)} → ${formatFileSize(
+                      uploadMeta.optimizedBytes
+                    )}${savedPercent > 0 ? `（节省 ${savedPercent}%` : '（'}${
+                      savedPercent > 0 ? '，' : ''
+                    }${uploadMeta.formatLabel}），请点击保存同步到主页。`
+                  : `已优化就绪：${uploadMeta.width}×${uploadMeta.height} · ${formatFileSize(
+                      uploadMeta.optimizedBytes
+                    )}（${uploadMeta.formatLabel}），请点击保存同步到主页。`
+                : `已选择优化图片（约 ${formatFileSize(approxBytes)}），请点击保存同步到主页。`}
             </p>
           ) : (
             <input

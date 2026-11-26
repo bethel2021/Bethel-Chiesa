@@ -10,7 +10,6 @@ import {
   Image,
   LogOut,
   Menu,
-  Music,
   Palette,
   RefreshCw,
   ShieldCheck,
@@ -39,7 +38,6 @@ type AdminTab =
   | 'info'
   | 'coworkers'
   | 'worship'
-  | 'songs'
   | 'roster'
   | 'weekday'
   | 'announcements'
@@ -56,7 +54,6 @@ const SIDEBAR_ITEMS: {
   { id: 'info', label: '教会简介与联系', icon: FileText },
   { id: 'coworkers', label: '讲台同工管理', icon: Users },
   { id: 'worship', label: '主日时间与流程', icon: BookOpen },
-  { id: 'songs', label: '主日崇拜歌曲', icon: Music },
   { id: 'weekday', label: '周间事工安排', icon: CalendarDays },
   { id: 'roster', label: '精彩瞬间展示', icon: Image },
   { id: 'announcements', label: '最新家事公告', icon: Bell },
@@ -80,7 +77,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     coworkers,
     worshipTimes,
     liturgySteps,
-    worshipSongs,
     ministryRoster,
     weekdayMinistries,
     announcements,
@@ -200,7 +196,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           </div>
 
           <p className="text-sm text-[#57534E] leading-relaxed">
-            请使用已授权的教会管理员 Google 账号登录，即可实时编辑教会简介、服事同工、主日流程与诗歌、事工轮值表及最新公告。
+            请使用已授权的教会管理员 Google 账号登录，即可实时编辑教会简介、服事同工、主日时间与流程、事工轮值表及最新公告。
           </p>
 
           {authError && (
@@ -554,12 +550,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     sub: '常规主日与圣餐主日礼仪',
                   },
                   {
-                    tab: 'songs' as AdminTab,
-                    label: '主日崇拜歌曲',
-                    count: `${worshipSongs.length} 首诗歌`,
-                    sub: '诗歌名字 · YouTube 视频链接',
-                  },
-                  {
                     tab: 'weekday' as AdminTab,
                     label: '周间事工安排',
                     count: `${weekdayMinistries.length} 项聚会`,
@@ -623,8 +613,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           {activeTab === 'theme' && <AdminThemeEditor />}
           {activeTab === 'info' && <AdminInfoEditor />}
           {activeTab === 'coworkers' && <AdminCoworkersEditor />}
-          {activeTab === 'worship' && <AdminWorshipEditor mode="worship" />}
-          {activeTab === 'songs' && <AdminWorshipEditor mode="songs" />}
+          {activeTab === 'worship' && <AdminWorshipEditor />}
           {activeTab === 'roster' && <AdminMinistryEditor mode="roster" />}
           {activeTab === 'weekday' && <AdminMinistryEditor mode="weekday" />}
           {activeTab === 'announcements' && <AdminAnnouncementsEditor />}

@@ -531,8 +531,9 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               value={editingRoster.image}
               onChange={(nextImg) => setEditingRoster({ ...editingRoster, image: nextImg })}
               previewAspect="landscape"
+              preset="poster"
               required
-              hint="支持本地原图上传（自动优化）或输入外链网址"
+              hint="自动缩放至 1200px 并压缩为轻量 WebP，或输入外链网址"
             />
 
             <FieldLabel label="活动说明 / 见证文字（可选）">

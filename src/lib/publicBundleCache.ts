@@ -6,7 +6,6 @@ import type {
   MinistryRosterItem,
   PulpitCoworker,
   WeekdayMinistry,
-  WorshipSong,
   WorshipTimeSlot,
 } from '../data/churchData';
 
@@ -15,7 +14,6 @@ export interface PublicBundleData {
   coworkers: PulpitCoworker[];
   worshipTimes: WorshipTimeSlot[];
   liturgySteps: LiturgyStep[];
-  worshipSongs: WorshipSong[];
   ministryRoster: MinistryRosterItem[];
   weekdayMinistries: WeekdayMinistry[];
   announcements: AnnouncementItem[];

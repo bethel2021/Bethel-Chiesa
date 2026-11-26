@@ -1,6 +1,6 @@
 {
   "name": "伯特利教会 · Bethel Church",
-  "description": "伯特利教会官方网站——扎根圣道、彼此相爱、广传福音。提供教会简介、牧者同工介绍、主日崇拜流程与敬拜诗歌、主日事工岗位与主日学团契安排、周间事工、最新聚会公告及交通联系方式。",
+  "description": "伯特利教会官方网站——扎根圣道、彼此相爱、广传福音。提供教会简介、同工团队介绍、主日崇拜时间与流程、精彩瞬间展示、周间事工、最新聚会公告及交通联系方式。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

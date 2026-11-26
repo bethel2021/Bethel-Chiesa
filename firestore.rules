@@ -123,7 +123,7 @@ service cloud.firestore {
     function isValidPublicBundle(data) {
       return data.keys().hasAll([
         'churchInfo', 'coworkers', 'worshipTimes', 'liturgySteps',
-        'worshipSongs', 'ministryRoster', 'weekdayMinistries', 'announcements',
+        'ministryRoster', 'weekdayMinistries', 'announcements',
         'version', 'updatedAt'
       ]) && data.keys().hasOnly([
         'churchInfo', 'pastors', 'coworkers', 'worshipTimes', 'liturgySteps',
@@ -135,7 +135,7 @@ service cloud.firestore {
       && isValidMapList(data.coworkers, 50)
       && isValidMapList(data.worshipTimes, 20)
       && isValidMapList(data.liturgySteps, 40)
-      && isValidMapList(data.worshipSongs, 30)
+      && (!('worshipSongs' in data) || isValidMapList(data.worshipSongs, 30))
       && isValidMapList(data.ministryRoster, 80)
       && isValidMapList(data.weekdayMinistries, 30)
       && isValidMapList(data.announcements, 50)

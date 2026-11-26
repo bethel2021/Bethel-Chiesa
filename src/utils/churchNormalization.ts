@@ -10,15 +10,12 @@ import {
   type MinistryRosterItem,
   type PulpitCoworker,
   type WeekdayMinistry,
-  type WorshipSong,
 } from '../data/churchData';
 import { normalizeSiteTheme } from '../data/themes';
 import { DATA_IMAGE_URI_REGEX, isMediaUri } from '../lib/mediaStorage';
 import {
   filterSafeImageSrc,
-  filterSafeYoutubeUrl,
   SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
-  YOUTUBE_HTTPS_URL_REGEX,
 } from './urlSafety';
 
 export function clampStr(val: string | undefined, maxLen: number): string {
@@ -60,22 +57,6 @@ export function sanitizeImageRef(val: string | undefined, maxLen: number): strin
   return trimmed;
 }
 
-export function sanitizeYoutubeUrl(val: string | undefined): string {
-  let trimmed = String(val ?? '').trim();
-  if (!trimmed) return '';
-  if (/^http:\/\//i.test(trimmed)) {
-    trimmed = trimmed.replace(/^http:\/\//i, 'https://');
-  } else if (/^([a-zA-Z0-9-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(trimmed)) {
-    trimmed = `https://${trimmed}`;
-  }
-  if (trimmed.length > FIELD_LIMITS.worshipSong.youtubeUrl || !YOUTUBE_HTTPS_URL_REGEX.test(trimmed)) {
-    throw new Error(
-      '请输入有效的 YouTube 视频链接（例如 https://www.youtube.com/watch?v=... 或 https://youtu.be/...），或留空。'
-    );
-  }
-  return trimmed;
-}
-
 const EVANGELISM_DEFAULT_DESC =
   '领受主的大使命，借着福音聚会与生活见证向同胞及社区传扬基督救恩与盼望。';
 
@@ -109,17 +90,6 @@ export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): Churc
   };
 }
 
-
-export function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong[] {
-  const L = FIELD_LIMITS.worshipSong;
-  return list.map((song, idx) => ({
-    id: String(song.id || `song-${idx + 1}`),
-    title: clampStr(song.title, L.title),
-    youtubeUrl: filterSafeYoutubeUrl(song.youtubeUrl),
-    youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
-    sortOrder: clampSortOrder(song.sortOrder, idx + 1),
-  }));
-}
 
 export interface LegacyPastorLike {
   id?: string;
