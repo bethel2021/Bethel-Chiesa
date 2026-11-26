@@ -21,6 +21,23 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 const VISITOR_HASH_DOMAIN = process.env.VISITOR_IP_SALT || 'bethel-church-visitor-counter-v1';
 
+interface FirebasePublicConfig {
+  apiKey?: string;
+  projectId?: string;
+  firestoreDatabaseId?: string;
+}
+
+function loadFirebasePublicConfig(): FirebasePublicConfig {
+  try {
+    const raw = fs.readFileSync(path.resolve(__dirname, 'firebase-applet-config.json'), 'utf8');
+    return JSON.parse(raw) as FirebasePublicConfig;
+  } catch {
+    return {};
+  }
+}
+
+const firebasePublicConfig = loadFirebasePublicConfig();
+
 interface GeoLocationResult {
   country: string;
   region: string;
@@ -431,9 +448,12 @@ async function startServer(): Promise<void> {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     const authCheck = await verifyAdminBearerToken({
       authHeader: req.get('authorization'),
-      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY,
-      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || firebasePublicConfig.apiKey || '',
+      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || firebasePublicConfig.projectId || '',
+      firestoreDatabaseId:
+        process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID ||
+        firebasePublicConfig.firestoreDatabaseId ||
+        '',
     });
 
     if (authCheck.ok === false) {
@@ -463,9 +483,12 @@ async function startServer(): Promise<void> {
 
     const authCheck = await verifyAdminBearerToken({
       authHeader: req.get('authorization'),
-      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY,
-      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+      firebaseApiKey: process.env.VITE_FIREBASE_API_KEY || firebasePublicConfig.apiKey || '',
+      firebaseProjectId: process.env.VITE_FIREBASE_PROJECT_ID || firebasePublicConfig.projectId || '',
+      firestoreDatabaseId:
+        process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID ||
+        firebasePublicConfig.firestoreDatabaseId ||
+        '',
     });
 
     if (authCheck.ok === false) {

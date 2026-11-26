@@ -1,3 +1,4 @@
+import firebaseConfig from '../../firebase-applet-config.json';
 import {
   parseRecipients,
   resolveSenderAddress,
@@ -31,9 +32,10 @@ export async function onRequestGet(context: {
 
   const authCheck = await verifyAdminBearerToken({
     authHeader: request.headers.get('authorization'),
-    firebaseApiKey: env?.VITE_FIREBASE_API_KEY,
-    firebaseProjectId: env?.VITE_FIREBASE_PROJECT_ID,
-    firestoreDatabaseId: env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+    firebaseApiKey: env?.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+    firebaseProjectId: env?.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+    firestoreDatabaseId:
+      env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId,
   });
 
   if (authCheck.ok === false) {

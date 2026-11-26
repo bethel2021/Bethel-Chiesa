@@ -1,5 +1,3 @@
-import firebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
-
 export const DEFAULT_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
 export const DEFAULT_FROM_ADDRESS = '伯特利教会官网 <onboarding@resend.dev>';
 
@@ -271,9 +269,9 @@ export async function sendResendEmail(params: {
 
 export async function verifyAdminBearerToken(params: {
   authHeader: string | null | undefined;
-  firebaseApiKey?: string;
-  firebaseProjectId?: string;
-  firestoreDatabaseId?: string;
+  firebaseApiKey: string;
+  firebaseProjectId: string;
+  firestoreDatabaseId: string;
 }): Promise<{ ok: true; uid: string; email: string } | { ok: false; status: number; message: string }> {
   const rawHeader = typeof params.authHeader === 'string' ? params.authHeader.trim() : '';
   if (!rawHeader.startsWith('Bearer ')) {
@@ -284,9 +282,12 @@ export async function verifyAdminBearerToken(params: {
     return { ok: false, status: 401, message: '无效的身份验证令牌。' };
   }
 
-  const apiKey = params.firebaseApiKey || firebaseConfig.apiKey;
-  const projectId = params.firebaseProjectId || firebaseConfig.projectId;
-  const databaseId = params.firestoreDatabaseId || firebaseConfig.firestoreDatabaseId;
+  const apiKey = params.firebaseApiKey;
+  const projectId = params.firebaseProjectId;
+  const databaseId = params.firestoreDatabaseId;
+  if (!apiKey || !projectId || !databaseId) {
+    return { ok: false, status: 500, message: '缺少 Firebase 配置信息。' };
+  }
 
   try {
     const lookupRes = await fetch(
