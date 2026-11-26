@@ -35,7 +35,6 @@ import {
   LITURGY_STANDARD,
   normalizeMinistryCategory,
   normalizeWeekdayMinistries,
-  PASTORS_TEAM,
   PULPIT_COWORKERS,
   SUNDAY_MINISTRY_ROSTER,
   SUNDAY_WORSHIP_TIMES,
@@ -46,7 +45,6 @@ import {
   type ChurchInfo,
   type LiturgyStep,
   type MinistryRosterItem,
-  type PastorProfile,
   type PulpitCoworker,
   type VisitorIpRecord,
   type VisitorRequestItem,
@@ -85,18 +83,19 @@ import {
   clampStr,
   cleanWeekdayMinistry,
   makeDocId,
+  mergeLegacyPastorsIntoCoworkers,
   normalizeAnnouncementCategory,
   normalizeAnnouncements,
   normalizeChurchInfo,
   normalizeCoworkers,
   normalizeMinistryRoster,
-  normalizePastors,
   normalizeWorshipSongs,
   removeById,
   sanitizeImageRef,
   sanitizeYoutubeUrl,
   toWeekdayFirestoreBody,
   upsertSorted,
+  type LegacyPastorLike,
 } from '../utils/churchNormalization';
 import { filterSafeYoutubeUrl } from '../utils/urlSafety';
 
@@ -105,7 +104,6 @@ export type DataSourceMode = 'local-cache' | 'cloud-bundle' | 'admin-live' | 'de
 
 export interface PublicChurchDataValue {
   churchInfo: ChurchInfo;
-  pastors: PastorProfile[];
   coworkers: PulpitCoworker[];
   worshipTimes: WorshipTimeSlot[];
   liturgySteps: LiturgyStep[];
@@ -148,8 +146,6 @@ export interface ChurchAdminActionsValue {
   publishPublicBundle: () => Promise<void>;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
   saveChurchInfo: (info: ChurchInfo) => Promise<void>;
-  savePastor: (item: PastorProfile) => Promise<void>;
-  deletePastor: (id: string) => Promise<void>;
   saveCoworker: (item: PulpitCoworker) => Promise<void>;
   deleteCoworker: (id: string) => Promise<void>;
   saveWorshipTime: (item: WorshipTimeSlot) => Promise<void>;
@@ -266,6 +262,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const publicBootStartedRef = useRef(false);
   const wasAdminRef = useRef(false);
   const legacyCloudWeekdayIdsRef = useRef<string[]>([]);
+  const legacyCloudPastorIdsRef = useRef<Set<string>>(new Set());
 
   const activeTheme: SiteThemeId = normalizeSiteTheme(churchInfo.siteTheme);
 
@@ -281,12 +278,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const [pastors, setPastors] = useState<PastorProfile[]>(
-    initialBundle?.pastors?.length ? normalizePastors(initialBundle.pastors) : PASTORS_TEAM
-  );
+  const initialLegacyPastors = (initialBundle as { pastors?: LegacyPastorLike[] } | null)?.pastors;
   const [coworkers, setCoworkers] = useState<PulpitCoworker[]>(
-    initialBundle?.coworkers?.length
-      ? normalizeCoworkers(initialBundle.coworkers)
+    initialBundle?.coworkers?.length || initialLegacyPastors?.length
+      ? mergeLegacyPastorsIntoCoworkers(initialBundle?.coworkers ?? [], initialLegacyPastors)
       : PULPIT_COWORKERS
   );
   const [worshipTimes, setWorshipTimes] = useState<WorshipTimeSlot[]>(
@@ -325,7 +320,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const latestStateRef = useRef({
     churchInfo,
-    pastors,
     coworkers,
     worshipTimes,
     liturgySteps,
@@ -338,7 +332,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     latestStateRef.current = {
       churchInfo,
-      pastors,
       coworkers,
       worshipTimes,
       liturgySteps,
@@ -349,7 +342,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     };
   }, [
     churchInfo,
-    pastors,
     coworkers,
     worshipTimes,
     liturgySteps,
@@ -365,8 +357,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       preloadImageRef(merged.heroImage, 'high');
       setChurchInfo(merged);
     }
-    if (bundle.pastors?.length) setPastors(normalizePastors(bundle.pastors));
-    if (bundle.coworkers?.length) setCoworkers(normalizeCoworkers(bundle.coworkers));
+    const legacyPastors = (bundle as { pastors?: LegacyPastorLike[] }).pastors;
+    if (bundle.coworkers?.length || legacyPastors?.length) {
+      setCoworkers(mergeLegacyPastorsIntoCoworkers(bundle.coworkers ?? [], legacyPastors));
+    }
     if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
     if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
     if (bundle.worshipSongs?.length) setWorshipSongs(normalizeWorshipSongs(bundle.worshipSongs));
@@ -384,7 +378,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const buildPublicBundlePayload = useCallback(
     (snapshot: {
       churchInfo: ChurchInfo;
-      pastors: PastorProfile[];
       coworkers: PulpitCoworker[];
       worshipTimes: WorshipTimeSlot[];
       liturgySteps: LiturgyStep[];
@@ -394,7 +387,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       announcements: AnnouncementItem[];
     }) => ({
       churchInfo: buildChurchInfoFields(snapshot.churchInfo),
-      pastors: snapshot.pastors.slice(0, 30),
       coworkers: normalizeCoworkers(snapshot.coworkers).slice(0, 50),
       worshipTimes: snapshot.worshipTimes.slice(0, 20),
       liturgySteps: snapshot.liturgySteps.slice(0, 40),
@@ -487,9 +479,18 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             })) as unknown as T[];
           };
 
+          const fetchOptionalDocs = async <T,>(colName: string): Promise<T[]> => {
+            const snap = await getDocs(query(collection(db, colName), orderBy('sortOrder', 'asc')));
+            if (snap.empty) return [];
+            return snap.docs.map((d) => ({
+              ...(d.data() as Omit<T, 'id'>),
+              id: d.id,
+            })) as unknown as T[];
+          };
+
           const [
-            pastorsList,
-            coworkersList,
+            legacyPastorsList,
+            coworkersRawList,
             worshipTimesList,
             liturgyList,
             songsList,
@@ -497,8 +498,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             weekdayList,
             annList,
           ] = await Promise.all([
-            fetchSorted<PastorProfile>('pastors', PASTORS_TEAM),
-            fetchSorted<PulpitCoworker>('coworkers', PULPIT_COWORKERS),
+            fetchOptionalDocs<LegacyPastorLike>('pastors'),
+            fetchOptionalDocs<PulpitCoworker>('coworkers'),
             fetchSorted<WorshipTimeSlot>('worship_times', SUNDAY_WORSHIP_TIMES),
             fetchSorted<LiturgyStep>('liturgy_steps', [...LITURGY_STANDARD, ...LITURGY_COMMUNION]),
             fetchSorted<WorshipSong>('worship_songs', WORSHIP_SONGS),
@@ -507,10 +508,14 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             fetchSorted<AnnouncementItem>('announcements', ANNOUNCEMENTS),
           ]);
 
+          const mergedCoworkers =
+            coworkersRawList.length || legacyPastorsList.length
+              ? mergeLegacyPastorsIntoCoworkers(coworkersRawList, legacyPastorsList)
+              : PULPIT_COWORKERS;
+
           const legacyBundle: PublicBundleData = {
             churchInfo: { ...CHURCH_INFO, ...(infoSnap.data() as ChurchInfo) },
-            pastors: pastorsList,
-            coworkers: coworkersList,
+            coworkers: mergedCoworkers,
             worshipTimes: worshipTimesList,
             liturgySteps: liturgyList,
             worshipSongs: songsList,
@@ -528,7 +533,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         } else {
           const defaultBundle: PublicBundleData = {
             churchInfo: CHURCH_INFO,
-            pastors: PASTORS_TEAM,
             coworkers: PULPIT_COWORKERS,
             worshipTimes: SUNDAY_WORSHIP_TIMES,
             liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
@@ -618,6 +622,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
     if (!isAdmin) {
       legacyCloudWeekdayIdsRef.current = [];
+      legacyCloudPastorIdsRef.current = new Set();
       setVisitorRequests([]);
       setAdminUsers([]);
       setVisitorStats(null);
@@ -709,15 +714,63 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       );
     };
 
-    subscribeSorted<PastorProfile>(
-      'pastors',
-      (items) => setPastors(normalizePastors(items)),
-      PASTORS_TEAM
+    let adminRawCoworkers: PulpitCoworker[] = [];
+    let adminLegacyPastors: LegacyPastorLike[] = [];
+    let hasAdminCoworkersSnap = false;
+    let hasAdminLegacyPastorsSnap = false;
+
+    const applyAdminCoworkers = () => {
+      if (!hasAdminCoworkersSnap && !hasAdminLegacyPastorsSnap) return;
+      if (adminRawCoworkers.length === 0 && adminLegacyPastors.length === 0) {
+        setCoworkers(PULPIT_COWORKERS);
+        return;
+      }
+      setCoworkers(mergeLegacyPastorsIntoCoworkers(adminRawCoworkers, adminLegacyPastors));
+    };
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'pastors'), orderBy('sortOrder', 'asc')),
+        (snap) => {
+          adminLegacyPastors = snap.docs.map((d) => ({
+            ...(d.data() as Omit<LegacyPastorLike, 'id'>),
+            id: d.id,
+          }));
+          legacyCloudPastorIdsRef.current = new Set(
+            adminLegacyPastors.map((p) => String(p.id || '')).filter(Boolean)
+          );
+          hasAdminLegacyPastorsSnap = true;
+          applyAdminCoworkers();
+        },
+        (error) => {
+          try {
+            handleFirestoreError(error, OperationType.LIST, 'pastors');
+          } catch {
+            // Logged
+          }
+        }
+      )
     );
-    subscribeSorted<PulpitCoworker>(
-      'coworkers',
-      (items) => setCoworkers(normalizeCoworkers(items)),
-      PULPIT_COWORKERS
+
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, 'coworkers'), orderBy('sortOrder', 'asc')),
+        (snap) => {
+          adminRawCoworkers = snap.docs.map((d) => ({
+            ...(d.data() as Omit<PulpitCoworker, 'id'>),
+            id: d.id,
+          }));
+          hasAdminCoworkersSnap = true;
+          applyAdminCoworkers();
+        },
+        (error) => {
+          try {
+            handleFirestoreError(error, OperationType.LIST, 'coworkers');
+          } catch {
+            // Logged
+          }
+        }
+      )
     );
     subscribeSorted<WorshipTimeSlot>('worship_times', setWorshipTimes, SUNDAY_WORSHIP_TIMES);
     subscribeSorted<LiturgyStep>('liturgy_steps', setLiturgySteps, [
@@ -884,17 +937,11 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     const current = latestStateRef.current;
     try {
       if (!hasCloudData) {
-        const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
+        const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
           persistLosslessImageIfNeeded(current.churchInfo.heroImage, 180_000),
           persistLosslessImageIfNeeded(current.churchInfo.fellowshipImage, 180_000),
+          persistLosslessImageIfNeeded(current.churchInfo.churchTeamImage, 250_000),
         ]);
-        const resolvedPastors = await Promise.all(
-          current.pastors.map(async (p) => ({
-            ...p,
-            image:
-              (await persistLosslessImageIfNeeded(p.image, 100_000)) || PASTORS_TEAM[0].image,
-          }))
-        );
         const resolvedCoworkers = await Promise.all(
           normalizeCoworkers(current.coworkers).map(async (cw) => ({
             ...cw,
@@ -907,8 +954,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             ...current.churchInfo,
             heroImage: resolvedHeroImage || CHURCH_INFO.heroImage,
             fellowshipImage: resolvedFellowshipImage || CHURCH_INFO.fellowshipImage,
+            churchTeamImage: resolvedTeamImage || CHURCH_INFO.churchTeamImage,
           },
-          pastors: resolvedPastors,
           coworkers: resolvedCoworkers,
         };
 
@@ -921,14 +968,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
             },
           },
         ];
-
-        for (const p of normalizedSnapshot.pastors) {
-          const { id, ...body } = p;
-          ops.push({
-            ref: doc(db, 'pastors', id),
-            data: { ...body, updatedAt: serverTimestamp() },
-          });
-        }
 
         for (const cw of normalizedSnapshot.coworkers) {
           const { id, image, ...body } = cw;
@@ -1071,14 +1110,16 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const path = 'church_sections/info';
       const prevInfo = latestStateRef.current.churchInfo;
       try {
-        const [resolvedHeroImage, resolvedFellowshipImage] = await Promise.all([
+        const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
           persistLosslessImageIfNeeded(info.heroImage, 180_000),
           persistLosslessImageIfNeeded(info.fellowshipImage, 180_000),
+          persistLosslessImageIfNeeded(info.churchTeamImage, 250_000),
         ]);
         const cleaned = buildChurchInfoFields({
           ...info,
           heroImage: resolvedHeroImage,
           fellowshipImage: resolvedFellowshipImage,
+          churchTeamImage: resolvedTeamImage,
         });
         await setDoc(doc(db, 'church_sections', 'info'), {
           ...cleaned,
@@ -1092,6 +1133,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
         cleanupReplacedMediaUri(prevInfo.heroImage, cleaned.heroImage);
         cleanupReplacedMediaUri(prevInfo.fellowshipImage, cleaned.fellowshipImage);
+        cleanupReplacedMediaUri(prevInfo.churchTeamImage, cleaned.churchTeamImage);
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, path);
       }
@@ -1109,41 +1151,45 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [saveChurchInfo]
   );
 
-  const savePastor = useCallback(
-    async (item: PastorProfile) => {
-      const L = FIELD_LIMITS.pastor;
-      const id = item.id || makeDocId('pastor');
-      const prevPastor = latestStateRef.current.pastors.find((p) => p.id === id);
-      let cleaned: PastorProfile;
-      try {
-        const resolvedImage = await persistLosslessImageIfNeeded(item.image, 100_000);
-        cleaned = {
-          id,
-          name: clampStr(item.name, L.name),
-          role: clampStr(item.role, L.role),
-          tenure: clampStr(item.tenure, L.tenure),
-          image: sanitizeImageRef(resolvedImage, L.image) || PASTORS_TEAM[0].image,
-          education: clampStr(item.education, L.education),
-          ministryFocus: clampStr(item.ministryFocus, L.ministryFocus),
-          bio: clampStr(item.bio, L.bio),
-          sortOrder: clampSortOrder(item.sortOrder, 0),
-        };
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `pastors/${id}`);
-      }
-      await saveSortedCollectionDoc('pastors', 'pastors', cleaned);
-      cleanupReplacedMediaUri(prevPastor?.image, cleaned.image);
-    },
-    [saveSortedCollectionDoc]
-  );
+  const migrateLegacyPastorsWithCoworkerList = useCallback(
+    async (rawNextList: PulpitCoworker[]) => {
+      const L = FIELD_LIMITS.coworker;
+      const legacyIds = Array.from(legacyCloudPastorIdsRef.current);
+      const migratedList = await Promise.all(
+        rawNextList.map(async (cw) => {
+          const resolvedImage = cw.image
+            ? await persistLosslessImageIfNeeded(cw.image, 50_000)
+            : '';
+          return {
+            id: cw.id,
+            name: clampStr(cw.name, L.name),
+            title: clampStr(cw.title, L.title),
+            image: sanitizeImageRef(resolvedImage, L.image),
+            sortOrder: clampSortOrder(cw.sortOrder, 0),
+          };
+        })
+      );
 
-  const deletePastor = useCallback(
-    async (id: string) => {
-      const prevPastor = latestStateRef.current.pastors.find((p) => p.id === id);
-      await deleteSortedCollectionDoc<PastorProfile>('pastors', 'pastors', id);
-      cleanupReplacedMediaUri(prevPastor?.image, '');
+      const batch = writeBatch(db);
+      for (const cw of migratedList) {
+        const { id: cwId, ...body } = cw;
+        batch.set(doc(db, 'coworkers', cwId), {
+          ...body,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      for (const legacyId of legacyIds) {
+        batch.delete(doc(db, 'pastors', legacyId));
+      }
+      await batch.commit();
+      legacyCloudPastorIdsRef.current = new Set();
+      setCoworkers(migratedList);
+      await publishBundleSnapshot({
+        ...latestStateRef.current,
+        coworkers: migratedList,
+      });
     },
-    [deleteSortedCollectionDoc]
+    [publishBundleSnapshot]
   );
 
   const saveCoworker = useCallback(
@@ -1166,19 +1212,41 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `coworkers/${id}`);
       }
-      await saveSortedCollectionDoc('coworkers', 'coworkers', cleaned);
+
+      if (legacyCloudPastorIdsRef.current.size > 0) {
+        try {
+          const nextList = upsertSorted(latestStateRef.current.coworkers, cleaned);
+          await migrateLegacyPastorsWithCoworkerList(nextList);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `coworkers/${id}`);
+        }
+      } else {
+        await saveSortedCollectionDoc('coworkers', 'coworkers', cleaned);
+      }
       cleanupReplacedMediaUri(prevCoworker?.image, cleaned.image);
     },
-    [saveSortedCollectionDoc]
+    [migrateLegacyPastorsWithCoworkerList, saveSortedCollectionDoc]
   );
 
   const deleteCoworker = useCallback(
     async (id: string) => {
       const prevCoworker = latestStateRef.current.coworkers.find((cw) => cw.id === id);
-      await deleteSortedCollectionDoc<PulpitCoworker>('coworkers', 'coworkers', id);
+      if (legacyCloudPastorIdsRef.current.size > 0) {
+        try {
+          const nextList = removeById(latestStateRef.current.coworkers, id);
+          if (prevCoworker && !legacyCloudPastorIdsRef.current.has(id)) {
+            await deleteDoc(doc(db, 'coworkers', id));
+          }
+          await migrateLegacyPastorsWithCoworkerList(nextList);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `coworkers/${id}`);
+        }
+      } else {
+        await deleteSortedCollectionDoc<PulpitCoworker>('coworkers', 'coworkers', id);
+      }
       cleanupReplacedMediaUri(prevCoworker?.image, '');
     },
-    [deleteSortedCollectionDoc]
+    [deleteSortedCollectionDoc, migrateLegacyPastorsWithCoworkerList]
   );
 
   const saveWorshipTime = useCallback(
@@ -1535,7 +1603,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const publicValue = useMemo<PublicChurchDataValue>(
     () => ({
       churchInfo,
-      pastors,
       coworkers,
       worshipTimes,
       liturgySteps,
@@ -1554,7 +1621,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }),
     [
       churchInfo,
-      pastors,
       coworkers,
       worshipTimes,
       liturgySteps,
@@ -1610,8 +1676,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       publishPublicBundle,
       saveSiteTheme,
       saveChurchInfo,
-      savePastor,
-      deletePastor,
       saveCoworker,
       deleteCoworker,
       saveWorshipTime,
@@ -1637,8 +1701,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       publishPublicBundle,
       saveSiteTheme,
       saveChurchInfo,
-      savePastor,
-      deletePastor,
       saveCoworker,
       deleteCoworker,
       saveWorshipTime,

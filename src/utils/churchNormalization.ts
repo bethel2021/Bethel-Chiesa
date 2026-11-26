@@ -5,11 +5,9 @@ import {
   CHURCH_INFO,
   normalizeMinistryCategory,
   normalizeWeekdayMinistries,
-  PASTORS_TEAM,
   type AnnouncementItem,
   type ChurchInfo,
   type MinistryRosterItem,
-  type PastorProfile,
   type PulpitCoworker,
   type WeekdayMinistry,
   type WorshipSong,
@@ -106,24 +104,11 @@ export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): Churc
     themeVerseRef,
     heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
     fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
+    churchTeamImage: filterSafeImageSrc(base.churchTeamImage, CHURCH_INFO.churchTeamImage),
     siteTheme: normalizeSiteTheme(base.siteTheme),
   };
 }
 
-export function normalizePastors(list: Partial<PastorProfile>[]): PastorProfile[] {
-  const L = FIELD_LIMITS.pastor;
-  return list.map((p, idx) => ({
-    id: String(p.id || `pastor-${idx + 1}`),
-    name: clampStr(p.name, L.name),
-    role: clampStr(p.role, L.role),
-    tenure: clampStr(p.tenure, L.tenure),
-    image: filterSafeImageSrc(p.image, PASTORS_TEAM[0]?.image || ''),
-    education: clampStr(p.education, L.education),
-    ministryFocus: clampStr(p.ministryFocus, L.ministryFocus),
-    bio: clampStr(p.bio, L.bio),
-    sortOrder: clampSortOrder(p.sortOrder, idx + 1),
-  }));
-}
 
 export function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong[] {
   const L = FIELD_LIMITS.worshipSong;
@@ -134,6 +119,14 @@ export function normalizeWorshipSongs(list: Partial<WorshipSong>[]): WorshipSong
     youtubeUrl2: filterSafeYoutubeUrl(song.youtubeUrl2),
     sortOrder: clampSortOrder(song.sortOrder, idx + 1),
   }));
+}
+
+export interface LegacyPastorLike {
+  id?: string;
+  name?: string;
+  role?: string;
+  image?: string;
+  sortOrder?: number;
 }
 
 export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
@@ -148,6 +141,46 @@ export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCowor
       sortOrder: clampSortOrder(cw.sortOrder, idx + 1),
     };
   });
+}
+
+export function mergeLegacyPastorsIntoCoworkers(
+  coworkers: Partial<PulpitCoworker>[],
+  legacyPastors?: LegacyPastorLike[]
+): PulpitCoworker[] {
+  const normalizedCoworkers = normalizeCoworkers(coworkers);
+  if (!Array.isArray(legacyPastors) || legacyPastors.length === 0) {
+    return normalizedCoworkers;
+  }
+
+  const existingIds = new Set(normalizedCoworkers.map((c) => c.id));
+  const convertedPastors: PulpitCoworker[] = legacyPastors
+    .filter((p) => p && typeof p.name === 'string' && p.name.trim().length > 0)
+    .filter((p, idx) => !existingIds.has(String(p.id || `pastor-${idx + 1}`)))
+    .map((p, idx) => {
+      const safeImg = filterSafeImageSrc(p.image);
+      return {
+        id: String(p.id || `pastor-${idx + 1}`),
+        name: clampStr(p.name, FIELD_LIMITS.coworker.name),
+        title: clampStr(p.role, FIELD_LIMITS.coworker.title),
+        ...(safeImg ? { image: safeImg } : {}),
+        sortOrder: clampSortOrder(p.sortOrder, idx + 1),
+      };
+    });
+
+  if (convertedPastors.length === 0) {
+    return normalizedCoworkers;
+  }
+
+  const maxPastorOrder = convertedPastors.reduce(
+    (max, p) => Math.max(max, p.sortOrder),
+    0
+  );
+  const shiftedCoworkers = normalizedCoworkers.map((cw) => ({
+    ...cw,
+    sortOrder: cw.sortOrder <= maxPastorOrder ? cw.sortOrder + maxPastorOrder : cw.sortOrder,
+  }));
+
+  return [...convertedPastors, ...shiftedCoworkers].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
@@ -217,6 +250,8 @@ export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
     heroImage: sanitizeImageRef(info.heroImage, L.heroImage) || CHURCH_INFO.heroImage,
     fellowshipImage:
       sanitizeImageRef(info.fellowshipImage, L.fellowshipImage) || CHURCH_INFO.fellowshipImage,
+    churchTeamImage:
+      sanitizeImageRef(info.churchTeamImage, L.churchTeamImage) || CHURCH_INFO.churchTeamImage,
     address: clampStr(info.address, L.address),
     shortAddress: clampStr(info.shortAddress, L.shortAddress),
     pastoralPhone: clampStr(info.pastoralPhone, L.pastoralPhone),

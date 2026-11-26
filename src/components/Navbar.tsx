@@ -5,7 +5,7 @@ import { getStickyHeaderHeight, handleAnchorClick } from '../utils/scroll';
 
 const NAV_LINKS = [
   { id: 'intro', label: '教会简介', href: '#intro' },
-  { id: 'pastors', label: '牧者同工', href: '#pastors' },
+  { id: 'pastors', label: '服事同工', href: '#pastors' },
   { id: 'worship', label: '主日崇拜', href: '#worship' },
   { id: 'ministry', label: '周间事工', href: '#ministry' },
   { id: 'moments', label: '精彩瞬间', href: '#moments' },

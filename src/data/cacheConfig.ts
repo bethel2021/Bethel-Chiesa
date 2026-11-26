@@ -16,6 +16,7 @@ export const FIELD_LIMITS = {
     heroSubtitle: 400,
     heroImage: 480_000,
     fellowshipImage: 240_000,
+    churchTeamImage: 300_000,
     address: 300,
     shortAddress: 100,
     pastoralPhone: 100,
@@ -29,15 +30,6 @@ export const FIELD_LIMITS = {
     coreValueIndex: 10,
     coreValueTitle: 60,
     coreValueDescription: 300,
-  },
-  pastor: {
-    name: 80,
-    role: 120,
-    tenure: 60,
-    image: 120_000,
-    education: 200,
-    ministryFocus: 200,
-    bio: 1200,
   },
   coworker: {
     name: 80,

@@ -172,6 +172,15 @@ export function AdminInfoEditor() {
             hint="支持 JPG / PNG / WebP 原图无损直传（12 MB 内），或填写外链网址"
             required
           />
+          <ImageFieldControl
+            label="同工团队合影图片"
+            value={form.churchTeamImage}
+            onChange={(nextUrl) => setForm({ ...form, churchTeamImage: nextUrl })}
+            defaultValue={CHURCH_IMAGES.churchTeam}
+            previewAspect="landscape"
+            hint="支持 JPG / PNG / WebP 原图无损直传（15 MB 内），或填写外链网址"
+            required
+          />
         </div>
 
         <div className="pt-4 border-t border-[#EFEAE0]">

@@ -14,6 +14,7 @@ export interface ChurchInfo {
   heroSubtitle: string;
   heroImage: string;
   fellowshipImage: string;
+  churchTeamImage: string;
   address: string;
   shortAddress: string;
   pastoralPhone: string;
@@ -26,17 +27,6 @@ export interface ChurchInfo {
   coreValues: CoreValueItem[];
 }
 
-export interface PastorProfile {
-  id: string;
-  name: string;
-  role: string;
-  tenure: string;
-  image: string;
-  education: string;
-  ministryFocus: string;
-  bio: string;
-  sortOrder: number;
-}
 
 export interface PulpitCoworker {
   id: string;
@@ -195,6 +185,7 @@ export const CHURCH_IMAGES = {
   annChoir: '/src/assets/images/ann_christmas_choir_1795542572912.jpg',
   annCare: '/src/assets/images/ann_community_care_1795542571854.jpg',
   annSeekers: '/src/assets/images/ann_seekers_group_1795542572342.jpg',
+  churchTeam: '/src/assets/images/church_coworker_team_1795724161606.jpg',
 } as const;
 
 export const CHURCH_INFO: ChurchInfo = {
@@ -205,6 +196,7 @@ export const CHURCH_INFO: ChurchInfo = {
   heroSubtitle: '每周主日 14:30 主堂崇拜 · 诚挚欢迎每一位寻求真理、渴望在基督里得享安息的朋友',
   heroImage: CHURCH_IMAGES.heroSanctuary,
   fellowshipImage: CHURCH_IMAGES.fellowshipIntro,
+  churchTeamImage: CHURCH_IMAGES.churchTeam,
   address: 'VIA ANTONIO STRADIVARI 19, PRATO',
   shortAddress: 'VIA ANTONIO STRADIVARI 19, PRATO',
   pastoralPhone: '021-6438-2819',
@@ -241,66 +233,51 @@ export const CHURCH_INFO: ChurchInfo = {
   ],
 };
 
-export const PASTORS_TEAM: PastorProfile[] = [
+export const PULPIT_COWORKERS: PulpitCoworker[] = [
   {
     id: 'pastor-lin',
     name: '林恩典 牧师',
-    role: '主任牧师 · 讲台总负责',
-    tenure: '事奉 18 年',
+    title: '主任牧师 · 讲台总负责',
     image: CHURCH_IMAGES.pastorLin,
-    education: '道学硕士（M.Div）· 圣经释经学教牧博士',
-    ministryFocus: '主日释经讲道 · 教会治理 · 传道人培育',
-    bio: '自 2008 年受按立牧职并在伯特利教会全职服事至今。讲道风格沉稳清晰、深植圣经上下文与历史神学脉络，近年致力于带领全教会研读新约书信与旧约先知书，看重信徒在职场与家庭中的信仰践行。',
     sortOrder: 1,
   },
   {
     id: 'pastor-chen',
     name: '陈雅惠 牧师',
-    role: '副牧师 · 牧养与主日学事工',
-    tenure: '事奉 12 年',
+    title: '副牧师 · 牧养与主日学事工',
     image: CHURCH_IMAGES.pastorChen,
-    education: '基督教教育硕士 · 教牧辅导专科进修',
-    ministryFocus: '慕道造就 · 家庭婚姻辅导 · 姊妹与儿童事工',
-    bio: '主责教会主日学课程体系、新朋友迎新跟进及婚姻家庭辅导。陈牧师以温柔而坚定的牧养心肠陪伴许多家庭度过人生低谷，并带领同工团队建立完善的分龄儿童与青少年信仰教育机制。',
     sortOrder: 2,
   },
   {
     id: 'minister-zhao',
     name: '赵信义 长老',
-    role: '讲台同工 · 青年与敬拜事工长老',
-    tenure: '事奉 10 年',
+    title: '讲台同工 · 青年与敬拜事工',
     image: CHURCH_IMAGES.ministerZhao,
-    education: '圣经研究文凭 · 教会圣乐事奉研习',
-    ministryFocus: '主日讲台轮值 · 青年团契 · 圣乐敬拜编排',
-    bio: '曾任高校人文讲师，后蒙召全心委身教会讲台与青年牧养。协助主任牧师承担主日及周间查经讲台服事，并统筹诗班与敬拜赞美团队，推动圣诗神学与当代会众敬拜的深度结合。',
     sortOrder: 3,
   },
-];
-
-export const PULPIT_COWORKERS: PulpitCoworker[] = [
   {
     id: 'cw-zhou',
     name: '周以撒 传道',
     title: '全职传道 · 青年与校园事工',
-    sortOrder: 1,
+    sortOrder: 4,
   },
   {
     id: 'cw-xu',
     name: '许保罗 长老',
     title: '教会长老 · 宣教与探访事工',
-    sortOrder: 2,
+    sortOrder: 5,
   },
   {
     id: 'cw-zhang',
     name: '张书亚 弟兄',
     title: '讲台见习传道 · 成人主日学教师',
-    sortOrder: 3,
+    sortOrder: 6,
   },
   {
     id: 'cw-su',
     name: '苏米利暗 姊妹',
     title: '圣乐执事 · 诗班指挥',
-    sortOrder: 4,
+    sortOrder: 7,
   },
 ];
 

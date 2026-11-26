@@ -24,9 +24,9 @@ import {
 } from '../../context/ChurchDataContext';
 import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
 import { AdminAnnouncementsEditor } from './AdminAnnouncementsEditor';
+import { AdminCoworkersEditor } from './AdminCoworkersEditor';
 import { AdminInfoEditor } from './AdminInfoEditor';
 import { AdminMinistryEditor } from './AdminMinistryEditor';
-import { AdminPastorsEditor } from './AdminPastorsEditor';
 import { getFriendlyAdminError, StatusBanner } from './AdminSharedUI';
 import { AdminThemeEditor } from './AdminThemeEditor';
 import { AdminVisitorsPanel } from './AdminVisitorsPanel';
@@ -37,7 +37,7 @@ type AdminTab =
   | 'overview'
   | 'theme'
   | 'info'
-  | 'pastors'
+  | 'coworkers'
   | 'worship'
   | 'songs'
   | 'roster'
@@ -54,7 +54,7 @@ const SIDEBAR_ITEMS: {
 }[] = [
   { id: 'overview', label: '后台总览与同步', icon: Database },
   { id: 'info', label: '教会简介与联系', icon: FileText },
-  { id: 'pastors', label: '牧者及讲台同工', icon: Users },
+  { id: 'coworkers', label: '讲台同工管理', icon: Users },
   { id: 'worship', label: '主日时间与流程', icon: BookOpen },
   { id: 'songs', label: '主日崇拜歌曲', icon: Music },
   { id: 'weekday', label: '周间事工安排', icon: CalendarDays },
@@ -77,7 +77,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     cloudLoading,
     lastSyncedAt,
     churchInfo,
-    pastors,
     coworkers,
     worshipTimes,
     liturgySteps,
@@ -201,7 +200,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
           </div>
 
           <p className="text-sm text-[#57534E] leading-relaxed">
-            请使用已授权的教会管理员 Google 账号登录，即可实时编辑教会简介、牧者同工、主日流程与诗歌、事工轮值表及最新公告。
+            请使用已授权的教会管理员 Google 账号登录，即可实时编辑教会简介、服事同工、主日流程与诗歌、事工轮值表及最新公告。
           </p>
 
           {authError && (
@@ -543,10 +542,10 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     sub: '主视觉 · 异象 · 堂址电话',
                   },
                   {
-                    tab: 'pastors' as AdminTab,
-                    label: '牧者及讲台同工',
-                    count: `${pastors.length} 位牧者 · ${coworkers.length} 位同工`,
-                    sub: '肖像档案与讲台轮值',
+                    tab: 'coworkers' as AdminTab,
+                    label: '讲台同工管理',
+                    count: `${coworkers.length} 位讲台同工`,
+                    sub: '牧师 · 长老 · 传道及事工同工',
                   },
                   {
                     tab: 'worship' as AdminTab,
@@ -623,7 +622,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
 
           {activeTab === 'theme' && <AdminThemeEditor />}
           {activeTab === 'info' && <AdminInfoEditor />}
-          {activeTab === 'pastors' && <AdminPastorsEditor />}
+          {activeTab === 'coworkers' && <AdminCoworkersEditor />}
           {activeTab === 'worship' && <AdminWorshipEditor mode="worship" />}
           {activeTab === 'songs' && <AdminWorshipEditor mode="songs" />}
           {activeTab === 'roster' && <AdminMinistryEditor mode="roster" />}
