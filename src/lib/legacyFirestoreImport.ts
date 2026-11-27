@@ -7,11 +7,15 @@ import {
   SUNDAY_MINISTRY_ROSTER,
   SUNDAY_WORSHIP_TIMES,
   WEEKDAY_MINISTRIES,
+  type AdminUserItem,
   type AnnouncementItem,
   type ChurchInfo,
   type LiturgyStep,
   type MinistryRosterItem,
   type PulpitCoworker,
+  type VisitorIpRecord,
+  type VisitorRequestItem,
+  type VisitorStatsSummary,
   type WeekdayMinistry,
   type WorshipTimeSlot,
 } from '../data/churchData';
@@ -26,13 +30,22 @@ import {
   type LegacyPastorLike,
 } from '../utils/churchNormalization';
 import { DATA_IMAGE_URI_REGEX } from '../utils/urlSafety';
-import { firebasePublicConfig } from './firebase';
 import {
+  readCachedAdminUsers,
+  readCachedVisitorCounter,
+  readCachedVisitorRequests,
+  readCachedVisitorStatsBundle,
+} from './adminSessionCache';
+import { firebasePublicConfig, getCurrentAuthUid } from './firebase';
+import {
+  blobToDataUrl,
   dataUrlToBlobFast,
+  isD1MediaUrl,
   isMediaUri,
   resolveLegacyMediaToBlob,
   uploadBlobToD1Media,
 } from './mediaStorage';
+import { readLocalBundleCache } from './publicBundleCache';
 
 type FirestoreValue =
   | { stringValue: string }
@@ -81,6 +94,16 @@ function extractDocId(docName: string | undefined): string {
   if (!docName) return '';
   const parts = docName.split('/');
   return parts[parts.length - 1] || '';
+}
+
+function isQuotaExceededError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota')
+  );
 }
 
 function firestoreRestBase(): string {
@@ -147,7 +170,8 @@ async function fetchFirestoreCollection(
 async function migrateImageToD1(
   rawUrl: string | undefined,
   getToken: () => Promise<string | null>,
-  uploadedCache: Map<string, string>
+  uploadedCache: Map<string, string>,
+  warnings: string[]
 ): Promise<string> {
   const trimmed = String(rawUrl ?? '').trim();
   if (!trimmed) return '';
@@ -156,16 +180,52 @@ async function migrateImageToD1(
   }
 
   let migrated = trimmed;
-  if (isMediaUri(trimmed)) {
-    const blob = await resolveLegacyMediaToBlob(trimmed);
-    migrated = await uploadBlobToD1Media(blob, getToken);
-  } else if (DATA_IMAGE_URI_REGEX.test(trimmed)) {
-    const blob = await dataUrlToBlobFast(trimmed);
-    migrated = await uploadBlobToD1Media(blob, getToken);
+  try {
+    if (isMediaUri(trimmed)) {
+      const blob = await resolveLegacyMediaToBlob(trimmed);
+      migrated = await uploadBlobToD1Media(blob, getToken);
+    } else if (DATA_IMAGE_URI_REGEX.test(trimmed)) {
+      const blob = await dataUrlToBlobFast(trimmed);
+      migrated = await uploadBlobToD1Media(blob, getToken);
+    }
+  } catch (err) {
+    if (isQuotaExceededError(err)) {
+      warnings.push('部分旧版图片因 Firestore 额度限制暂未能拉取，已保留原链接。');
+      migrated = trimmed;
+    } else {
+      throw err;
+    }
   }
 
   uploadedCache.set(trimmed, migrated);
   return migrated;
+}
+
+async function inlineImageForBackup(
+  rawUrl: string | undefined,
+  cache: Map<string, string>
+): Promise<string> {
+  const trimmed = String(rawUrl ?? '').trim();
+  if (!trimmed) return '';
+  if (cache.has(trimmed)) return cache.get(trimmed)!;
+
+  let result = trimmed;
+  try {
+    if (isMediaUri(trimmed)) {
+      const blob = await resolveLegacyMediaToBlob(trimmed);
+      result = await blobToDataUrl(blob);
+    } else if (isD1MediaUrl(trimmed)) {
+      const res = await fetch(trimmed);
+      if (res.ok) {
+        result = await blobToDataUrl(await res.blob());
+      }
+    }
+  } catch {
+    // Keep original reference if inline export fails
+  }
+
+  cache.set(trimmed, result);
+  return result;
 }
 
 export interface LegacyImportSummary {
@@ -173,6 +233,277 @@ export interface LegacyImportSummary {
   importedAdmins: number;
   importedRequests: number;
   importedIps: number;
+  usedLocalCacheFallback?: boolean;
+  warnings: string[];
+}
+
+export interface BethelBackupPayload {
+  format: 'bethel-church-backup-v1';
+  exportedAt: string;
+  content: {
+    churchInfo: ChurchInfo;
+    coworkers: PulpitCoworker[];
+    worshipTimes: WorshipTimeSlot[];
+    liturgySteps: LiturgyStep[];
+    ministryRoster: MinistryRosterItem[];
+    weekdayMinistries: WeekdayMinistry[];
+    announcements: AnnouncementItem[];
+  };
+  admins?: AdminUserItem[];
+  visitorRequests?: VisitorRequestItem[];
+  visitorCounter?: VisitorStatsSummary | null;
+  visitorIps?: VisitorIpRecord[];
+}
+
+export async function buildChurchBackupJson(params: {
+  content: BethelBackupPayload['content'];
+  admins: AdminUserItem[];
+  visitorRequests: VisitorRequestItem[];
+  visitorStats: VisitorStatsSummary | null;
+  visitorIpRecords: VisitorIpRecord[];
+}): Promise<string> {
+  const inlineCache = new Map<string, string>();
+  const { content } = params;
+
+  const exportedChurchInfo = buildChurchInfoFields({
+    ...content.churchInfo,
+    heroImage: await inlineImageForBackup(content.churchInfo.heroImage, inlineCache),
+    fellowshipImage: await inlineImageForBackup(content.churchInfo.fellowshipImage, inlineCache),
+    churchTeamImage: await inlineImageForBackup(content.churchInfo.churchTeamImage, inlineCache),
+  });
+
+  const exportedCoworkers = await Promise.all(
+    content.coworkers.map(async (cw) => ({
+      ...cw,
+      ...(cw.image ? { image: await inlineImageForBackup(cw.image, inlineCache) } : {}),
+    }))
+  );
+
+  const exportedRoster = await Promise.all(
+    content.ministryRoster.map(async (mr) => ({
+      ...mr,
+      image: await inlineImageForBackup(mr.image, inlineCache),
+    }))
+  );
+
+  const exportedAnnouncements = await Promise.all(
+    content.announcements.map(async (ann) => ({
+      ...ann,
+      ...(ann.image ? { image: await inlineImageForBackup(ann.image, inlineCache) } : {}),
+    }))
+  );
+
+  const uid = getCurrentAuthUid();
+  const payload: BethelBackupPayload = {
+    format: 'bethel-church-backup-v1',
+    exportedAt: new Date().toISOString(),
+    content: {
+      churchInfo: exportedChurchInfo,
+      coworkers: exportedCoworkers,
+      worshipTimes: content.worshipTimes,
+      liturgySteps: content.liturgySteps,
+      ministryRoster: exportedRoster,
+      weekdayMinistries: content.weekdayMinistries,
+      announcements: exportedAnnouncements,
+    },
+    admins: params.admins.length ? params.admins : readCachedAdminUsers(uid) ?? [],
+    visitorRequests: params.visitorRequests.length
+      ? params.visitorRequests
+      : readCachedVisitorRequests(uid) ?? [],
+    visitorCounter: params.visitorStats ?? readCachedVisitorCounter(uid) ?? null,
+    visitorIps: params.visitorIpRecords.length
+      ? params.visitorIpRecords
+      : readCachedVisitorStatsBundle(uid)?.ipRecords ?? [],
+  };
+
+  return JSON.stringify(payload, null, 2);
+}
+
+async function uploadContentImagesAndSendToD1(params: {
+  hasContent: boolean;
+  churchInfo: ChurchInfo;
+  coworkers: PulpitCoworker[];
+  worshipTimes: WorshipTimeSlot[];
+  liturgySteps: LiturgyStep[];
+  ministryRoster: MinistryRosterItem[];
+  weekdayMinistries: WeekdayMinistry[];
+  announcements: AnnouncementItem[];
+  admins: unknown[];
+  visitorRequests: unknown[];
+  visitorCounter: unknown;
+  visitorIps: unknown[];
+  getToken: () => Promise<string | null>;
+  onProgress?: (step: string) => void;
+  usedLocalCacheFallback?: boolean;
+  warnings: string[];
+}): Promise<LegacyImportSummary> {
+  const token = await params.getToken();
+  if (!token) {
+    throw new Error('请先使用主管理员账号登录后再导入数据。');
+  }
+
+  let { churchInfo, coworkers, ministryRoster, announcements } = params;
+  const uploadedCache = new Map<string, string>();
+
+  if (params.hasContent) {
+    params.onProgress?.('正在将图片转存至 Cloudflare D1 数据库…');
+    churchInfo = buildChurchInfoFields({
+      ...churchInfo,
+      heroImage: await migrateImageToD1(churchInfo.heroImage, params.getToken, uploadedCache, params.warnings),
+      fellowshipImage: await migrateImageToD1(
+        churchInfo.fellowshipImage,
+        params.getToken,
+        uploadedCache,
+        params.warnings
+      ),
+      churchTeamImage: await migrateImageToD1(
+        churchInfo.churchTeamImage,
+        params.getToken,
+        uploadedCache,
+        params.warnings
+      ),
+    });
+
+    coworkers = await Promise.all(
+      coworkers.map(async (cw) => ({
+        ...cw,
+        ...(cw.image
+          ? { image: await migrateImageToD1(cw.image, params.getToken, uploadedCache, params.warnings) }
+          : {}),
+      }))
+    );
+
+    ministryRoster = await Promise.all(
+      ministryRoster.map(async (mr) => ({
+        ...mr,
+        image: await migrateImageToD1(mr.image, params.getToken, uploadedCache, params.warnings),
+      }))
+    );
+
+    announcements = await Promise.all(
+      announcements.map(async (ann) => ({
+        ...ann,
+        ...(ann.image
+          ? { image: await migrateImageToD1(ann.image, params.getToken, uploadedCache, params.warnings) }
+          : {}),
+      }))
+    );
+  }
+
+  params.onProgress?.('正在写入 Cloudflare D1 数据库…');
+  const res = await fetch('/api/admin/import-legacy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      ...(params.hasContent
+        ? {
+            content: {
+              churchInfo,
+              coworkers,
+              worshipTimes: params.worshipTimes,
+              liturgySteps: params.liturgySteps,
+              ministryRoster,
+              weekdayMinistries: params.weekdayMinistries,
+              announcements,
+            },
+          }
+        : {}),
+      admins: params.admins,
+      visitorRequests: params.visitorRequests,
+      visitorCounter: params.visitorCounter,
+      visitorIps: params.visitorIps,
+    }),
+  });
+
+  const result = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    importedAdmins?: number;
+    importedRequests?: number;
+    importedIps?: number;
+  };
+
+  if (!res.ok || !result.ok) {
+    throw new Error(result.error || `写入 D1 失败（HTTP ${res.status}）`);
+  }
+
+  return {
+    migratedImages: Array.from(uploadedCache.entries()).filter(([k, v]) => k !== v).length,
+    importedAdmins: result.importedAdmins ?? params.admins.length,
+    importedRequests: result.importedRequests ?? params.visitorRequests.length,
+    importedIps: result.importedIps ?? params.visitorIps.length,
+    usedLocalCacheFallback: params.usedLocalCacheFallback,
+    warnings: params.warnings,
+  };
+}
+
+export async function importBackupJsonToD1(
+  rawJsonText: string,
+  getToken: () => Promise<string | null>,
+  onProgress?: (step: string) => void
+): Promise<LegacyImportSummary> {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawJsonText) as Record<string, unknown>;
+  } catch {
+    throw new Error('备份文件不是有效的 JSON 格式。');
+  }
+
+  const rawContent = (parsed.content && typeof parsed.content === 'object'
+    ? parsed.content
+    : parsed) as Record<string, unknown>;
+
+  if (!rawContent || !rawContent.churchInfo || typeof rawContent.churchInfo !== 'object') {
+    throw new Error('备份文件缺少 churchInfo 教会基础内容，无法导入。');
+  }
+
+  const churchInfo = normalizeChurchInfo(rawContent.churchInfo as Partial<ChurchInfo>);
+  const coworkers = Array.isArray(rawContent.coworkers)
+    ? mergeLegacyPastorsIntoCoworkers(rawContent.coworkers as Partial<PulpitCoworker>[])
+    : PULPIT_COWORKERS;
+  const worshipTimes = Array.isArray(rawContent.worshipTimes)
+    ? (rawContent.worshipTimes as WorshipTimeSlot[])
+    : SUNDAY_WORSHIP_TIMES;
+  const liturgySteps = Array.isArray(rawContent.liturgySteps)
+    ? (rawContent.liturgySteps as LiturgyStep[])
+    : [...LITURGY_STANDARD, ...LITURGY_COMMUNION];
+  const ministryRoster = Array.isArray(rawContent.ministryRoster)
+    ? normalizeMinistryRoster(rawContent.ministryRoster as Partial<MinistryRosterItem>[])
+    : SUNDAY_MINISTRY_ROSTER;
+  const weekdayMinistries = Array.isArray(rawContent.weekdayMinistries)
+    ? normalizeWeekdayMinistries(
+        (rawContent.weekdayMinistries as Partial<WeekdayMinistry>[]).map((item, idx) =>
+          cleanWeekdayMinistry(item, idx + 1)
+        )
+      )
+    : WEEKDAY_MINISTRIES;
+  const announcements = Array.isArray(rawContent.announcements)
+    ? normalizeAnnouncements(rawContent.announcements as Partial<AnnouncementItem>[])
+    : ANNOUNCEMENTS;
+
+  return await uploadContentImagesAndSendToD1({
+    hasContent: true,
+    churchInfo,
+    coworkers,
+    worshipTimes,
+    liturgySteps,
+    ministryRoster,
+    weekdayMinistries,
+    announcements,
+    admins: Array.isArray(parsed.admins) ? parsed.admins : [],
+    visitorRequests: Array.isArray(parsed.visitorRequests) ? parsed.visitorRequests : [],
+    visitorCounter:
+      parsed.visitorCounter && typeof parsed.visitorCounter === 'object'
+        ? parsed.visitorCounter
+        : null,
+    visitorIps: Array.isArray(parsed.visitorIps) ? parsed.visitorIps : [],
+    getToken,
+    onProgress,
+    warnings: [],
+  });
 }
 
 export async function runLegacyFirestoreMigration(
@@ -184,8 +515,9 @@ export async function runLegacyFirestoreMigration(
     throw new Error('请先使用主管理员账号登录后再导入旧数据。');
   }
 
-  onProgress?.('正在读取旧版 Firestore 公开内容…');
-  const publicBundle = await fetchFirestoreDoc('church_sections/public_bundle', token);
+  const uid = getCurrentAuthUid();
+  const warnings: string[] = [];
+  let usedLocalCacheFallback = false;
 
   let churchInfo: ChurchInfo = CHURCH_INFO;
   let coworkers: PulpitCoworker[] = PULPIT_COWORKERS;
@@ -195,6 +527,20 @@ export async function runLegacyFirestoreMigration(
   let weekdayMinistries: WeekdayMinistry[] = WEEKDAY_MINISTRIES;
   let announcements: AnnouncementItem[] = ANNOUNCEMENTS;
   let hasContent = false;
+
+  onProgress?.('正在读取旧版 Firestore 公开内容…');
+  let publicBundle: Record<string, unknown> | null = null;
+  let hitContentQuota = false;
+
+  try {
+    publicBundle = await fetchFirestoreDoc('church_sections/public_bundle', token);
+  } catch (err) {
+    if (isQuotaExceededError(err)) {
+      hitContentQuota = true;
+    } else {
+      throw err;
+    }
+  }
 
   if (publicBundle && publicBundle.churchInfo) {
     hasContent = true;
@@ -229,154 +575,138 @@ export async function runLegacyFirestoreMigration(
         publicBundle.announcements as Partial<AnnouncementItem>[]
       );
     }
-  } else {
-    const infoDoc = await fetchFirestoreDoc('church_sections/info', token);
-    if (infoDoc) {
-      hasContent = true;
-      churchInfo = normalizeChurchInfo(infoDoc as Partial<ChurchInfo>);
-      const [cw, lp, wt, ls, mr, wm, ann] = await Promise.all([
-        fetchFirestoreCollection('coworkers', token),
-        fetchFirestoreCollection('pastors', token),
-        fetchFirestoreCollection('worship_times', token),
-        fetchFirestoreCollection('liturgy_steps', token),
-        fetchFirestoreCollection('ministry_roster', token),
-        fetchFirestoreCollection('weekday_ministries', token),
-        fetchFirestoreCollection('announcements', token),
-      ]);
-      if (cw.length || lp.length) {
-        coworkers = mergeLegacyPastorsIntoCoworkers(
-          cw as unknown as Partial<PulpitCoworker>[],
-          lp as unknown as LegacyPastorLike[]
-        );
+  } else if (!hitContentQuota) {
+    try {
+      const infoDoc = await fetchFirestoreDoc('church_sections/info', token);
+      if (infoDoc) {
+        hasContent = true;
+        churchInfo = normalizeChurchInfo(infoDoc as Partial<ChurchInfo>);
+        const [cw, lp, wt, ls, mr, wm, ann] = await Promise.all([
+          fetchFirestoreCollection('coworkers', token),
+          fetchFirestoreCollection('pastors', token),
+          fetchFirestoreCollection('worship_times', token),
+          fetchFirestoreCollection('liturgy_steps', token),
+          fetchFirestoreCollection('ministry_roster', token),
+          fetchFirestoreCollection('weekday_ministries', token),
+          fetchFirestoreCollection('announcements', token),
+        ]);
+        if (cw.length || lp.length) {
+          coworkers = mergeLegacyPastorsIntoCoworkers(
+            cw as unknown as Partial<PulpitCoworker>[],
+            lp as unknown as LegacyPastorLike[]
+          );
+        }
+        if (wt.length) worshipTimes = wt as unknown as WorshipTimeSlot[];
+        if (ls.length) liturgySteps = ls as unknown as LiturgyStep[];
+        if (mr.length) ministryRoster = normalizeMinistryRoster(mr as unknown as Partial<MinistryRosterItem>[]);
+        if (wm.length) {
+          weekdayMinistries = normalizeWeekdayMinistries(
+            (wm as unknown as Partial<WeekdayMinistry>[]).map((item, idx) =>
+              cleanWeekdayMinistry(item, idx + 1)
+            )
+          );
+        }
+        if (ann.length) announcements = normalizeAnnouncements(ann as unknown as Partial<AnnouncementItem>[]);
       }
-      if (wt.length) worshipTimes = wt as unknown as WorshipTimeSlot[];
-      if (ls.length) liturgySteps = ls as unknown as LiturgyStep[];
-      if (mr.length) ministryRoster = normalizeMinistryRoster(mr as unknown as Partial<MinistryRosterItem>[]);
-      if (wm.length) {
-        weekdayMinistries = normalizeWeekdayMinistries(
-          (wm as unknown as Partial<WeekdayMinistry>[]).map((item, idx) =>
-            cleanWeekdayMinistry(item, idx + 1)
-          )
-        );
+    } catch (err) {
+      if (isQuotaExceededError(err)) {
+        hitContentQuota = true;
+      } else {
+        throw err;
       }
-      if (ann.length) announcements = normalizeAnnouncements(ann as unknown as Partial<AnnouncementItem>[]);
     }
   }
 
-  const uploadedCache = new Map<string, string>();
-  if (hasContent) {
-    onProgress?.('正在将旧版图片转存至 Cloudflare D1 数据库…');
-    churchInfo = buildChurchInfoFields({
-      ...churchInfo,
-      heroImage: await migrateImageToD1(churchInfo.heroImage, getToken, uploadedCache),
-      fellowshipImage: await migrateImageToD1(churchInfo.fellowshipImage, getToken, uploadedCache),
-      churchTeamImage: await migrateImageToD1(churchInfo.churchTeamImage, getToken, uploadedCache),
-    });
-
-    coworkers = await Promise.all(
-      coworkers.map(async (cw) => ({
-        ...cw,
-        ...(cw.image
-          ? { image: await migrateImageToD1(cw.image, getToken, uploadedCache) }
-          : {}),
-      }))
-    );
-
-    ministryRoster = await Promise.all(
-      ministryRoster.map(async (mr) => ({
-        ...mr,
-        image: await migrateImageToD1(mr.image, getToken, uploadedCache),
-      }))
-    );
-
-    announcements = await Promise.all(
-      announcements.map(async (ann) => ({
-        ...ann,
-        ...(ann.image
-          ? { image: await migrateImageToD1(ann.image, getToken, uploadedCache) }
-          : {}),
-      }))
-    );
+  if (hitContentQuota && !hasContent) {
+    const cachedBundle = readLocalBundleCache();
+    if (cachedBundle?.bundle?.churchInfo) {
+      hasContent = true;
+      usedLocalCacheFallback = true;
+      churchInfo = cachedBundle.bundle.churchInfo;
+      coworkers = cachedBundle.bundle.coworkers;
+      worshipTimes = cachedBundle.bundle.worshipTimes;
+      liturgySteps = cachedBundle.bundle.liturgySteps;
+      ministryRoster = cachedBundle.bundle.ministryRoster;
+      weekdayMinistries = cachedBundle.bundle.weekdayMinistries;
+      announcements = cachedBundle.bundle.announcements;
+      warnings.push('Firestore 今日额度已满，已自动改用本浏览器本地缓存的旧版页面内容进行导入。');
+    } else {
+      throw new Error(
+        '旧版 Firestore 今日免费读取额度已达上限，且当前浏览器无本地缓存。您可以：1) 先点击「同步默认模板到 D1」立即启用新库；2) 打开之前访问过网站的旧浏览器页面导出 JSON 备份后再导入；3) 待明日（约意大利时间 09:00）Firestore 额度重置后再点击导入。'
+      );
+    }
   }
 
   onProgress?.('正在读取管理员名单、访客留言与访问统计…');
-  const [adminsRaw, requestsRaw, visitorCounter, visitorIpsRaw] = await Promise.all([
-    fetchFirestoreCollection('admins', token),
-    fetchFirestoreCollection('visitor_requests', token),
-    fetchFirestoreDoc('site_stats/visitor_counter', token),
-    fetchFirestoreCollection('visitor_ips', token, 500),
+  const tryOptional = async <T>(fn: () => Promise<T>, label: string): Promise<T | null> => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (isQuotaExceededError(err)) {
+        warnings.push(`${label}因 Firestore 额度已满未拉取`);
+        return null;
+      }
+      throw err;
+    }
+  };
+
+  const [adminsRaw, requestsRaw, visitorCounterFetched, visitorIpsRaw] = await Promise.all([
+    tryOptional(() => fetchFirestoreCollection('admins', token), '同工权限名单'),
+    tryOptional(() => fetchFirestoreCollection('visitor_requests', token), '来访留言'),
+    tryOptional(() => fetchFirestoreDoc('site_stats/visitor_counter', token), '总访客计数'),
+    tryOptional(() => fetchFirestoreCollection('visitor_ips', token, 500), '访客归属地明细'),
   ]);
 
-  const admins = adminsRaw.map((a) => ({
-    uid: a.id,
-    email: a.email,
-    displayName: a.displayName,
-    canViewVisitorStats: a.canViewVisitorStats === true,
-    addedAt: a.addedAt,
-  }));
+  const admins = adminsRaw
+    ? adminsRaw.map((a) => ({
+        uid: a.id,
+        email: a.email,
+        displayName: a.displayName,
+        canViewVisitorStats: a.canViewVisitorStats === true,
+        addedAt: a.addedAt,
+      }))
+    : readCachedAdminUsers(uid) ?? [];
 
-  const visitorRequests = requestsRaw.map((r) => ({
-    id: r.id,
-    name: r.name,
-    contact: r.contact,
-    intent: r.intent,
-    message: r.message,
-    status: r.status,
-    adminNote: r.adminNote,
-    createdAt: r.createdAt,
-  }));
+  const visitorRequests = requestsRaw
+    ? requestsRaw.map((r) => ({
+        id: r.id,
+        name: r.name,
+        contact: r.contact,
+        intent: r.intent,
+        message: r.message,
+        status: r.status,
+        adminNote: r.adminNote,
+        createdAt: r.createdAt,
+      }))
+    : readCachedVisitorRequests(uid) ?? [];
 
-  const visitorIps = visitorIpsRaw.map((ip) => ({
-    id: ip.id,
-    country: ip.country,
-    region: ip.region,
-    countedAt: ip.countedAt,
-  }));
+  const cachedStats = readCachedVisitorStatsBundle(uid);
+  const visitorCounter = visitorCounterFetched ?? readCachedVisitorCounter(uid) ?? cachedStats?.stats ?? null;
+  const visitorIps = visitorIpsRaw
+    ? visitorIpsRaw.map((ip) => ({
+        id: ip.id,
+        country: ip.country,
+        region: ip.region,
+        countedAt: ip.countedAt,
+      }))
+    : cachedStats?.ipRecords ?? [];
 
-  onProgress?.('正在写入 Cloudflare D1 数据库…');
-  const res = await fetch('/api/admin/import-legacy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      ...(hasContent
-        ? {
-            content: {
-              churchInfo,
-              coworkers,
-              worshipTimes,
-              liturgySteps,
-              ministryRoster,
-              weekdayMinistries,
-              announcements,
-            },
-          }
-        : {}),
-      admins,
-      visitorRequests,
-      visitorCounter,
-      visitorIps,
-    }),
+  return await uploadContentImagesAndSendToD1({
+    hasContent,
+    churchInfo,
+    coworkers,
+    worshipTimes,
+    liturgySteps,
+    ministryRoster,
+    weekdayMinistries,
+    announcements,
+    admins,
+    visitorRequests,
+    visitorCounter,
+    visitorIps,
+    getToken,
+    onProgress,
+    usedLocalCacheFallback,
+    warnings,
   });
-
-  const result = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    error?: string;
-    importedAdmins?: number;
-    importedRequests?: number;
-    importedIps?: number;
-  };
-
-  if (!res.ok || !result.ok) {
-    throw new Error(result.error || `写入 D1 失败（HTTP ${res.status}）`);
-  }
-
-  return {
-    migratedImages: Array.from(uploadedCache.entries()).filter(([k, v]) => k !== v).length,
-    importedAdmins: result.importedAdmins ?? admins.length,
-    importedRequests: result.importedRequests ?? visitorRequests.length,
-    importedIps: result.importedIps ?? visitorIps.length,
-  };
 }

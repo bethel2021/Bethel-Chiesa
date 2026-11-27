@@ -132,6 +132,20 @@ export interface ChurchAdminActionsValue {
     importedAdmins: number;
     importedRequests: number;
     importedIps: number;
+    usedLocalCacheFallback?: boolean;
+    warnings: string[];
+  }>;
+  exportChurchBackupJson: () => Promise<string>;
+  importChurchBackupJson: (
+    rawJsonText: string,
+    onProgress?: (step: string) => void
+  ) => Promise<{
+    migratedImages: number;
+    importedAdmins: number;
+    importedRequests: number;
+    importedIps: number;
+    usedLocalCacheFallback?: boolean;
+    warnings: string[];
   }>;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
   saveChurchInfo: (info: ChurchInfo) => Promise<void>;
@@ -864,6 +878,49 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  const exportChurchBackupJson = useCallback(async () => {
+    const { buildChurchBackupJson } = await import('../lib/legacyFirestoreImport');
+    const current = latestStateRef.current;
+    return await buildChurchBackupJson({
+      content: {
+        churchInfo: current.churchInfo,
+        coworkers: current.coworkers,
+        worshipTimes: current.worshipTimes,
+        liturgySteps: current.liturgySteps,
+        ministryRoster: current.ministryRoster,
+        weekdayMinistries: current.weekdayMinistries,
+        announcements: current.announcements,
+      },
+      admins: adminUsers,
+      visitorRequests,
+      visitorStats,
+      visitorIpRecords,
+    });
+  }, [adminUsers, visitorIpRecords, visitorRequests, visitorStats]);
+
+  const importChurchBackupJson = useCallback(
+    async (rawJsonText: string, onProgress?: (step: string) => void) => {
+      const { importBackupJsonToD1 } = await import('../lib/legacyFirestoreImport');
+      const summary = await importBackupJsonToD1(rawJsonText, getBearerToken, onProgress);
+      await refreshAdminData();
+      if (isMainAdmin) {
+        await loadAdminUsersData(true);
+      }
+      if (canViewVisitorStats) {
+        await loadVisitorStatsData(true);
+      }
+      return summary;
+    },
+    [
+      canViewVisitorStats,
+      getBearerToken,
+      isMainAdmin,
+      loadAdminUsersData,
+      loadVisitorStatsData,
+      refreshAdminData,
+    ]
+  );
+
   const saveSortedCollectionDoc = useCallback(
     async <T extends { id: string; sortOrder: number }>(
       colName: string,
@@ -1323,6 +1380,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       publishPublicBundle,
       refreshAdminData,
       importFromLegacyFirestore,
+      exportChurchBackupJson,
+      importChurchBackupJson,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,
@@ -1348,6 +1407,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       publishPublicBundle,
       refreshAdminData,
       importFromLegacyFirestore,
+      exportChurchBackupJson,
+      importChurchBackupJson,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,

@@ -121,8 +121,36 @@ async function fetchLegacyMediaDataUrlViaRest(mediaUri: string): Promise<string>
   return fullDataUrl;
 }
 
+export async function blobToDataUrl(blob: Blob): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('读取图片数据失败。'));
+      }
+    };
+    reader.onerror = () => reject(new Error('读取图片数据失败。'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function resolveLegacyMediaToBlob(mediaUri: string): Promise<Blob> {
-  const fullDataUrl = await fetchLegacyMediaDataUrlViaRest(mediaUri);
+  const normalized = mediaUri.trim();
+  const match = normalized.match(MEDIA_URI_REGEX);
+  if (match && typeof window !== 'undefined' && 'caches' in window) {
+    try {
+      const cache = await window.caches.open(CACHE_NAME);
+      const cachedResp = await cache.match(`https://bethel-media.local/${match[1]}/${match[2]}`);
+      if (cachedResp) {
+        return await cachedResp.blob();
+      }
+    } catch {
+      // Fallback to Firestore REST
+    }
+  }
+  const fullDataUrl = await fetchLegacyMediaDataUrlViaRest(normalized);
   return await dataUrlToBlobFast(fullDataUrl);
 }
 
