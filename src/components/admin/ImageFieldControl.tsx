@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { Link2, RotateCcw, Trash2, Upload } from 'lucide-react';
-import { isMediaUri } from '../../lib/mediaStorage';
+import { isD1MediaUrl, isMediaUri } from '../../lib/mediaStorage';
 import {
   optimizeUploadedImage,
   type ImageOptimizationPreset,
@@ -56,7 +56,8 @@ export function ImageFieldControl({
       : 'banner');
 
   const isDataUri = value.startsWith('data:image/');
-  const isCloudMedia = isMediaUri(value);
+  const isD1Media = isD1MediaUrl(value);
+  const isCloudMedia = isD1Media || isMediaUri(value);
   const isUploadedBinary = isDataUri || isCloudMedia;
   const approxBytes = isDataUri ? Math.round(value.length * 0.75) : 0;
 
@@ -192,7 +193,9 @@ export function ImageFieldControl({
           {isUploadedBinary && !forceUrlMode ? (
             <p className="text-xs text-[#14532D] bg-[#EEF5F0] border border-[#B7D4C0] rounded px-3 py-1.5 tabular-nums">
               {isCloudMedia
-                ? '已保存云端优化图片，主页与后台均可快速清晰加载。'
+                ? isD1Media
+                  ? '已保存至 Cloudflare D1 数据库存储，并开启浏览器与边缘强缓存加速加载。'
+                  : '已保存云端优化图片，主页与后台均可快速清晰加载。'
                 : uploadMeta
                 ? uploadMeta.wasResized || uploadMeta.wasCompressed
                   ? `已自动优化：${

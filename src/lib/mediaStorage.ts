@@ -1,17 +1,13 @@
-import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import {
   DATA_IMAGE_URI_REGEX,
   MEDIA_URI_REGEX,
   SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
 } from '../utils/urlSafety';
 import { consumeEarlyHeroMediaChunks } from './earlyPrefetch';
-import { db } from './firebase';
+import { firebasePublicConfig } from './firebase';
 
 export { DATA_IMAGE_URI_REGEX, MEDIA_URI_REGEX };
 
-const CHUNK_SIZE_CHARS = 650_000;
-const MAX_MEDIA_CHUNKS = 30;
-const BATCH_CHUNK_LIMIT = 3;
 const CACHE_NAME = 'bethel-church-media-v1';
 
 const resolvedObjectUrls = new Map<string, string>();
@@ -22,12 +18,15 @@ export function isMediaUri(src: string): boolean {
   return MEDIA_URI_REGEX.test(src.trim());
 }
 
+export function isD1MediaUrl(src: string): boolean {
+  return /^\/api\/media\/[a-zA-Z0-9_-]{4,120}\.(webp|jpg|jpeg|png)$/.test(src.trim());
+}
+
 export function getCachedMediaObjectUrl(mediaUri: string): string | null {
   return resolvedObjectUrls.get(mediaUri.trim()) ?? null;
 }
 
-async function dataUrlToBlobFast(dataUrl: string): Promise<Blob> {
-  // Prefer browser's native off-thread data-URI decoder to avoid main-thread UI stalls on large photos
+export async function dataUrlToBlobFast(dataUrl: string): Promise<Blob> {
   try {
     const response = await fetch(dataUrl);
     if (response.ok) {
@@ -67,7 +66,6 @@ async function putBlobInBrowserCache(mediaUri: string, blob: Blob): Promise<stri
   if (typeof window !== 'undefined' && 'caches' in window) {
     const match = mediaUri.match(MEDIA_URI_REGEX);
     if (match) {
-      // Persist to Cache API asynchronously without blocking immediate image display
       void window.caches
         .open(CACHE_NAME)
         .then((cache) =>
@@ -77,12 +75,55 @@ async function putBlobInBrowserCache(mediaUri: string, blob: Blob): Promise<stri
           )
         )
         .catch(() => {
-          // Ignore Cache API storage quota/private mode failures
+          // Ignore Cache API storage quota/private mode errors
         });
     }
   }
 
   return objectUrl;
+}
+
+async function fetchLegacyMediaDataUrlViaRest(mediaUri: string): Promise<string> {
+  const match = mediaUri.trim().match(MEDIA_URI_REGEX);
+  if (!match) {
+    throw new Error('无效的旧版图片引用格式。');
+  }
+  const mediaId = match[1];
+  const totalChunks = Number(match[2]);
+  const base = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    firebasePublicConfig.projectId
+  )}/databases/${encodeURIComponent(firebasePublicConfig.firestoreDatabaseId)}/documents/media_chunks`;
+  const keyParam = firebasePublicConfig.apiKey
+    ? `?key=${encodeURIComponent(firebasePublicConfig.apiKey)}`
+    : '';
+
+  const parts = await Promise.all(
+    Array.from({ length: totalChunks }, async (_, idx) => {
+      const res = await fetch(`${base}/${encodeURIComponent(`${mediaId}__${idx}`)}${keyParam}`);
+      if (!res.ok) {
+        throw new Error(`读取旧版图片分片失败（HTTP ${res.status}）`);
+      }
+      const docJson = (await res.json()) as {
+        fields?: { data?: { stringValue?: string } };
+      };
+      const val = docJson.fields?.data?.stringValue;
+      if (!val) {
+        throw new Error('旧版图片分片数据为空。');
+      }
+      return val;
+    })
+  );
+
+  const fullDataUrl = parts.join('');
+  if (!DATA_IMAGE_URI_REGEX.test(fullDataUrl)) {
+    throw new Error('旧版图片编码校验失败。');
+  }
+  return fullDataUrl;
+}
+
+export async function resolveLegacyMediaToBlob(mediaUri: string): Promise<Blob> {
+  const fullDataUrl = await fetchLegacyMediaDataUrlViaRest(mediaUri);
+  return await dataUrlToBlobFast(fullDataUrl);
 }
 
 export async function resolveMediaUri(mediaUri: string): Promise<string> {
@@ -118,37 +159,15 @@ export async function resolveMediaUri(mediaUri: string): Promise<string> {
           return objectUrl;
         }
       } catch {
-        // Fallback to Firestore fetch
+        // Fallback to REST fetch
       }
     }
 
-    let parts = await consumeEarlyHeroMediaChunks(normalized);
-
-    if (!parts || parts.length !== totalChunks) {
-      const chunkSnaps = await Promise.all(
-        Array.from({ length: totalChunks }, (_, idx) =>
-          getDoc(doc(db, 'media_chunks', `${mediaId}__${idx}`))
-        )
-      );
-
-      parts = [];
-      for (let i = 0; i < totalChunks; i += 1) {
-        const snap = chunkSnaps[i];
-        if (!snap.exists()) {
-          throw new Error('部分云端原图分片缺失。');
-        }
-        const chunkData = snap.data()?.data;
-        if (typeof chunkData !== 'string' || !chunkData) {
-          throw new Error('云端原图数据格式无效。');
-        }
-        parts.push(chunkData);
-      }
-    }
-
-    const fullDataUrl = parts.join('');
-    if (!DATA_IMAGE_URI_REGEX.test(fullDataUrl)) {
-      throw new Error('云端原图编码校验失败。');
-    }
+    const earlyParts = await consumeEarlyHeroMediaChunks(normalized);
+    const fullDataUrl =
+      earlyParts && earlyParts.length === totalChunks
+        ? earlyParts.join('')
+        : await fetchLegacyMediaDataUrlViaRest(normalized);
 
     const blob = await dataUrlToBlobFast(fullDataUrl);
     return putBlobInBrowserCache(normalized, blob);
@@ -191,9 +210,38 @@ export function preloadImageRef(src: string | undefined, priority: 'high' | 'low
   }
 }
 
-export async function persistLosslessImageIfNeeded(
+export async function uploadBlobToD1Media(
+  blob: Blob,
+  getToken: () => Promise<string | null>
+): Promise<string> {
+  const token = await getToken();
+  if (!token) {
+    throw new Error('登录凭证已失效，请重新登录后再上传图片。');
+  }
+  const contentType = blob.type || 'image/webp';
+  const res = await fetch('/api/media/upload', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': contentType,
+    },
+    body: blob,
+  });
+
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    url?: string;
+    error?: string;
+  };
+  if (!res.ok || !data.ok || !data.url) {
+    throw new Error(data.error || `图片上传到 Cloudflare D1 失败（HTTP ${res.status}）。`);
+  }
+  return data.url;
+}
+
+export async function persistImageToD1IfNeeded(
   imageRef: string | undefined,
-  inlineMaxChars: number
+  getToken: () => Promise<string | null>
 ): Promise<string> {
   const trimmed = String(imageRef ?? '').trim();
   if (!trimmed) return '';
@@ -201,80 +249,8 @@ export async function persistLosslessImageIfNeeded(
     return trimmed;
   }
   if (!DATA_IMAGE_URI_REGEX.test(trimmed)) {
-    throw new Error('图片格式不受支持，请上传 JPG、PNG 或 WebP 格式原图。');
+    throw new Error('图片格式不受支持，请上传 JPG、PNG 或 WebP 格式图片。');
   }
-
-  if (trimmed.length <= inlineMaxChars) {
-    return trimmed;
-  }
-
-  const chunks: string[] = [];
-  for (let offset = 0; offset < trimmed.length; offset += CHUNK_SIZE_CHARS) {
-    chunks.push(trimmed.slice(offset, offset + CHUNK_SIZE_CHARS));
-  }
-
-  if (chunks.length > MAX_MEDIA_CHUNKS) {
-    throw new Error('原图文件过大（已超过 12 MB 原图直传上限），请适当减小原图体积或改用外链网址。');
-  }
-
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  const mediaId = `img-${Date.now()}-${randomPart}`;
-
-  for (let start = 0; start < chunks.length; start += BATCH_CHUNK_LIMIT) {
-    const batch = writeBatch(db);
-    const end = Math.min(start + BATCH_CHUNK_LIMIT, chunks.length);
-    for (let i = start; i < end; i += 1) {
-      batch.set(doc(db, 'media_chunks', `${mediaId}__${i}`), {
-        mediaId,
-        chunkIndex: i,
-        totalChunks: chunks.length,
-        data: chunks[i],
-        updatedAt: serverTimestamp(),
-      });
-    }
-    await batch.commit();
-  }
-
-  const mediaUri = `media://${mediaId}/${chunks.length}`;
-  try {
-    const blob = await dataUrlToBlobFast(trimmed);
-    await putBlobInBrowserCache(mediaUri, blob);
-  } catch {
-    // Non-fatal: cache warm-up failure will lazily fetch on next render
-  }
-
-  return mediaUri;
-}
-
-export async function deleteMediaChunksByUri(mediaUri: string | undefined): Promise<void> {
-  const normalized = String(mediaUri ?? '').trim();
-  const match = normalized.match(MEDIA_URI_REGEX);
-  if (!match) return;
-
-  const mediaId = match[1];
-  const totalChunks = Number(match[2]);
-
-  const cachedUrl = resolvedObjectUrls.get(normalized);
-  if (cachedUrl) {
-    URL.revokeObjectURL(cachedUrl);
-    resolvedObjectUrls.delete(normalized);
-  }
-
-  if (typeof window !== 'undefined' && 'caches' in window) {
-    void window.caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.delete(`https://bethel-media.local/${mediaId}/${totalChunks}`))
-      .catch(() => {
-        // Ignore cache cleanup errors
-      });
-  }
-
-  for (let start = 0; start < totalChunks; start += BATCH_CHUNK_LIMIT) {
-    const batch = writeBatch(db);
-    const end = Math.min(start + BATCH_CHUNK_LIMIT, totalChunks);
-    for (let i = start; i < end; i += 1) {
-      batch.delete(doc(db, 'media_chunks', `${mediaId}__${i}`));
-    }
-    await batch.commit();
-  }
+  const blob = await dataUrlToBlobFast(trimmed);
+  return await uploadBlobToD1Media(blob, getToken);
 }

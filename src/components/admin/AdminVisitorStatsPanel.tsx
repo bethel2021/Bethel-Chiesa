@@ -5,6 +5,10 @@ import { AdminPanelHeader } from './AdminSharedUI';
 
 function toMillis(ts: unknown): number | null {
   if (!ts) return null;
+  if (typeof ts === 'string' && ts.trim()) {
+    const ms = Date.parse(ts);
+    return Number.isFinite(ms) ? ms : null;
+  }
   if (typeof ts === 'object' && ts !== null && 'toMillis' in ts) {
     const fn = (ts as { toMillis?: () => number }).toMillis;
     if (typeof fn === 'function') {
@@ -56,6 +60,7 @@ export function AdminVisitorStatsPanel() {
     isMainAdmin,
     visitorStats,
     visitorIpRecords,
+    visitorStatsAggregates,
     visitorStatsLoading,
     loadVisitorStatsData,
   } = useChurchAuth();
@@ -68,6 +73,47 @@ export function AdminVisitorStatsPanel() {
 
   const { todayCount, weekCount, monthCount, countryStats, regionStats, totalSampleCount } =
     useMemo(() => {
+      if (visitorStatsAggregates) {
+        const countryMap = new Map<string, number>();
+        const regions: RegionStatRow[] = visitorStatsAggregates.regionBreakdown.map((item) => {
+          const hasCountry = Boolean(item.country && item.country.trim());
+          const hasRegion = Boolean(item.region && item.region.trim());
+          const country = hasCountry ? item.country.trim() : '历史访问（未采集地区）';
+          const region = hasRegion
+            ? item.region.trim()
+            : hasCountry
+              ? '未知省份/州'
+              : '再次访问后自动补全';
+          countryMap.set(country, (countryMap.get(country) ?? 0) + item.count);
+          return {
+            key: `${country}__${region}`,
+            country,
+            region,
+            count: item.count,
+            latestMs: toMillis(item.latestAt) ?? 0,
+            latestRaw: item.latestAt,
+          };
+        });
+
+        const sortedCountries: CountryStatRow[] = Array.from(countryMap.entries())
+          .map(([country, count]) => ({ country, count }))
+          .sort((a, b) => b.count - a.count);
+
+        const sortedRegions = regions.sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return b.latestMs - a.latestMs;
+        });
+
+        return {
+          todayCount: visitorStatsAggregates.todayCount,
+          weekCount: visitorStatsAggregates.weekCount,
+          monthCount: visitorStatsAggregates.monthCount,
+          countryStats: sortedCountries,
+          regionStats: sortedRegions,
+          totalSampleCount: visitorStatsAggregates.totalRecords,
+        };
+      }
+
       const now = Date.now();
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
@@ -139,7 +185,7 @@ export function AdminVisitorStatsPanel() {
         regionStats: sortedRegions,
         totalSampleCount: visitorIpRecords.length,
       };
-    }, [visitorIpRecords]);
+    }, [visitorIpRecords, visitorStatsAggregates]);
 
   if (!canViewVisitorStats) {
     return (

@@ -1,4 +1,3 @@
-import { serverTimestamp } from 'firebase/firestore';
 import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
   ANNOUNCEMENTS,
@@ -188,17 +187,6 @@ export function cleanWeekdayMinistry(
     ...(leader ? { leader } : {}),
     ...(description ? { description } : {}),
     sortOrder: clampSortOrder(item.sortOrder, fallbackSort),
-  };
-}
-
-export function toWeekdayFirestoreBody(item: WeekdayMinistry): Record<string, unknown> {
-  const { id: _ignored, location, leader, description, ...required } = item;
-  return {
-    ...required,
-    ...(location ? { location } : {}),
-    ...(leader ? { leader } : {}),
-    ...(description ? { description } : {}),
-    updatedAt: serverTimestamp(),
   };
 }
 

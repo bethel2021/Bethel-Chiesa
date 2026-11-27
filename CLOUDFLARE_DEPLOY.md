@@ -1,78 +1,87 @@
-# 伯特利教会网站 · Cloudflare Pages 部署指南（方案一）
+# 伯特利教会网站 · Cloudflare Pages + D1 部署指南
 
-本架构采用 **Cloudflare Pages 托管纯静态前端 + 现有 Firebase（Firestore & Google Auth）后端**：
-- **零服务器运维**：无需 Node.js / Express 后端，全球 CDN 边缘分发，带宽免费且不限流量。
-- **保留原有数据与省流优化**：继续连接现有 Firestore 数据库（`ai-studio-bethelchurch-3b002d53-0447-4092-8ce7-29a844fab9fc`），已启用「单文档汇总快照 + 10 分钟本地缓存」。
+本架构仅使用 **Cloudflare Pages + Pages Functions + D1（SQLite 数据库）**，无需创建或绑定 R2 存储桶，并保留 **Firebase Auth（Google 登录）** 作为后台同工身份认证：
+- **彻底告别 Firestore 每日 5 万读取配额**：Cloudflare D1 免费版提供每日 **500 万行读取 / 10 万行写入**与 **5 GB 免费存储**。
+- **全能单数据库架构**：教会图文内容、访客留言、同工权限、去重访客 IP 统计，以及压缩优化后的图片（以安全二进制分片方式存入 `media_files` / `media_chunks` 表，并通过 `/api/media/<key>` 配合边缘强缓存极速分发）全部统一存于 D1。
+- **内置一键数据迁移工具**：支持从旧版 Firestore 一键导入所有教会图文内容、历史图片、管理员权限名录、来访留言及去重访客 IP 统计。
 
 ---
 
-## 一、Cloudflare Pages 构建配置
+## 一、创建 Cloudflare D1 数据库
 
-在 Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → 连接你的 Git 仓库（或本地使用 Wrangler 上传）：
+在本地终端（或 Cloudflare Dashboard Web 控制台）执行以下命令创建 D1 数据库：
 
-- **Framework preset**：`Vite`（或 `None`）
-- **Build command**：`npm run build`（⚠️ **必填**：仓库中的 `wrangler.toml` 仅声明输出目录 `dist`，Cloudflare Pages 不会从 `wrangler.toml` 读取构建命令；若此处留空，会出现 `No build command specified` / `Output directory "dist" not found` 错误）
-- **Build output directory**：`dist`
-- **Node.js version**：仓库根目录已内置 `.node-version`（`22`），Cloudflare Pages 会自动选用 Node 22（也可在环境变量中手动指定 `NODE_VERSION = 22`）
-
-如使用命令行直接发布：
 ```bash
-npm install
-npm run build
-npx wrangler pages deploy dist --project-name=bethel-church
+# 1. 登录 Cloudflare（如尚未登录）
+npx wrangler login
+
+# 2. 创建 D1 数据库
+npx wrangler d1 create bethel-church-db
+
+# 3. 执行数据库建表迁移（首次部署也可跳过，后端首次收到请求时会自动建表）
+npx wrangler d1 migrations apply bethel-church-db --remote
 ```
 
 ---
 
-## 二、Firebase 控制台必须配置的步骤（关键）
+## 二、Cloudflare Pages 构建与 D1 绑定配置
 
-部署到 Cloudflare Pages 后，网站域名将变为 `*.pages.dev` 或你的自定义域名。**必须将新域名加入 Firebase 授权域名白名单**，否则后台 Google 登录会报 `auth/unauthorized-domain`：
+在 Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → 连接你的 Git 仓库（或使用 `npx wrangler pages deploy dist`）：
+
+1. **构建配置**：
+   - **Framework preset**：`Vite`（或 `None`）
+   - **Build command**：`npm run build`
+   - **Build output directory**：`dist`
+   - **Node.js version**：仓库根目录已包含 `.node-version`（`22`），Cloudflare Pages 会自动选用 Node 22。
+
+2. **绑定 D1 数据库（⚠️ 唯一必须的绑定）**：
+   进入你的 Pages 项目 → **Settings** → **Bindings**（或 **Functions → Bindings**）：
+   - 添加 **D1 database** 绑定：
+     - **Variable name（变量名）**：`DB`
+     - **D1 database**：选择 `bethel-church-db`
+   *(说明：仓库根目录已刻意移除 `wrangler.toml`，以确保 Cloudflare 控制台中的 Bindings 与环境变量按钮处于可编辑状态；新增绑定后需重新触发一次部署才会生效。)*
+
+3. **如使用本地命令行直接部署**：
+   ```bash
+   npm install
+   npm run build
+   npx wrangler pages deploy dist --project-name=bethel-church
+   ```
+
+---
+
+## 三、Firebase 控制台配置（Google 登录白名单）
+
+后台继续使用 Google 账号登录（由服务端调用 Firebase Auth 校验 ID Token）。部署到 Cloudflare Pages 后，**必须将新域名加入 Firebase 授权域名白名单**，否则登录会报 `auth/unauthorized-domain`：
 
 1. 打开 [Firebase Console](https://console.firebase.google.com/)，选择项目 `dulcet-cairn-m40px`。
 2. 进入 **Authentication** → **Settings** → **Authorized domains**。
 3. 点击 **Add domain**，依次添加：
    - 你的 Pages 默认域名（例如 `bethel-church.pages.dev`）
-   - 你的自定义域名（例如 `www.bethelchurch.org`、`bethelchurch.org`）
+   - 你的自定义正式域名（例如 `www.bethelchurch.org`、`bethelchurch.org`）
 
 ---
 
-## 三、环境变量说明（可选）
+## 四、环境变量设置（可选）
 
-代码默认优先读取 `VITE_FIREBASE_*` 环境变量；若未设置，则自动回退读取仓库中的 `firebase-applet-config.json`（Firebase Web Client Config 本身为公开客户端配置，由 Firestore Security Rules 保障数据权限安全）。
+在 Cloudflare Pages 的 **Settings → Environment variables**（建议 Production 与 Preview 均配置）中可按需添加：
 
-如需在 Cloudflare Pages 后台区分测试/生产环境，可在 **Settings → Environment variables** 配置：
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
-- `VITE_FIREBASE_FIRESTORE_DATABASE_ID`
-
-如需开启“新访客登记自动发送邮件提醒”，请在 Cloudflare Pages 的 **Settings → Environment variables** 中额外添加服务端环境变量（请勿加 `VITE_` 前缀）：
-- `RESEND_API_KEY`（必填，Resend API 密钥）
-- `VISITOR_NOTIFY_TO`（可选，接收提醒的同工邮箱，多个邮箱以英文逗号分隔；留空时默认发往主管理员邮箱）
-- `VISITOR_NOTIFY_FROM`（可选，发件人地址；未绑定自定义发信域名时可留空，默认使用 `onboarding@resend.dev`）
+- **访客 IP 哈希盐值（建议配置）**：
+  - `VISITOR_IP_SALT`：任意长随机字符串，用于服务端对访客 IP 进行 SHA-256 脱敏哈希。
+- **新访客留言自动发邮件提醒（Resend API）**：
+  - `RESEND_API_KEY`（Resend API 密钥）
+  - `VISITOR_NOTIFY_TO`（可选，接收提醒的同工邮箱，多个以英文逗号分隔；留空则默认发往数据库内的主管理员邮箱）
+  - `VISITOR_NOTIFY_FROM`（可选，发件人地址；未绑定发信域名时可留空，默认 `onboarding@resend.dev`）
+- **Firebase Auth 客户端覆盖配置（可选）**：
+  - 若留空则自动读取仓库中的 `firebase-applet-config.json`；如需覆盖可配置 `VITE_FIREBASE_API_KEY`、`VITE_FIREBASE_AUTH_DOMAIN`、`VITE_FIREBASE_PROJECT_ID`、`VITE_FIREBASE_APP_ID`、`VITE_FIREBASE_FIRESTORE_DATABASE_ID` 等。
 
 ---
 
-## 四、已内置的 Cloudflare Pages 架构适配
+## 五、上线后一键迁移旧版 Firestore 数据
 
-1. **`public/_headers`**：
-   - 设置 `Cross-Origin-Opener-Policy: same-origin-allow-popups`，确保 Firebase Google 登录弹窗正常回调。
-   - 启用 `Strict-Transport-Security`、`X-Content-Type-Options: nosniff`、`Referrer-Policy` 与最小权限 `Permissions-Policy`。
-   - 对 `/assets/*` 开启长期强缓存（`immutable`），对 `/index.html` 关闭强缓存确保发版即时生效。
-2. **`public/_redirects` & `/admin` 路由**：
-   - 配置 `/* /index.html 200` SPA 回退规则，直接访问或刷新 `https://你的域名/admin` 可直接进入同工管理后台。
-3. **静态图片资产**：
-   - `vite.config.ts` 构建时会自动将 `src/assets` 复制到 `dist/src/assets`，确保教会实景与牧者照片路径直接由 Cloudflare CDN 分发。
+完成上述部署与 D1 绑定后：
 
----
-
-## 五、发布前安全检查清单
-
-1. **Firebase Authorized domains**：确保已将 `*.pages.dev` 与自定义正式域名添加到 Firebase Authentication 授权域名白名单，并移除不再使用的测试域名。
-2. **Firebase Web API Key 限制**：在 Google Cloud Console → **APIs & Services → Credentials** 中，为前端使用的 Firebase Browser API Key 添加 **HTTP referrers（网站来源）限制**（仅允许你的正式域名、`*.pages.dev` 与本地开发域名）。
-3. **Firestore 安全规则与访客隐私**：所有公开模块仅允许管理员（已验证邮箱）写入；`visitor_requests` 访客留言仅允许公开创建 `pending` 状态，严禁未授权用户读取或修改。
-4. **管理员权限核对**：在正式公布前，登录 `/admin` 检查「来访留言与权限」中的授权同工名录，并点击一次「同步修改内容到云端」以刷新公开快照。
-5. **Cloudflare 域名与 SSL**：在 Cloudflare DNS/SSL 设置中启用 **Full (strict)** SSL 模式与强制 HTTPS 重定向。
+1. 使用主管理员账号（`chinarenzhian@gmail.com`）打开 `https://你的域名/admin` 并完成 Google 登录。
+2. 在后台顶部提示条或「后台总览与同步」模块中点击 **「从旧版 Firestore 一键导入」**。
+3. 系统将在浏览器端拉取旧版 Firestore 中的全部数据与 `media://` 分片图片，全部统一写入 Cloudflare D1 数据库（含图片转存、教会信息、讲台同工、周间事工、精彩瞬间、家事公告、来访留言、管理员权限与去重访客 IP 记录）。
+4. 迁移完成后刷新公开首页，即可确认所有内容与图片均正常加载。

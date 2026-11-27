@@ -9,32 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 import type { User } from 'firebase/auth';
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocFromServer,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  writeBatch,
-  type DocumentReference,
-} from 'firebase/firestore';
 import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
   ANNOUNCEMENTS,
   CHURCH_INFO,
-  isLegacySeededWeekdayMinistries,
   LITURGY_COMMUNION,
   LITURGY_STANDARD,
   normalizeMinistryCategory,
-  normalizeWeekdayMinistries,
   PULPIT_COWORKERS,
   SUNDAY_MINISTRY_ROSTER,
   SUNDAY_WORSHIP_TIMES,
@@ -53,24 +34,6 @@ import {
 } from '../data/churchData';
 import { normalizeSiteTheme, type SiteThemeId } from '../data/themes';
 import {
-  awaitEarlyPrefetchedBundle,
-  getEarlyPrefetchedBundleSnapshot,
-} from '../lib/earlyPrefetch';
-import {
-  db,
-  fetchPublicBundleFromServer,
-  getCurrentAuthUid,
-  handleFirestoreError,
-  isFirestoreQuotaError,
-  OperationType,
-} from '../lib/firebase';
-import {
-  deleteMediaChunksByUri,
-  isMediaUri,
-  persistLosslessImageIfNeeded,
-  preloadImageRef,
-} from '../lib/mediaStorage';
-import {
   clearAllAdminSessionCaches,
   readCachedAdminUsers,
   readCachedVisitorCounter,
@@ -80,7 +43,14 @@ import {
   writeCachedVisitorCounter,
   writeCachedVisitorRequests,
   writeCachedVisitorStatsBundle,
+  type VisitorStatsAggregates,
 } from '../lib/adminSessionCache';
+import {
+  awaitEarlyPrefetchedBundle,
+  getEarlyPrefetchedBundleSnapshot,
+} from '../lib/earlyPrefetch';
+import { getCurrentAuthUid } from '../lib/firebase';
+import { persistImageToD1IfNeeded, preloadImageRef } from '../lib/mediaStorage';
 import {
   isCacheFresh,
   readLocalBundleCache,
@@ -99,9 +69,9 @@ import {
   normalizeChurchInfo,
   normalizeCoworkers,
   normalizeMinistryRoster,
+  normalizeWeekdayMinistries,
   removeById,
   sanitizeImageRef,
-  toWeekdayFirestoreBody,
   upsertSorted,
   type LegacyPastorLike,
 } from '../utils/churchNormalization';
@@ -143,6 +113,7 @@ export interface ChurchAuthValue {
   adminUsers: AdminUserItem[];
   visitorStats: VisitorStatsSummary | null;
   visitorIpRecords: VisitorIpRecord[];
+  visitorStatsAggregates: VisitorStatsAggregates | null;
   visitorStatsLoading: boolean;
   adminUsersLoading: boolean;
   loadVisitorStatsData: (forceRefresh?: boolean) => Promise<void>;
@@ -156,6 +127,12 @@ export interface ChurchAdminActionsValue {
   syncModifiedContentToCloud: () => Promise<void>;
   publishPublicBundle: () => Promise<void>;
   refreshAdminData: () => Promise<void>;
+  importFromLegacyFirestore: (onProgress?: (step: string) => void) => Promise<{
+    migratedImages: number;
+    importedAdmins: number;
+    importedRequests: number;
+    importedIps: number;
+  }>;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
   saveChurchInfo: (info: ChurchInfo) => Promise<void>;
   saveCoworker: (item: PulpitCoworker) => Promise<void>;
@@ -196,37 +173,6 @@ export type ChurchDataContextValue = PublicChurchDataValue &
 const ChurchPublicContext = createContext<PublicChurchDataValue | null>(null);
 const ChurchAuthContext = createContext<ChurchAuthValue | null>(null);
 const ChurchAdminActionsContext = createContext<ChurchAdminActionsValue | null>(null);
-
-interface BatchWriteOp {
-  ref: DocumentReference;
-  data: Record<string, unknown>;
-}
-
-async function commitChunkedBatches(ops: BatchWriteOp[], chunkSize = 400): Promise<void> {
-  for (let i = 0; i < ops.length; i += chunkSize) {
-    const batch = writeBatch(db);
-    const slice = ops.slice(i, i + chunkSize);
-    for (const op of slice) {
-      batch.set(op.ref, op.data);
-    }
-    await batch.commit();
-  }
-}
-
-function cleanupReplacedMediaUri(
-  oldUri: string | undefined,
-  newUri: string | undefined,
-  stillReferencedUris: Set<string> = new Set()
-): void {
-  const prev = String(oldUri ?? '').trim();
-  const next = String(newUri ?? '').trim();
-  if (!prev || prev === next || !isMediaUri(prev) || stillReferencedUris.has(prev)) {
-    return;
-  }
-  void deleteMediaChunksByUri(prev).catch(() => {
-    // Best-effort orphaned chunk cleanup
-  });
-}
 
 function resolveInitialAdminRoute(): boolean {
   if (typeof window === 'undefined') return false;
@@ -272,12 +218,15 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const earlyPrefetchBundleRef = useRef<PublicBundleData | null>(initialEarlyBundle);
   const publicBootStartedRef = useRef(false);
   const wasAdminRef = useRef(false);
-  const legacyCloudWeekdayIdsRef = useRef<string[]>([]);
-  const legacyCloudPastorIdsRef = useRef<Set<string>>(new Set());
   const visitorStatsLoadedRef = useRef(false);
   const adminUsersLoadedRef = useRef(false);
   const adminSessionIdRef = useRef(0);
   const activeAuthUidRef = useRef<string | null>(null);
+  const userRef = useRef<User | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const activeTheme: SiteThemeId = normalizeSiteTheme(churchInfo.siteTheme);
 
@@ -327,6 +276,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
   const [visitorStats, setVisitorStats] = useState<VisitorStatsSummary | null>(null);
   const [visitorIpRecords, setVisitorIpRecords] = useState<VisitorIpRecord[]>([]);
+  const [visitorStatsAggregates, setVisitorStatsAggregates] =
+    useState<VisitorStatsAggregates | null>(null);
   const [visitorStatsLoading, setVisitorStatsLoading] = useState(false);
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
 
@@ -359,6 +310,42 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     weekdayMinistries,
     announcements,
   ]);
+
+  const getBearerToken = useCallback(async (): Promise<string | null> => {
+    if (userRef.current) {
+      return await userRef.current.getIdToken();
+    }
+    const mod = await import('../lib/firebaseAuth');
+    return await mod.getCurrentIdToken();
+  }, []);
+
+  const adminFetch = useCallback(
+    async <T = Record<string, unknown>>(
+      url: string,
+      init: RequestInit = {}
+    ): Promise<T> => {
+      const token = await getBearerToken();
+      if (!token) {
+        throw new Error('管理员登录凭证已失效，请重新登录。');
+      }
+      const headers = new Headers(init.headers);
+      headers.set('Authorization', `Bearer ${token}`);
+      if (init.body && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
+
+      const res = await fetch(url, { ...init, headers });
+      const data = (await res.json().catch(() => ({}))) as T & {
+        error?: string;
+        ok?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || `服务端请求失败（HTTP ${res.status}）`);
+      }
+      return data;
+    },
+    [getBearerToken]
+  );
 
   const applyBundleToState = useCallback((bundle: PublicBundleData) => {
     if (bundle.churchInfo) {
@@ -404,55 +391,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       announcements: normalizeAnnouncements(snapshot.announcements).slice(0, 50),
       version: Date.now(),
     }),
-    []
-  );
-
-  const publishBundleSnapshot = useCallback(
-    async (snapshot: Parameters<typeof buildPublicBundlePayload>[0]) => {
-      const bundle = buildPublicBundlePayload(snapshot);
-      const approxBytes = new Blob([JSON.stringify(bundle)]).size;
-      if (approxBytes > 950_000) {
-        throw new Error(
-          '当前所有模块图片与文本汇总大小已接近云端单文档 1MB 上限，请改用外链图片地址或适当压缩后再试。'
-        );
-      }
-      await setDoc(doc(db, 'church_sections', 'public_bundle'), {
-        ...bundle,
-        updatedAt: serverTimestamp(),
-      });
-      const syncedAt = writeLocalBundleCache(bundle, true);
-      setHasPublicBundle(true);
-      setLastSyncedAt(syncedAt);
-    },
-    [buildPublicBundlePayload]
-  );
-
-  const handleReadError = useCallback(
-    (error: unknown, operationType: OperationType, path: string | null): boolean => {
-      if (isFirestoreQuotaError(error)) {
-        setQuotaExceeded(true);
-        return true;
-      }
-      try {
-        handleFirestoreError(error, operationType, path);
-      } catch {
-        // Keep local cache / default fallback rendered smoothly
-      }
-      return false;
-    },
-    []
-  );
-
-  const handleWriteError = useCallback(
-    (error: unknown, operationType: OperationType, path: string | null): never => {
-      if (isFirestoreQuotaError(error)) {
-        setQuotaExceeded(true);
-        throw new Error(
-          '今日云端数据库免费读写额度已达上限，请待每日配额重置（约意大利时间 09:00）后再试。'
-        );
-      }
-      handleFirestoreError(error, operationType, path);
-    },
     []
   );
 
@@ -519,115 +457,52 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (earlyResult?.status === 'quota-exceeded') {
-          setQuotaExceeded(true);
-          return;
-        }
-
         if (earlyResult?.status !== 'not-found') {
-          const bundleSnap = await fetchPublicBundleFromServer();
-          if (bundleSnap.exists()) {
-            const data = bundleSnap.data() as PublicBundleData;
-            applyBundleToState(data);
-            const syncedAt = writeLocalBundleCache(data, true);
-            setHasCloudData(true);
-            setHasPublicBundle(true);
-            setQuotaExceeded(false);
-            setDataSource('cloud-bundle');
-            setLastSyncedAt(syncedAt);
-            return;
+          const res = await fetch('/api/public-bundle', {
+            headers: { Accept: 'application/json' },
+            ...(forceRefresh ? { cache: 'no-store' as const } : {}),
+          });
+          if (res.ok) {
+            const payload = (await res.json()) as {
+              exists?: boolean;
+              bundle?: PublicBundleData | null;
+            };
+            if (payload.exists && payload.bundle) {
+              applyBundleToState(payload.bundle);
+              const syncedAt = writeLocalBundleCache(payload.bundle, true);
+              setHasCloudData(true);
+              setHasPublicBundle(true);
+              setQuotaExceeded(false);
+              setDataSource('cloud-bundle');
+              setLastSyncedAt(syncedAt);
+              return;
+            }
           }
         }
 
-        // Backward compatibility for legacy pre-bundle databases
-        const infoSnap = await getDocFromServer(doc(db, 'church_sections', 'info'));
-        if (infoSnap.exists()) {
-          const fetchSorted = async <T extends { sortOrder: number }>(
-            colName: string,
-            fallback: T[]
-          ): Promise<T[]> => {
-            const snap = await getDocs(query(collection(db, colName), orderBy('sortOrder', 'asc')));
-            if (snap.empty) return fallback;
-            return snap.docs.map((d) => ({
-              ...(d.data() as Omit<T, 'id'>),
-              id: d.id,
-            })) as unknown as T[];
-          };
-
-          const fetchOptionalDocs = async <T,>(colName: string): Promise<T[]> => {
-            const snap = await getDocs(query(collection(db, colName), orderBy('sortOrder', 'asc')));
-            if (snap.empty) return [];
-            return snap.docs.map((d) => ({
-              ...(d.data() as Omit<T, 'id'>),
-              id: d.id,
-            })) as unknown as T[];
-          };
-
-          const [
-            legacyPastorsList,
-            coworkersRawList,
-            worshipTimesList,
-            liturgyList,
-            rosterList,
-            weekdayList,
-            annList,
-          ] = await Promise.all([
-            fetchOptionalDocs<LegacyPastorLike>('pastors'),
-            fetchOptionalDocs<PulpitCoworker>('coworkers'),
-            fetchSorted<WorshipTimeSlot>('worship_times', SUNDAY_WORSHIP_TIMES),
-            fetchSorted<LiturgyStep>('liturgy_steps', [...LITURGY_STANDARD, ...LITURGY_COMMUNION]),
-            fetchSorted<MinistryRosterItem>('ministry_roster', SUNDAY_MINISTRY_ROSTER),
-            fetchSorted<WeekdayMinistry>('weekday_ministries', WEEKDAY_MINISTRIES),
-            fetchSorted<AnnouncementItem>('announcements', ANNOUNCEMENTS),
-          ]);
-
-          const mergedCoworkers =
-            coworkersRawList.length || legacyPastorsList.length
-              ? mergeLegacyPastorsIntoCoworkers(coworkersRawList, legacyPastorsList)
-              : PULPIT_COWORKERS;
-
-          const legacyBundle: PublicBundleData = {
-            churchInfo: { ...CHURCH_INFO, ...(infoSnap.data() as ChurchInfo) },
-            coworkers: mergedCoworkers,
-            worshipTimes: worshipTimesList,
-            liturgySteps: liturgyList,
-            ministryRoster: normalizeMinistryRoster(rosterList),
-            weekdayMinistries: normalizeWeekdayMinistries(weekdayList),
-            announcements: normalizeAnnouncements(annList),
-            version: Date.now(),
-          };
-          applyBundleToState(legacyBundle);
-          const syncedAt = writeLocalBundleCache(legacyBundle, false);
-          setHasCloudData(true);
-          setHasPublicBundle(false);
-          setQuotaExceeded(false);
-          setDataSource('cloud-bundle');
-          setLastSyncedAt(syncedAt);
-        } else {
-          const defaultBundle: PublicBundleData = {
-            churchInfo: CHURCH_INFO,
-            coworkers: PULPIT_COWORKERS,
-            worshipTimes: SUNDAY_WORSHIP_TIMES,
-            liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
-            ministryRoster: SUNDAY_MINISTRY_ROSTER,
-            weekdayMinistries: WEEKDAY_MINISTRIES,
-            announcements: ANNOUNCEMENTS,
-            version: 0,
-          };
-          const syncedAt = writeLocalBundleCache(defaultBundle, false);
-          setHasCloudData(false);
-          setHasPublicBundle(false);
-          setQuotaExceeded(false);
-          setDataSource('default');
-          setLastSyncedAt(syncedAt);
-        }
-      } catch (error) {
-        handleReadError(error, OperationType.GET, 'church_sections/public_bundle');
+        const defaultBundle: PublicBundleData = {
+          churchInfo: CHURCH_INFO,
+          coworkers: PULPIT_COWORKERS,
+          worshipTimes: SUNDAY_WORSHIP_TIMES,
+          liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
+          ministryRoster: SUNDAY_MINISTRY_ROSTER,
+          weekdayMinistries: WEEKDAY_MINISTRIES,
+          announcements: ANNOUNCEMENTS,
+          version: 0,
+        };
+        const syncedAt = writeLocalBundleCache(defaultBundle, false);
+        setHasCloudData(false);
+        setHasPublicBundle(false);
+        setQuotaExceeded(false);
+        setDataSource('default');
+        setLastSyncedAt(syncedAt);
+      } catch {
+        // Keep local cache / default fallback rendered smoothly
       } finally {
         setCloudLoading(false);
       }
     },
-    [applyBundleToState, handleReadError]
+    [applyBundleToState]
   );
 
   const activateAdminSession = useCallback(() => {
@@ -639,7 +514,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Lazy-load Firebase Auth only when Admin mode is accessed
   useEffect(() => {
     if (!adminSessionRequested) return;
     let active = true;
@@ -671,8 +545,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     };
   }, [adminSessionRequested]);
 
-  // Visitor Mode boot: immediately load or apply public snapshot without waiting for Firebase Auth
-  // Skip when booting directly into Admin Mode so Admin loader owns the single fetch/cache path.
   useEffect(() => {
     if (publicBootStartedRef.current) return;
     publicBootStartedRef.current = true;
@@ -691,191 +563,62 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (sessionId: number, forceRefresh = false) => {
       const isCurrent = () => adminSessionIdRef.current === sessionId;
       const uid = activeAuthUidRef.current;
-      let hitQuota = false;
 
-      // 1. Reuse fresh local public_bundle cache unless forceRefresh; otherwise 1 single read
-      const cachedBundle = !forceRefresh ? readLocalBundleCache() : null;
-      if (isCacheFresh(cachedBundle)) {
-        applyBundleToState(cachedBundle.bundle);
-        setHasCloudData(cachedBundle.hasCloudBundle);
-        setHasPublicBundle(cachedBundle.hasCloudBundle);
-        setLastSyncedAt(cachedBundle.cachedAt);
-        setCloudLoading(false);
-      } else {
-        try {
-          const bundleSnap = await fetchPublicBundleFromServer();
-          if (!isCurrent()) return;
+      setCloudLoading(true);
+      try {
+        const workspace = await adminFetch<{
+          hasCloudData: boolean;
+          bundle: PublicBundleData | null;
+          visitorRequests: VisitorRequestItem[];
+          visitorStats: VisitorStatsSummary | null;
+        }>('/api/admin/workspace', { cache: 'no-store' });
 
-          if (bundleSnap.exists()) {
-            const data = bundleSnap.data() as PublicBundleData;
-            applyBundleToState(data);
-            const syncedAt = writeLocalBundleCache(data, true);
-            setHasCloudData(true);
-            setHasPublicBundle(true);
-            setQuotaExceeded(false);
-            setLastSyncedAt(syncedAt);
-          } else {
-            // Legacy fallback: only query individual collections if public_bundle doesn't exist yet
-            const infoSnap = await getDocFromServer(doc(db, 'church_sections', 'info')).catch((err) => {
-              if (isFirestoreQuotaError(err)) throw err;
-              return getDoc(doc(db, 'church_sections', 'info'));
-            });
-            if (!isCurrent()) return;
+        if (!isCurrent()) return;
 
-            if (infoSnap.exists()) {
-              const fetchSorted = async <T extends { sortOrder: number }>(
-                colName: string,
-                fallback: T[]
-              ): Promise<T[]> => {
-                const snap = await getDocs(query(collection(db, colName), orderBy('sortOrder', 'asc')));
-                if (snap.empty) return fallback;
-                return snap.docs.map((d) => ({
-                  ...(d.data() as Omit<T, 'id'>),
-                  id: d.id,
-                })) as unknown as T[];
-              };
-
-              const fetchOptionalDocs = async <T,>(colName: string): Promise<T[]> => {
-                const snap = await getDocs(query(collection(db, colName), orderBy('sortOrder', 'asc')));
-                if (snap.empty) return [];
-                return snap.docs.map((d) => ({
-                  ...(d.data() as Omit<T, 'id'>),
-                  id: d.id,
-                })) as unknown as T[];
-              };
-
-              const [
-                legacyPastorsList,
-                coworkersRawList,
-                worshipTimesList,
-                liturgyList,
-                rosterList,
-                weekdayList,
-                annList,
-              ] = await Promise.all([
-                fetchOptionalDocs<LegacyPastorLike>('pastors'),
-                fetchOptionalDocs<PulpitCoworker>('coworkers'),
-                fetchSorted<WorshipTimeSlot>('worship_times', SUNDAY_WORSHIP_TIMES),
-                fetchSorted<LiturgyStep>('liturgy_steps', [...LITURGY_STANDARD, ...LITURGY_COMMUNION]),
-                fetchSorted<MinistryRosterItem>('ministry_roster', SUNDAY_MINISTRY_ROSTER),
-                fetchSorted<WeekdayMinistry>('weekday_ministries', WEEKDAY_MINISTRIES),
-                fetchSorted<AnnouncementItem>('announcements', ANNOUNCEMENTS),
-              ]);
-              if (!isCurrent()) return;
-
-              legacyCloudPastorIdsRef.current = new Set(
-                legacyPastorsList.map((p) => String(p.id || '')).filter(Boolean)
-              );
-              if (isLegacySeededWeekdayMinistries(weekdayList)) {
-                legacyCloudWeekdayIdsRef.current = weekdayList.map((item) => item.id);
-              } else {
-                legacyCloudWeekdayIdsRef.current = [];
-              }
-
-              const mergedCoworkers =
-                coworkersRawList.length || legacyPastorsList.length
-                  ? mergeLegacyPastorsIntoCoworkers(coworkersRawList, legacyPastorsList)
-                  : PULPIT_COWORKERS;
-
-              const legacyBundle: PublicBundleData = {
-                churchInfo: { ...CHURCH_INFO, ...(infoSnap.data() as ChurchInfo) },
-                coworkers: mergedCoworkers,
-                worshipTimes: worshipTimesList,
-                liturgySteps: liturgyList,
-                ministryRoster: normalizeMinistryRoster(rosterList),
-                weekdayMinistries: isLegacySeededWeekdayMinistries(weekdayList)
-                  ? WEEKDAY_MINISTRIES
-                  : normalizeWeekdayMinistries(weekdayList),
-                announcements: normalizeAnnouncements(annList),
-                version: Date.now(),
-              };
-              applyBundleToState(legacyBundle);
-              const syncedAt = writeLocalBundleCache(legacyBundle, false);
-              setHasCloudData(true);
-              setHasPublicBundle(false);
-              setQuotaExceeded(false);
-              setLastSyncedAt(syncedAt);
-            } else {
-              setHasCloudData(false);
-              setHasPublicBundle(false);
-            }
-          }
-        } catch (error) {
-          if (!isCurrent()) return;
-          hitQuota = handleReadError(error, OperationType.GET, 'church_sections/public_bundle');
-        } finally {
-          if (isCurrent()) {
-            setCloudLoading(false);
-          }
-        }
-      }
-
-      if (hitQuota || !isCurrent()) return;
-
-      // 2. Load visitor requests (5-min sessionStorage cache + bounded limit(50) query)
-      const cachedRequests = !forceRefresh ? readCachedVisitorRequests(uid) : null;
-      if (cachedRequests !== null) {
-        setVisitorRequests(cachedRequests);
-      } else {
-        try {
-          const reqSnap = await getDocs(
-            query(collection(db, 'visitor_requests'), orderBy('createdAt', 'desc'), limit(50))
-          );
-          if (!isCurrent()) return;
-          const items = reqSnap.docs.map((d) => ({
-            ...(d.data() as Omit<VisitorRequestItem, 'id'>),
-            id: d.id,
-          }));
-          setVisitorRequests(items);
-          writeCachedVisitorRequests(uid, items);
-        } catch (error) {
-          if (!isCurrent()) return;
-          hitQuota = handleReadError(error, OperationType.LIST, 'visitor_requests');
-          if (hitQuota) return;
-        }
-      }
-
-      // 3. Admins list is lazy-loaded only when AdminVisitorsPanel mounts (saves up to 50 reads on boot)
-      if (!isMainAdmin) {
-        setAdminUsers([]);
-      }
-
-      // 4. Load lightweight visitor_counter doc (5-min sessionStorage cache, 1 read when stale)
-      if (canViewVisitorStats) {
-        const cachedCounter = !forceRefresh ? readCachedVisitorCounter(uid) : undefined;
-        if (cachedCounter !== undefined) {
-          setVisitorStats(cachedCounter);
+        if (workspace.hasCloudData && workspace.bundle) {
+          applyBundleToState(workspace.bundle);
+          const syncedAt = writeLocalBundleCache(workspace.bundle, true);
+          setHasCloudData(true);
+          setHasPublicBundle(true);
+          setLastSyncedAt(syncedAt);
         } else {
-          try {
-            const counterRef = doc(db, 'site_stats', 'visitor_counter');
-            const counterSnap = await getDocFromServer(counterRef).catch((err) => {
-              if (isFirestoreQuotaError(err)) throw err;
-              return getDoc(counterRef);
-            });
-            if (!isCurrent()) return;
-            const summary: VisitorStatsSummary | null = counterSnap.exists()
-              ? {
-                  totalVisitors: Number((counterSnap.data() as Partial<VisitorStatsSummary>).totalVisitors ?? 0),
-                  lastVisitorId: String((counterSnap.data() as Partial<VisitorStatsSummary>).lastVisitorId ?? ''),
-                  updatedAt: (counterSnap.data() as Partial<VisitorStatsSummary>).updatedAt,
-                }
-              : null;
-            setVisitorStats(summary);
-            writeCachedVisitorCounter(uid, summary);
-          } catch (error) {
-            if (!isCurrent()) return;
-            handleReadError(error, OperationType.GET, 'site_stats/visitor_counter');
-          }
+          setHasCloudData(false);
+          setHasPublicBundle(false);
         }
-      } else {
-        setVisitorStats(null);
-        setVisitorIpRecords([]);
+
+        const requests = Array.isArray(workspace.visitorRequests)
+          ? workspace.visitorRequests
+          : [];
+        setVisitorRequests(requests);
+        writeCachedVisitorRequests(uid, requests);
+
+        if (canViewVisitorStats) {
+          const summary = workspace.visitorStats ?? null;
+          setVisitorStats(summary);
+          writeCachedVisitorCounter(uid, summary);
+        } else {
+          setVisitorStats(null);
+          setVisitorIpRecords([]);
+          setVisitorStatsAggregates(null);
+        }
+        setQuotaExceeded(false);
+      } catch {
+        if (!isCurrent()) return;
+        if (!forceRefresh) {
+          const cachedReq = readCachedVisitorRequests(uid);
+          if (cachedReq) setVisitorRequests(cachedReq);
+          const cachedCounter = readCachedVisitorCounter(uid);
+          if (cachedCounter !== undefined) setVisitorStats(cachedCounter);
+        }
+      } finally {
+        if (isCurrent()) {
+          setCloudLoading(false);
+        }
       }
     },
-    [applyBundleToState, canViewVisitorStats, handleReadError, isMainAdmin]
+    [adminFetch, applyBundleToState, canViewVisitorStats]
   );
 
-  // Admin Mode one-shot sync after Auth & RBAC verification (avoids 13 live onSnapshot listeners)
   useEffect(() => {
     if (!authReady) return;
 
@@ -883,8 +626,6 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
     if (!isAdmin) {
       adminSessionIdRef.current += 1;
-      legacyCloudWeekdayIdsRef.current = [];
-      legacyCloudPastorIdsRef.current = new Set();
       visitorStatsLoadedRef.current = false;
       adminUsersLoadedRef.current = false;
       clearAllAdminSessionCaches();
@@ -892,6 +633,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       setAdminUsers([]);
       setVisitorStats(null);
       setVisitorIpRecords([]);
+      setVisitorStatsAggregates(null);
       if (wasAdminRef.current) {
         wasAdminRef.current = false;
         void loadSingleDocPublicBundle(false);
@@ -924,25 +666,23 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const sessionAtStart = adminSessionIdRef.current;
       setAdminUsersLoading(true);
       try {
-        const adminsSnap = await getDocs(query(collection(db, 'admins'), limit(50)));
+        const res = await adminFetch<{ admins: AdminUserItem[] }>('/api/admin/users', {
+          cache: 'no-store',
+        });
         if (adminSessionIdRef.current !== sessionAtStart) return;
-        const items: AdminUserItem[] = adminsSnap.docs.map((d) => ({
-          ...(d.data() as Omit<AdminUserItem, 'uid'>),
-          uid: d.id,
-        }));
+        const items = Array.isArray(res.admins) ? res.admins : [];
         setAdminUsers(items);
         adminUsersLoadedRef.current = true;
         writeCachedAdminUsers(uid, items);
-      } catch (error) {
-        if (adminSessionIdRef.current !== sessionAtStart) return;
-        handleReadError(error, OperationType.LIST, 'admins');
+      } catch {
+        // Handled cleanly in panel
       } finally {
         if (adminSessionIdRef.current === sessionAtStart) {
           setAdminUsersLoading(false);
         }
       }
     },
-    [handleReadError, isAdmin, isMainAdmin]
+    [adminFetch, isAdmin, isMainAdmin]
   );
 
   const loadVisitorStatsData = useCallback(
@@ -956,6 +696,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         if (cachedStats !== null) {
           setVisitorStats(cachedStats.stats);
           setVisitorIpRecords(cachedStats.ipRecords);
+          setVisitorStatsAggregates(cachedStats.aggregates ?? null);
           visitorStatsLoadedRef.current = true;
           return;
         }
@@ -964,50 +705,37 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const sessionAtStart = adminSessionIdRef.current;
       setVisitorStatsLoading(true);
       try {
-        const counterRef = doc(db, 'site_stats', 'visitor_counter');
-        const [counterSnap, ipSnap] = await Promise.all([
-          getDocFromServer(counterRef).catch((err) => {
-            if (isFirestoreQuotaError(err)) throw err;
-            return getDoc(counterRef);
-          }),
-          getDocs(query(collection(db, 'visitor_ips'), orderBy('countedAt', 'desc'), limit(200))),
-        ]);
+        const res = await adminFetch<{
+          stats: VisitorStatsSummary | null;
+          ipRecords: VisitorIpRecord[];
+          aggregates?: VisitorStatsAggregates | null;
+        }>('/api/admin/visitor-stats', { cache: 'no-store' });
 
         if (adminSessionIdRef.current !== sessionAtStart) return;
 
-        const summary: VisitorStatsSummary | null = counterSnap.exists()
-          ? {
-              totalVisitors: Number((counterSnap.data() as Partial<VisitorStatsSummary>).totalVisitors ?? 0),
-              lastVisitorId: String((counterSnap.data() as Partial<VisitorStatsSummary>).lastVisitorId ?? ''),
-              updatedAt: (counterSnap.data() as Partial<VisitorStatsSummary>).updatedAt,
-            }
-          : null;
+        const summary = res.stats ?? null;
+        const items = Array.isArray(res.ipRecords) ? res.ipRecords : [];
+        const aggregates = res.aggregates ?? null;
+
         setVisitorStats(summary);
-        writeCachedVisitorCounter(uid, summary);
-
-        const items: VisitorIpRecord[] = ipSnap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            country: typeof data?.country === 'string' ? data.country : '',
-            region: typeof data?.region === 'string' ? data.region : '',
-            countedAt: data?.countedAt,
-          };
-        });
         setVisitorIpRecords(items);
+        setVisitorStatsAggregates(aggregates);
         visitorStatsLoadedRef.current = true;
-        writeCachedVisitorStatsBundle(uid, { stats: summary, ipRecords: items });
-        setQuotaExceeded(false);
-      } catch (error) {
-        if (adminSessionIdRef.current !== sessionAtStart) return;
-        handleReadError(error, OperationType.LIST, 'visitor_ips');
+        writeCachedVisitorCounter(uid, summary);
+        writeCachedVisitorStatsBundle(uid, {
+          stats: summary,
+          ipRecords: items,
+          aggregates,
+        });
+      } catch {
+        // Keep current state gracefully
       } finally {
         if (adminSessionIdRef.current === sessionAtStart) {
           setVisitorStatsLoading(false);
         }
       }
     },
-    [canViewVisitorStats, handleReadError, isAdmin]
+    [adminFetch, canViewVisitorStats, isAdmin]
   );
 
   const refreshAdminData = useCallback(async () => {
@@ -1029,14 +757,24 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     await signOutFirebaseUser();
   }, []);
 
+  const syncLocalCacheFromServerBundle = useCallback(
+    (bundle: PublicBundleData | null | undefined) => {
+      const targetBundle = bundle ?? buildPublicBundlePayload(latestStateRef.current);
+      const syncedAt = writeLocalBundleCache(targetBundle, true);
+      setHasCloudData(true);
+      setHasPublicBundle(true);
+      setLastSyncedAt(syncedAt);
+    },
+    [buildPublicBundlePayload]
+  );
+
   const publishPublicBundle = useCallback(async () => {
-    try {
-      await publishBundleSnapshot(latestStateRef.current);
-      setQuotaExceeded(false);
-    } catch (error) {
-      handleWriteError(error, OperationType.WRITE, 'church_sections/public_bundle');
-    }
-  }, [handleWriteError, publishBundleSnapshot]);
+    const res = await adminFetch<{ bundle?: PublicBundleData }>('/api/admin/publish-bundle', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    syncLocalCacheFromServerBundle(res.bundle);
+  }, [adminFetch, syncLocalCacheFromServerBundle]);
 
   const refreshPublicSnapshot = useCallback(async () => {
     await loadSingleDocPublicBundle(true);
@@ -1044,146 +782,111 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
 
   const syncModifiedContentToCloud = useCallback(async () => {
     const current = latestStateRef.current;
-    try {
-      if (!hasCloudData) {
-        const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
-          persistLosslessImageIfNeeded(current.churchInfo.heroImage, 180_000),
-          persistLosslessImageIfNeeded(current.churchInfo.fellowshipImage, 180_000),
-          persistLosslessImageIfNeeded(current.churchInfo.churchTeamImage, 250_000),
-        ]);
-        const resolvedCoworkers = await Promise.all(
-          normalizeCoworkers(current.coworkers).map(async (cw) => ({
-            ...cw,
-            ...(cw.image ? { image: await persistLosslessImageIfNeeded(cw.image, 50_000) } : {}),
-          }))
-        );
-        const normalizedSnapshot = {
-          ...current,
-          churchInfo: {
-            ...current.churchInfo,
-            heroImage: resolvedHeroImage || CHURCH_INFO.heroImage,
-            fellowshipImage: resolvedFellowshipImage || CHURCH_INFO.fellowshipImage,
-            churchTeamImage: resolvedTeamImage || CHURCH_INFO.churchTeamImage,
-          },
-          coworkers: resolvedCoworkers,
-        };
 
-        const ops: BatchWriteOp[] = [
-          {
-            ref: doc(db, 'church_sections', 'info'),
-            data: {
-              ...buildChurchInfoFields(normalizedSnapshot.churchInfo),
-              updatedAt: serverTimestamp(),
-            },
-          },
-        ];
+    const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
+      persistImageToD1IfNeeded(current.churchInfo.heroImage, getBearerToken),
+      persistImageToD1IfNeeded(current.churchInfo.fellowshipImage, getBearerToken),
+      persistImageToD1IfNeeded(current.churchInfo.churchTeamImage, getBearerToken),
+    ]);
 
-        for (const cw of normalizedSnapshot.coworkers) {
-          const { id, image, ...body } = cw;
-          ops.push({
-            ref: doc(db, 'coworkers', id),
-            data: { ...body, ...(image ? { image } : {}), updatedAt: serverTimestamp() },
-          });
-        }
+    const resolvedCoworkers = await Promise.all(
+      normalizeCoworkers(current.coworkers).map(async (cw) => ({
+        ...cw,
+        ...(cw.image
+          ? { image: await persistImageToD1IfNeeded(cw.image, getBearerToken) }
+          : {}),
+      }))
+    );
 
-        for (const wt of current.worshipTimes) {
-          const { id, ...body } = wt;
-          ops.push({
-            ref: doc(db, 'worship_times', id),
-            data: { ...body, updatedAt: serverTimestamp() },
-          });
-        }
+    const resolvedRoster = await Promise.all(
+      normalizeMinistryRoster(current.ministryRoster).map(async (mr) => ({
+        ...mr,
+        image: await persistImageToD1IfNeeded(mr.image, getBearerToken),
+      }))
+    );
 
-        for (const ls of current.liturgySteps) {
-          const cleanRef = clampStr(
-            ls.scriptureOrHymn,
-            FIELD_LIMITS.liturgyStep.scriptureOrHymn
-          );
-          const { id, scriptureOrHymn: _ignoredRef, ...body } = ls;
-          ops.push({
-            ref: doc(db, 'liturgy_steps', id),
-            data: {
-              ...body,
-              ...(cleanRef ? { scriptureOrHymn: cleanRef } : {}),
-              updatedAt: serverTimestamp(),
-            },
-          });
-        }
+    const resolvedAnnouncements = await Promise.all(
+      normalizeAnnouncements(current.announcements).map(async (ann) => ({
+        ...ann,
+        ...(ann.image
+          ? { image: await persistImageToD1IfNeeded(ann.image, getBearerToken) }
+          : {}),
+      }))
+    );
 
-        for (const r of normalizeMinistryRoster(current.ministryRoster)) {
-          const { id, ...body } = r;
-          ops.push({
-            ref: doc(db, 'ministry_roster', id),
-            data: { ...body, updatedAt: serverTimestamp() },
-          });
-        }
+    const normalizedSnapshot = {
+      churchInfo: buildChurchInfoFields({
+        ...current.churchInfo,
+        heroImage: resolvedHeroImage || CHURCH_INFO.heroImage,
+        fellowshipImage: resolvedFellowshipImage || CHURCH_INFO.fellowshipImage,
+        churchTeamImage: resolvedTeamImage || CHURCH_INFO.churchTeamImage,
+      }),
+      coworkers: resolvedCoworkers,
+      worshipTimes: current.worshipTimes,
+      liturgySteps: current.liturgySteps,
+      ministryRoster: resolvedRoster,
+      weekdayMinistries: normalizeWeekdayMinistries(current.weekdayMinistries).map((wm, idx) =>
+        cleanWeekdayMinistry(wm, idx + 1)
+      ),
+      announcements: resolvedAnnouncements,
+    };
 
-        for (const [idx, wm] of normalizeWeekdayMinistries(current.weekdayMinistries).entries()) {
-          const cleanedWm = cleanWeekdayMinistry(wm, idx + 1);
-          ops.push({
-            ref: doc(db, 'weekday_ministries', cleanedWm.id),
-            data: toWeekdayFirestoreBody(cleanedWm),
-          });
-        }
+    const res = await adminFetch<{ bundle?: PublicBundleData }>('/api/admin/sync-all', {
+      method: 'POST',
+      body: JSON.stringify(normalizedSnapshot),
+    });
 
-        for (const ann of normalizeAnnouncements(current.announcements)) {
-          const { id, ...body } = ann;
-          ops.push({
-            ref: doc(db, 'announcements', id),
-            data: { ...body, updatedAt: serverTimestamp() },
-          });
-        }
+    latestStateRef.current = normalizedSnapshot;
+    applyBundleToState(normalizedSnapshot as PublicBundleData);
+    syncLocalCacheFromServerBundle(res.bundle);
+  }, [adminFetch, applyBundleToState, getBearerToken, syncLocalCacheFromServerBundle]);
 
-        const bundle = buildPublicBundlePayload(normalizedSnapshot);
-        ops.push({
-          ref: doc(db, 'church_sections', 'public_bundle'),
-          data: { ...bundle, updatedAt: serverTimestamp() },
-        });
-
-        await commitChunkedBatches(ops);
-        const syncedAt = writeLocalBundleCache(bundle, true);
-        setHasCloudData(true);
-        setHasPublicBundle(true);
-        setQuotaExceeded(false);
-        setLastSyncedAt(syncedAt);
-        return;
+  const importFromLegacyFirestore = useCallback(
+    async (onProgress?: (step: string) => void) => {
+      const { runLegacyFirestoreMigration } = await import('../lib/legacyFirestoreImport');
+      const summary = await runLegacyFirestoreMigration(getBearerToken, onProgress);
+      await refreshAdminData();
+      if (isMainAdmin) {
+        await loadAdminUsersData(true);
       }
+      if (canViewVisitorStats) {
+        await loadVisitorStatsData(true);
+      }
+      return summary;
+    },
+    [
+      canViewVisitorStats,
+      getBearerToken,
+      isMainAdmin,
+      loadAdminUsersData,
+      loadVisitorStatsData,
+      refreshAdminData,
+    ]
+  );
 
-      await publishBundleSnapshot(current);
-      setQuotaExceeded(false);
-    } catch (error) {
-      handleWriteError(error, OperationType.WRITE, 'syncModifiedContentToCloud');
-    }
-  }, [hasCloudData, buildPublicBundlePayload, handleWriteError, publishBundleSnapshot]);
-
-  // Generic CRUD factories for sorted collections
   const saveSortedCollectionDoc = useCallback(
     async <T extends { id: string; sortOrder: number }>(
       colName: string,
       bundleKey: keyof Omit<PublicBundleData, 'churchInfo' | 'version'>,
       cleaned: T
     ) => {
-      const { id, ...docBody } = cleaned;
-      const path = `${colName}/${id}`;
-      try {
-        await setDoc(doc(db, colName, id), {
-          ...docBody,
-          updatedAt: serverTimestamp(),
-        });
-        const currentList = latestStateRef.current[bundleKey] as unknown as T[];
-        const nextList = upsertSorted(currentList, cleaned);
-        updateCollectionStateAndRef(
-          bundleKey,
-          nextList as unknown as PublicBundleData[typeof bundleKey]
-        );
-        setHasCloudData(true);
-        await publishBundleSnapshot(latestStateRef.current);
-        setQuotaExceeded(false);
-      } catch (error) {
-        handleWriteError(error, OperationType.WRITE, path);
-      }
+      const res = await adminFetch<{ bundle?: PublicBundleData }>(
+        `/api/admin/collection/${encodeURIComponent(colName)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(cleaned),
+        }
+      );
+
+      const currentList = latestStateRef.current[bundleKey] as unknown as T[];
+      const nextList = upsertSorted(currentList, cleaned);
+      updateCollectionStateAndRef(
+        bundleKey,
+        nextList as unknown as PublicBundleData[typeof bundleKey]
+      );
+      syncLocalCacheFromServerBundle(res.bundle);
     },
-    [handleWriteError, publishBundleSnapshot, updateCollectionStateAndRef]
+    [adminFetch, syncLocalCacheFromServerBundle, updateCollectionStateAndRef]
   );
 
   const deleteSortedCollectionDoc = useCallback(
@@ -1192,61 +895,48 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       bundleKey: keyof Omit<PublicBundleData, 'churchInfo' | 'version'>,
       id: string
     ) => {
-      const path = `${colName}/${id}`;
-      try {
-        await deleteDoc(doc(db, colName, id));
-        const currentList = latestStateRef.current[bundleKey] as unknown as T[];
-        const nextList = removeById(currentList, id);
-        updateCollectionStateAndRef(
-          bundleKey,
-          nextList as unknown as PublicBundleData[typeof bundleKey]
-        );
-        await publishBundleSnapshot(latestStateRef.current);
-        setQuotaExceeded(false);
-      } catch (error) {
-        handleWriteError(error, OperationType.DELETE, path);
-      }
+      const res = await adminFetch<{ bundle?: PublicBundleData }>(
+        `/api/admin/collection/${encodeURIComponent(colName)}/${encodeURIComponent(id)}`,
+        { method: 'DELETE' }
+      );
+      const currentList = latestStateRef.current[bundleKey] as unknown as T[];
+      const nextList = removeById(currentList, id);
+      updateCollectionStateAndRef(
+        bundleKey,
+        nextList as unknown as PublicBundleData[typeof bundleKey]
+      );
+      syncLocalCacheFromServerBundle(res.bundle);
     },
-    [handleWriteError, publishBundleSnapshot, updateCollectionStateAndRef]
+    [adminFetch, syncLocalCacheFromServerBundle, updateCollectionStateAndRef]
   );
 
   const saveChurchInfo = useCallback(
     async (info: ChurchInfo) => {
-      const path = 'church_sections/info';
-      const prevInfo = latestStateRef.current.churchInfo;
-      try {
-        const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
-          persistLosslessImageIfNeeded(info.heroImage, 180_000),
-          persistLosslessImageIfNeeded(info.fellowshipImage, 180_000),
-          persistLosslessImageIfNeeded(info.churchTeamImage, 250_000),
-        ]);
-        const cleaned = buildChurchInfoFields({
-          ...info,
-          heroImage: resolvedHeroImage,
-          fellowshipImage: resolvedFellowshipImage,
-          churchTeamImage: resolvedTeamImage,
-        });
-        await setDoc(doc(db, 'church_sections', 'info'), {
-          ...cleaned,
-          updatedAt: serverTimestamp(),
-        });
-        latestStateRef.current = {
-          ...latestStateRef.current,
-          churchInfo: cleaned,
-        };
-        setChurchInfo(cleaned);
-        setHasCloudData(true);
-        await publishBundleSnapshot(latestStateRef.current);
-        setQuotaExceeded(false);
+      const [resolvedHeroImage, resolvedFellowshipImage, resolvedTeamImage] = await Promise.all([
+        persistImageToD1IfNeeded(info.heroImage, getBearerToken),
+        persistImageToD1IfNeeded(info.fellowshipImage, getBearerToken),
+        persistImageToD1IfNeeded(info.churchTeamImage, getBearerToken),
+      ]);
+      const cleaned = buildChurchInfoFields({
+        ...info,
+        heroImage: resolvedHeroImage,
+        fellowshipImage: resolvedFellowshipImage,
+        churchTeamImage: resolvedTeamImage,
+      });
 
-        cleanupReplacedMediaUri(prevInfo.heroImage, cleaned.heroImage);
-        cleanupReplacedMediaUri(prevInfo.fellowshipImage, cleaned.fellowshipImage);
-        cleanupReplacedMediaUri(prevInfo.churchTeamImage, cleaned.churchTeamImage);
-      } catch (error) {
-        handleWriteError(error, OperationType.WRITE, path);
-      }
+      await adminFetch('/api/admin/church-info', {
+        method: 'PUT',
+        body: JSON.stringify(cleaned),
+      });
+
+      latestStateRef.current = {
+        ...latestStateRef.current,
+        churchInfo: cleaned,
+      };
+      setChurchInfo(cleaned);
+      syncLocalCacheFromServerBundle(null);
     },
-    [handleWriteError, publishBundleSnapshot]
+    [adminFetch, getBearerToken, syncLocalCacheFromServerBundle]
   );
 
   const saveSiteTheme = useCallback(
@@ -1259,105 +949,28 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     [saveChurchInfo]
   );
 
-  const migrateLegacyPastorsWithCoworkerList = useCallback(
-    async (rawNextList: PulpitCoworker[]) => {
-      const L = FIELD_LIMITS.coworker;
-      const legacyIds = Array.from(legacyCloudPastorIdsRef.current);
-      const migratedList = await Promise.all(
-        rawNextList.map(async (cw) => {
-          const resolvedImage = cw.image
-            ? await persistLosslessImageIfNeeded(cw.image, 50_000)
-            : '';
-          return {
-            id: cw.id,
-            name: clampStr(cw.name, L.name),
-            title: clampStr(cw.title, L.title),
-            image: sanitizeImageRef(resolvedImage, L.image),
-            sortOrder: clampSortOrder(cw.sortOrder, 0),
-          };
-        })
-      );
-
-      const batch = writeBatch(db);
-      for (const cw of migratedList) {
-        const { id: cwId, ...body } = cw;
-        batch.set(doc(db, 'coworkers', cwId), {
-          ...body,
-          updatedAt: serverTimestamp(),
-        });
-      }
-      for (const legacyId of legacyIds) {
-        batch.delete(doc(db, 'pastors', legacyId));
-      }
-      await batch.commit();
-      legacyCloudPastorIdsRef.current = new Set();
-      latestStateRef.current = {
-        ...latestStateRef.current,
-        coworkers: migratedList,
-      };
-      setCoworkers(migratedList);
-      setHasCloudData(true);
-      await publishBundleSnapshot(latestStateRef.current);
-      setQuotaExceeded(false);
-    },
-    [publishBundleSnapshot]
-  );
-
   const saveCoworker = useCallback(
     async (item: PulpitCoworker) => {
       const L = FIELD_LIMITS.coworker;
       const id = item.id || makeDocId('cw');
-      const prevCoworker = latestStateRef.current.coworkers.find((cw) => cw.id === id);
-      let cleaned: PulpitCoworker;
-      try {
-        const resolvedImage = item.image
-          ? await persistLosslessImageIfNeeded(item.image, 50_000)
-          : '';
-        cleaned = {
-          id,
-          name: clampStr(item.name, L.name),
-          title: clampStr(item.title, L.title),
-          image: sanitizeImageRef(resolvedImage, L.image),
-          sortOrder: clampSortOrder(item.sortOrder, 0),
-        };
-      } catch (error) {
-        return handleWriteError(error, OperationType.WRITE, `coworkers/${id}`);
-      }
-
-      if (legacyCloudPastorIdsRef.current.size > 0) {
-        try {
-          const nextList = upsertSorted(latestStateRef.current.coworkers, cleaned);
-          await migrateLegacyPastorsWithCoworkerList(nextList);
-        } catch (error) {
-          handleWriteError(error, OperationType.WRITE, `coworkers/${id}`);
-        }
-      } else {
-        await saveSortedCollectionDoc('coworkers', 'coworkers', cleaned);
-      }
-      cleanupReplacedMediaUri(prevCoworker?.image, cleaned.image);
+      const resolvedImage = item.image
+        ? await persistImageToD1IfNeeded(item.image, getBearerToken)
+        : '';
+      const cleaned: PulpitCoworker = {
+        id,
+        name: clampStr(item.name, L.name),
+        title: clampStr(item.title, L.title),
+        image: sanitizeImageRef(resolvedImage, L.image),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      };
+      await saveSortedCollectionDoc('coworkers', 'coworkers', cleaned);
     },
-    [handleWriteError, migrateLegacyPastorsWithCoworkerList, saveSortedCollectionDoc]
+    [getBearerToken, saveSortedCollectionDoc]
   );
 
   const deleteCoworker = useCallback(
-    async (id: string) => {
-      const prevCoworker = latestStateRef.current.coworkers.find((cw) => cw.id === id);
-      if (legacyCloudPastorIdsRef.current.size > 0) {
-        try {
-          const nextList = removeById(latestStateRef.current.coworkers, id);
-          if (prevCoworker && !legacyCloudPastorIdsRef.current.has(id)) {
-            await deleteDoc(doc(db, 'coworkers', id));
-          }
-          await migrateLegacyPastorsWithCoworkerList(nextList);
-        } catch (error) {
-          handleWriteError(error, OperationType.DELETE, `coworkers/${id}`);
-        }
-      } else {
-        await deleteSortedCollectionDoc<PulpitCoworker>('coworkers', 'coworkers', id);
-      }
-      cleanupReplacedMediaUri(prevCoworker?.image, '');
-    },
-    [deleteSortedCollectionDoc, handleWriteError, migrateLegacyPastorsWithCoworkerList]
+    (id: string) => deleteSortedCollectionDoc<PulpitCoworker>('coworkers', 'coworkers', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveWorshipTime = useCallback(
@@ -1409,172 +1022,79 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (item: MinistryRosterItem) => {
       const L = FIELD_LIMITS.ministryRoster;
       const id = item.id || makeDocId('roster');
-      const prevMoment = latestStateRef.current.ministryRoster.find((m) => m.id === id);
-      let cleaned: MinistryRosterItem = {
+      const resolvedImage = item.image
+        ? await persistImageToD1IfNeeded(item.image, getBearerToken)
+        : '';
+      const cleaned: MinistryRosterItem = {
         id,
         category: normalizeMinistryCategory(item.category),
         title: clampStr(item.title, L.title),
-        image: '',
+        image: sanitizeImageRef(resolvedImage, L.image),
         schedule: clampStr(item.schedule, L.schedule),
         description: clampStr(item.description, L.description),
         sortOrder: clampSortOrder(item.sortOrder, 0),
       };
-      try {
-        const resolvedImage = item.image
-          ? await persistLosslessImageIfNeeded(item.image, 65_000)
-          : '';
-        cleaned = {
-          ...cleaned,
-          image: sanitizeImageRef(resolvedImage, L.image),
-        };
-      } catch (error) {
-        handleWriteError(error, OperationType.WRITE, `ministry_roster/${id}`);
-      }
       await saveSortedCollectionDoc('ministry_roster', 'ministryRoster', cleaned);
-      cleanupReplacedMediaUri(prevMoment?.image, cleaned.image);
     },
-    [handleWriteError, saveSortedCollectionDoc]
+    [getBearerToken, saveSortedCollectionDoc]
   );
 
   const deleteMinistryRoster = useCallback(
-    async (id: string) => {
-      const prevMoment = latestStateRef.current.ministryRoster.find((m) => m.id === id);
-      await deleteSortedCollectionDoc<MinistryRosterItem>('ministry_roster', 'ministryRoster', id);
-      cleanupReplacedMediaUri(prevMoment?.image, '');
-    },
+    (id: string) =>
+      deleteSortedCollectionDoc<MinistryRosterItem>('ministry_roster', 'ministryRoster', id),
     [deleteSortedCollectionDoc]
   );
 
   const saveWeekdayMinistry = useCallback(
     async (item: WeekdayMinistry) => {
       const id = item.id || makeDocId('wm');
-      const path = `weekday_ministries/${id}`;
       const cleaned = cleanWeekdayMinistry({ ...item, id }, 0);
-      try {
-        const legacyIds = legacyCloudWeekdayIdsRef.current;
-        let nextList: WeekdayMinistry[];
-        if (legacyIds.length > 0) {
-          const baseList = latestStateRef.current.weekdayMinistries.map((wm, idx) =>
-            cleanWeekdayMinistry(wm, idx + 1)
-          );
-          nextList = upsertSorted(baseList, cleaned);
-          const nextIdSet = new Set(nextList.map((wm) => wm.id));
-          const batch = writeBatch(db);
-          for (const legacyId of legacyIds) {
-            if (!nextIdSet.has(legacyId)) {
-              batch.delete(doc(db, 'weekday_ministries', legacyId));
-            }
-          }
-          for (const wm of nextList) {
-            batch.set(doc(db, 'weekday_ministries', wm.id), toWeekdayFirestoreBody(wm));
-          }
-          await batch.commit();
-          legacyCloudWeekdayIdsRef.current = [];
-        } else {
-          await setDoc(doc(db, 'weekday_ministries', id), toWeekdayFirestoreBody(cleaned));
-          nextList = upsertSorted(latestStateRef.current.weekdayMinistries, cleaned);
-        }
-        latestStateRef.current = {
-          ...latestStateRef.current,
-          weekdayMinistries: nextList,
-        };
-        setWeekdayMinistries(nextList);
-        setHasCloudData(true);
-        await publishBundleSnapshot(latestStateRef.current);
-        setQuotaExceeded(false);
-      } catch (error) {
-        handleWriteError(error, OperationType.WRITE, path);
-      }
+      await saveSortedCollectionDoc('weekday_ministries', 'weekdayMinistries', cleaned);
     },
-    [handleWriteError, publishBundleSnapshot]
+    [saveSortedCollectionDoc]
   );
 
   const deleteWeekdayMinistry = useCallback(
-    async (id: string) => {
-      try {
-        const legacyIds = legacyCloudWeekdayIdsRef.current;
-        let nextList: WeekdayMinistry[];
-        if (legacyIds.length > 0) {
-          const baseList = latestStateRef.current.weekdayMinistries.map((wm, idx) =>
-            cleanWeekdayMinistry(wm, idx + 1)
-          );
-          nextList = removeById(baseList, id);
-          const nextIdSet = new Set(nextList.map((wm) => wm.id));
-          const batch = writeBatch(db);
-          for (const legacyId of legacyIds) {
-            if (!nextIdSet.has(legacyId)) {
-              batch.delete(doc(db, 'weekday_ministries', legacyId));
-            }
-          }
-          for (const wm of nextList) {
-            batch.set(doc(db, 'weekday_ministries', wm.id), toWeekdayFirestoreBody(wm));
-          }
-          await batch.commit();
-          legacyCloudWeekdayIdsRef.current = [];
-        } else {
-          await deleteDoc(doc(db, 'weekday_ministries', id));
-          nextList = removeById(latestStateRef.current.weekdayMinistries, id);
-        }
-        latestStateRef.current = {
-          ...latestStateRef.current,
-          weekdayMinistries: nextList,
-        };
-        setWeekdayMinistries(nextList);
-        await publishBundleSnapshot(latestStateRef.current);
-        setQuotaExceeded(false);
-      } catch (error) {
-        handleWriteError(error, OperationType.DELETE, `weekday_ministries/${id}`);
-      }
-    },
-    [handleWriteError, publishBundleSnapshot]
+    (id: string) =>
+      deleteSortedCollectionDoc<WeekdayMinistry>('weekday_ministries', 'weekdayMinistries', id),
+    [deleteSortedCollectionDoc]
   );
 
   const saveAnnouncement = useCallback(
     async (item: AnnouncementItem) => {
       const L = FIELD_LIMITS.announcement;
       const id = item.id || makeDocId('ann');
-      const prevAnnouncement = latestStateRef.current.announcements.find((ann) => ann.id === id);
-      let cleaned: AnnouncementItem;
-      try {
-        const resolvedImage = item.image
-          ? await persistLosslessImageIfNeeded(item.image, 60_000)
-          : '';
-        const cleanDate = clampStr(item.date, L.date);
-        const cleanTime = clampStr(item.time, L.time);
-        const cleanLocation = clampStr(item.location, L.location);
-        const cleanContact = clampStr(item.contact, L.contact);
-        cleaned = {
-          id,
-          category: normalizeAnnouncementCategory(item.category),
-          ...(cleanDate ? { date: cleanDate } : {}),
-          title: clampStr(item.title, L.title),
-          summary: clampStr(item.summary, L.summary),
-          ...(cleanTime ? { time: cleanTime } : {}),
-          ...(cleanLocation ? { location: cleanLocation } : {}),
-          ...(cleanContact ? { contact: cleanContact } : {}),
-          image: sanitizeImageRef(resolvedImage, L.image),
-          isFeatured: Boolean(item.isFeatured),
-          details: item.details
-            .slice(0, L.detailsMaxCount)
-            .map((d) => clampStr(d, L.detailLen))
-            .filter(Boolean),
-          sortOrder: clampSortOrder(item.sortOrder, 0),
-        };
-      } catch (error) {
-        return handleWriteError(error, OperationType.WRITE, `announcements/${id}`);
-      }
+      const resolvedImage = item.image
+        ? await persistImageToD1IfNeeded(item.image, getBearerToken)
+        : '';
+      const cleanDate = clampStr(item.date, L.date);
+      const cleanTime = clampStr(item.time, L.time);
+      const cleanLocation = clampStr(item.location, L.location);
+      const cleanContact = clampStr(item.contact, L.contact);
+      const cleaned: AnnouncementItem = {
+        id,
+        category: normalizeAnnouncementCategory(item.category),
+        ...(cleanDate ? { date: cleanDate } : {}),
+        title: clampStr(item.title, L.title),
+        summary: clampStr(item.summary, L.summary),
+        ...(cleanTime ? { time: cleanTime } : {}),
+        ...(cleanLocation ? { location: cleanLocation } : {}),
+        ...(cleanContact ? { contact: cleanContact } : {}),
+        image: sanitizeImageRef(resolvedImage, L.image),
+        isFeatured: Boolean(item.isFeatured),
+        details: item.details
+          .slice(0, L.detailsMaxCount)
+          .map((d) => clampStr(d, L.detailLen))
+          .filter(Boolean),
+        sortOrder: clampSortOrder(item.sortOrder, 0),
+      };
       await saveSortedCollectionDoc('announcements', 'announcements', cleaned);
-      cleanupReplacedMediaUri(prevAnnouncement?.image, cleaned.image);
     },
-    [handleWriteError, saveSortedCollectionDoc]
+    [getBearerToken, saveSortedCollectionDoc]
   );
 
   const deleteAnnouncement = useCallback(
-    async (id: string) => {
-      const prevAnnouncement = latestStateRef.current.announcements.find((ann) => ann.id === id);
-      await deleteSortedCollectionDoc<AnnouncementItem>('announcements', 'announcements', id);
-      cleanupReplacedMediaUri(prevAnnouncement?.image, '');
-    },
+    (id: string) => deleteSortedCollectionDoc<AnnouncementItem>('announcements', 'announcements', id),
     [deleteSortedCollectionDoc]
   );
 
@@ -1585,21 +1105,8 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const cleanContact = clampStr(payload.contact, L.contact);
       const cleanIntent = payload.intent ? clampStr(payload.intent, L.intent) : '';
       const cleanMessage = clampStr(payload.message, L.message);
-      try {
-        await addDoc(collection(db, 'visitor_requests'), {
-          name: cleanName,
-          contact: cleanContact,
-          ...(cleanIntent ? { intent: cleanIntent } : {}),
-          message: cleanMessage,
-          status: 'pending',
-          createdAt: serverTimestamp(),
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.CREATE, 'visitor_requests');
-      }
 
-      // Non-blocking server email push: Firestore persistence has already succeeded
-      void fetch('/api/notify-visitor', {
+      const res = await fetch('/api/visitor-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1608,47 +1115,43 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           ...(cleanIntent ? { intent: cleanIntent } : {}),
           message: cleanMessage,
         }),
-      }).catch(() => {
-        // Ignore network/notification errors so visitor submission experience stays seamless
       });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || '提交来访留言失败，请稍后重试。');
+      }
     },
-    [handleWriteError]
+    []
   );
 
   const updateVisitorRequestStatus = useCallback(
     async (id: string, status: VisitorRequestItem['status'], adminNote: string) => {
       const cleanNote = clampStr(adminNote, FIELD_LIMITS.visitorRequest.adminNote);
-      try {
-        await updateDoc(doc(db, 'visitor_requests', id), {
-          status,
-          adminNote: cleanNote,
-        });
-        setVisitorRequests((prev) => {
-          const next = prev.map((r) => (r.id === id ? { ...r, status, adminNote: cleanNote } : r));
-          writeCachedVisitorRequests(activeAuthUidRef.current, next);
-          return next;
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.UPDATE, `visitor_requests/${id}`);
-      }
+      await adminFetch(`/api/admin/visitor-requests/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, adminNote: cleanNote }),
+      });
+      setVisitorRequests((prev) => {
+        const next = prev.map((r) => (r.id === id ? { ...r, status, adminNote: cleanNote } : r));
+        writeCachedVisitorRequests(activeAuthUidRef.current, next);
+        return next;
+      });
     },
-    [handleWriteError]
+    [adminFetch]
   );
 
   const deleteVisitorRequest = useCallback(
     async (id: string) => {
-      try {
-        await deleteDoc(doc(db, 'visitor_requests', id));
-        setVisitorRequests((prev) => {
-          const next = prev.filter((r) => r.id !== id);
-          writeCachedVisitorRequests(activeAuthUidRef.current, next);
-          return next;
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.DELETE, `visitor_requests/${id}`);
-      }
+      await adminFetch(`/api/admin/visitor-requests/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      setVisitorRequests((prev) => {
+        const next = prev.filter((r) => r.id !== id);
+        writeCachedVisitorRequests(activeAuthUidRef.current, next);
+        return next;
+      });
     },
-    [handleWriteError]
+    [adminFetch]
   );
 
   const addAdminUser = useCallback(
@@ -1660,7 +1163,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     ) => {
       const L = FIELD_LIMITS.adminUser;
       const cleanUid = clampStr(uid, L.uid);
-      if (!/^[a-zA-Z0-9_\-]+$/.test(cleanUid)) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(cleanUid)) {
         throw new Error('管理员 UID 格式无效（仅支持字母、数字、下划线或连字符）。');
       }
       const cleanEmail = clampStr(email, L.email);
@@ -1672,52 +1175,48 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
         throw new Error('请填写同工称呼。');
       }
       const allowStats = Boolean(allowVisitorStats);
-      try {
-        await setDoc(doc(db, 'admins', cleanUid), {
+
+      const res = await adminFetch<{ admin?: AdminUserItem }>('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          uid: cleanUid,
           email: cleanEmail,
           displayName: cleanDisplayName,
           canViewVisitorStats: allowStats,
-          addedAt: serverTimestamp(),
-        });
-        setAdminUsers((prev) => {
-          const next = [
-            ...prev.filter((a) => a.uid !== cleanUid),
-            {
-              uid: cleanUid,
-              email: cleanEmail,
-              displayName: cleanDisplayName,
-              canViewVisitorStats: allowStats,
-            },
-          ];
-          writeCachedAdminUsers(activeAuthUidRef.current, next);
-          return next;
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.WRITE, `admins/${cleanUid}`);
-      }
+        }),
+      });
+
+      const created: AdminUserItem = res.admin ?? {
+        uid: cleanUid,
+        email: cleanEmail,
+        displayName: cleanDisplayName,
+        canViewVisitorStats: allowStats,
+      };
+      setAdminUsers((prev) => {
+        const next = [...prev.filter((a) => a.uid !== cleanUid), created];
+        writeCachedAdminUsers(activeAuthUidRef.current, next);
+        return next;
+      });
     },
-    [handleWriteError]
+    [adminFetch]
   );
 
   const updateAdminVisitorStatsPermission = useCallback(
     async (uid: string, allowVisitorStats: boolean) => {
       const allowStats = Boolean(allowVisitorStats);
-      try {
-        await updateDoc(doc(db, 'admins', uid), {
-          canViewVisitorStats: allowStats,
-        });
-        setAdminUsers((prev) => {
-          const next = prev.map((a) =>
-            a.uid === uid ? { ...a, canViewVisitorStats: allowStats } : a
-          );
-          writeCachedAdminUsers(activeAuthUidRef.current, next);
-          return next;
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.UPDATE, `admins/${uid}`);
-      }
+      await adminFetch(`/api/admin/users/${encodeURIComponent(uid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ canViewVisitorStats: allowStats }),
+      });
+      setAdminUsers((prev) => {
+        const next = prev.map((a) =>
+          a.uid === uid ? { ...a, canViewVisitorStats: allowStats } : a
+        );
+        writeCachedAdminUsers(activeAuthUidRef.current, next);
+        return next;
+      });
     },
-    [handleWriteError]
+    [adminFetch]
   );
 
   const removeAdminUser = useCallback(
@@ -1726,18 +1225,16 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       if (activeUid && uid === activeUid) {
         throw new Error('为防止误锁定，无法在此撤销当前登录账号自身的权限。');
       }
-      try {
-        await deleteDoc(doc(db, 'admins', uid));
-        setAdminUsers((prev) => {
-          const next = prev.filter((a) => a.uid !== uid);
-          writeCachedAdminUsers(activeAuthUidRef.current, next);
-          return next;
-        });
-      } catch (error) {
-        handleWriteError(error, OperationType.DELETE, `admins/${uid}`);
-      }
+      await adminFetch(`/api/admin/users/${encodeURIComponent(uid)}`, {
+        method: 'DELETE',
+      });
+      setAdminUsers((prev) => {
+        const next = prev.filter((a) => a.uid !== uid);
+        writeCachedAdminUsers(activeAuthUidRef.current, next);
+        return next;
+      });
     },
-    [handleWriteError]
+    [adminFetch]
   );
 
   const publicValue = useMemo<PublicChurchDataValue>(
@@ -1790,6 +1287,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       adminUsers,
       visitorStats,
       visitorIpRecords,
+      visitorStatsAggregates,
       visitorStatsLoading,
       adminUsersLoading,
       loadVisitorStatsData,
@@ -1808,6 +1306,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       adminUsers,
       visitorStats,
       visitorIpRecords,
+      visitorStatsAggregates,
       visitorStatsLoading,
       adminUsersLoading,
       loadVisitorStatsData,
@@ -1823,6 +1322,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       syncModifiedContentToCloud,
       publishPublicBundle,
       refreshAdminData,
+      importFromLegacyFirestore,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,
@@ -1847,6 +1347,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       syncModifiedContentToCloud,
       publishPublicBundle,
       refreshAdminData,
+      importFromLegacyFirestore,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,

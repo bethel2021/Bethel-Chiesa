@@ -100,9 +100,23 @@ export function writeCachedVisitorCounter(
   writeEnvelope(COUNTER_CACHE_KEY, uid, summary);
 }
 
+export interface VisitorStatsAggregates {
+  totalRecords: number;
+  todayCount: number;
+  weekCount: number;
+  monthCount: number;
+  regionBreakdown: Array<{
+    country: string;
+    region: string;
+    count: number;
+    latestAt: string;
+  }>;
+}
+
 export interface CachedVisitorStatsBundle {
   stats: VisitorStatsSummary | null;
   ipRecords: VisitorIpRecord[];
+  aggregates?: VisitorStatsAggregates | null;
 }
 
 export function readCachedVisitorStatsBundle(

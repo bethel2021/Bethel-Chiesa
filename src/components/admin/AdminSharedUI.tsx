@@ -155,11 +155,17 @@ export function getFriendlyAdminError(err: unknown, fallback: string): string {
   if (!msg) return fallback;
   const lowerMsg = msg.toLowerCase();
   if (
+    lowerMsg.includes('d1') &&
+    (lowerMsg.includes('未绑定') || lowerMsg.includes('binding') || lowerMsg.includes('not configured'))
+  ) {
+    return 'Cloudflare D1 数据库尚未绑定，请在 Cloudflare Pages Settings → Bindings 中绑定变量名 DB。';
+  }
+  if (
     lowerMsg.includes('resource-exhausted') ||
     lowerMsg.includes('quota limit exceeded') ||
     lowerMsg.includes('quota exceeded')
   ) {
-    return '今日云端数据库免费读写额度已达上限，请待每日配额重置（约意大利时间 09:00）后再试。';
+    return '云端服务暂忙或已达配额上限，请稍后再试。';
   }
   if (msg.startsWith('{') && msg.endsWith('}')) {
     try {
@@ -173,12 +179,12 @@ export function getFriendlyAdminError(err: unknown, fallback: string): string {
         inner.includes('quota limit exceeded') ||
         inner.includes('quota exceeded')
       ) {
-        return '今日云端数据库免费读写额度已达上限，请待每日配额重置（约意大利时间 09:00）后再试。';
+        return '云端服务暂忙或已达配额上限，请稍后再试。';
       }
       if (inner.includes('unavailable') || inner.includes('offline') || inner.includes('network')) {
         return '网络连接异常，请稍后重试。';
       }
-      return fallback;
+      return parsed.error || fallback;
     } catch {
       return fallback;
     }

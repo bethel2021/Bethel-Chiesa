@@ -1,47 +1,12 @@
-import firebaseConfig from '../../firebase-applet-config.json';
-import {
-  parseRecipients,
-  resolveSenderAddress,
-  verifyAdminBearerToken,
-} from './_visitorNotify';
+import { jsonResponse } from './_auth';
+import { authorizeCloudflareAdmin, type PagesContext } from './_cfContext';
+import { parseRecipients, resolveSenderAddress } from './_visitorNotify';
 
-interface StatusEnv {
-  RESEND_API_KEY?: string;
-  VISITOR_NOTIFY_TO?: string;
-  VISITOR_NOTIFY_FROM?: string;
-  VITE_FIREBASE_API_KEY?: string;
-  VITE_FIREBASE_PROJECT_ID?: string;
-  VITE_FIREBASE_FIRESTORE_DATABASE_ID?: string;
-}
+export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const auth = await authorizeCloudflareAdmin(context);
+  if (auth.ok === false) return auth.response;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store, max-age=0',
-    },
-  });
-}
-
-export async function onRequestGet(context: {
-  request: Request;
-  env?: StatusEnv;
-}): Promise<Response> {
-  const { request, env } = context;
-
-  const authCheck = await verifyAdminBearerToken({
-    authHeader: request.headers.get('authorization'),
-    firebaseApiKey: env?.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-    firebaseProjectId: env?.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-    firestoreDatabaseId:
-      env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId,
-  });
-
-  if (authCheck.ok === false) {
-    return jsonResponse({ error: authCheck.message }, authCheck.status);
-  }
-
+  const { env } = context;
   const configured = Boolean(
     typeof env?.RESEND_API_KEY === 'string' && env.RESEND_API_KEY.trim().length > 0
   );

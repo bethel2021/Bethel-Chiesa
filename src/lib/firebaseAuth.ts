@@ -7,9 +7,8 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { BOOTSTRAPPED_ADMIN_EMAIL } from '../data/cacheConfig';
-import { db, firebaseApp, setAuthSummaryForErrors } from './firebase';
+import { firebaseApp, setAuthSummaryForErrors } from './firebase';
 
 export type AuthUserSummary = {
   uid: string;
@@ -22,8 +21,6 @@ const auth = getAuth(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Prevent orphaned Firebase Auth AbstractPopupRedirectOperation.onAuthEvent races
-// from emitting unhandled rejections after a popup has already settled/cancelled.
 if (typeof window !== 'undefined') {
   const globalKey = '__bethelAuthAssertionGuardInstalled';
   const win = window as Window & { [globalKey]?: boolean };
@@ -90,6 +87,13 @@ export async function signOutFirebaseUser(): Promise<void> {
   await signOut(auth);
 }
 
+export async function getCurrentIdToken(forceRefresh = false): Promise<string | null> {
+  await auth.authStateReady();
+  const current = auth.currentUser;
+  if (!current) return null;
+  return await current.getIdToken(forceRefresh);
+}
+
 export function subscribeAdminAuthAndRbac(
   onUpdate: (state: {
     user: User | null;
@@ -124,7 +128,7 @@ export function subscribeAdminAuthAndRbac(
     }
 
     const isBootstrapped =
-      currentUser.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
+      currentUser.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase();
 
     if (isBootstrapped) {
       onUpdate({
@@ -145,19 +149,29 @@ export function subscribeAdminAuthAndRbac(
       authReady: false,
     });
 
-    const adminRef = doc(db, 'admins', currentUser.uid);
-    void getDocFromServer(adminRef)
-      .catch(() => getDoc(adminRef))
-      .then((adminDoc) => {
+    void currentUser
+      .getIdToken()
+      .then(async (token) => {
+        const res = await fetch('/api/admin/me', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return (await res.json()) as {
+          isAdmin?: boolean;
+          isMainAdmin?: boolean;
+          canViewVisitorStats?: boolean;
+        };
+      })
+      .then((role) => {
         if (currentEpoch !== authEpoch) return;
-        const verifiedAdmin = adminDoc.exists() && currentUser.emailVerified;
-        const canViewStats =
-          verifiedAdmin && adminDoc.data()?.canViewVisitorStats === true;
         onUpdate({
           user: currentUser,
-          isAdmin: verifiedAdmin,
-          isMainAdmin: false,
-          canViewVisitorStats: canViewStats,
+          isAdmin: Boolean(role.isAdmin),
+          isMainAdmin: Boolean(role.isMainAdmin),
+          canViewVisitorStats: Boolean(role.canViewVisitorStats),
           authReady: true,
         });
       })

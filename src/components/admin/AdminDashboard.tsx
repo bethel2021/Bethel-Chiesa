@@ -14,6 +14,7 @@ import {
   Palette,
   RefreshCw,
   ShieldCheck,
+  UploadCloud,
   Users,
   X,
 } from 'lucide-react';
@@ -87,6 +88,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     user,
     authReady,
     isAdmin,
+    isMainAdmin,
     canViewVisitorStats,
     visitorRequests,
     visitorStats,
@@ -94,8 +96,12 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     signInWithGoogle,
     signOutUser,
   } = useChurchAuth();
-  const { syncModifiedContentToCloud, publishPublicBundle, refreshAdminData } =
-    useChurchAdminActions();
+  const {
+    syncModifiedContentToCloud,
+    publishPublicBundle,
+    refreshAdminData,
+    importFromLegacyFirestore,
+  } = useChurchAdminActions();
 
   useEffect(() => {
     activateAdminSession();
@@ -111,6 +117,8 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [importingLegacy, setImportingLegacy] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const [refreshingAdmin, setRefreshingAdmin] = useState(false);
   const [authError, setAuthError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
@@ -120,8 +128,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   } | null>(null);
   const autoPublishedRef = useRef(false);
 
-  // If an existing cloud database was created before single-doc snapshot support,
-  // wait briefly for legacy collections to load and auto-generate public_bundle once.
   useEffect(() => {
     if (
       !authReady ||
@@ -141,7 +147,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
       try {
         await publishPublicBundle();
       } catch {
-        // Admin can manually click "同步修改内容到云端" if needed
+        // Admin can manually click "同步修改内容到 D1" if needed
       }
     }, 1500);
 
@@ -163,15 +169,38 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
       await syncModifiedContentToCloud();
       setSyncStatus({
         type: 'success',
-        message: '已将修改内容同步到云端并刷新访客端公开快照（public_bundle），访客加载主页仅需 1 次读取。',
+        message:
+          '已将当前内容写入 Cloudflare D1 数据库并更新访客端公开快照，前端加载仅需单次极速请求。',
       });
     } catch (err) {
       setSyncStatus({
         type: 'error',
-        message: getFriendlyAdminError(err, '同步到云端失败，请稍后重试。'),
+        message: getFriendlyAdminError(err, '同步到 Cloudflare D1 失败，请稍后重试。'),
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleImportFromFirestore = async () => {
+    if (!isMainAdmin || importingLegacy) return;
+    setImportingLegacy(true);
+    setSyncStatus(null);
+    setImportProgress('正在连接旧版 Firestore…');
+    try {
+      const summary = await importFromLegacyFirestore((step) => setImportProgress(step));
+      setSyncStatus({
+        type: 'success',
+        message: `已完成旧版 Firestore 数据导入：迁移 ${summary.migratedImages} 张图片、${summary.importedAdmins} 位管理员、${summary.importedRequests} 条来访留言与 ${summary.importedIps} 条去重访客记录到 Cloudflare D1。`,
+      });
+    } catch (err) {
+      setSyncStatus({
+        type: 'error',
+        message: getFriendlyAdminError(err, '从旧版 Firestore 导入失败，请检查网络或权限后重试。'),
+      });
+    } finally {
+      setImportingLegacy(false);
+      setImportProgress('');
     }
   };
 
@@ -494,10 +523,10 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                 <AlertTriangle className="w-4 h-4 text-[#B45309] shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
                   <p className="font-semibold text-[#78350F]">
-                    今日云端免费读取额度已达上限（当前展示本地缓存数据）
+                    云端连接暂不可用（当前展示本地缓存数据）
                   </p>
                   <p className="text-[#92400E] leading-relaxed">
-                    系统已自动切换为轻量单文档读取与本地缓存模式。云端每日配额通常在太平洋时间零点（约意大利时间 09:00）自动重置，重置后点击右侧按钮即可恢复最新同步。
+                    未能从 Cloudflare D1 读取最新后台工作区数据。请确认 D1 数据库绑定（变量名 DB）状态正常后点击右侧按钮重试。
                   </p>
                 </div>
               </div>
@@ -515,7 +544,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                 className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#78350F] bg-white border border-[#F59E0B]/50 hover:bg-[#FFFBEB] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshingAdmin ? 'animate-spin' : ''}`} />
-                {refreshingAdmin ? '重试中…' : '重试连接云端'}
+                {refreshingAdmin ? '重试中…' : '重试连接 D1'}
               </button>
             </div>
           )}
@@ -524,21 +553,39 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
             <div className="mb-6 bg-[#F3EFE6] border border-[#DFD8C8] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-[#1C1917]">
-                  尚未检测到云端数据
+                  尚未检测到 Cloudflare D1 云端数据
                 </h2>
                 <p className="text-xs text-[#57534E] mt-1">
-                  点击右侧按钮可将当前主页内容与已修改数据同步写入 Firestore 云端数据库，以便跨设备持久化编辑与发布。
+                  {isMainAdmin
+                    ? '你可以从旧版 Firestore 一键导入历史内容、照片与访客数据到 Cloudflare D1，或直接初始化默认模板内容。'
+                    : '点击右侧按钮可将当前主页内容写入 Cloudflare D1 数据库，以便跨设备持久化编辑与发布。'}
                 </p>
+                {importProgress && (
+                  <p className="text-xs text-[#1E3A5F] font-medium mt-2">{importProgress}</p>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={handleSyncToCloud}
-                disabled={syncing}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? '正在同步…' : '同步修改内容到云端'}
-              </button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {isMainAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleImportFromFirestore}
+                    disabled={importingLegacy || syncing}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#1E3A5F] hover:bg-[#FAF8F4] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                  >
+                    <UploadCloud className={`w-3.5 h-3.5 ${importingLegacy ? 'animate-pulse' : ''}`} />
+                    {importingLegacy ? '正在迁移…' : '从旧版 Firestore 一键导入'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSyncToCloud}
+                  disabled={syncing || importingLegacy}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? '正在同步…' : '同步默认模板到 D1'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -551,14 +598,14 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   伯特利教会内容管理总览
                 </h2>
                 <p className="text-xs text-[#57534E] mt-1">
-                  选择下方任意模块即可立即修改主页展示内容，保存时将自动同步到云端并更新访客端单文档汇总快照。
+                  全部页面内容与优化图片均存储于 Cloudflare D1 数据库，保存修改时将自动更新公开快照。
                 </p>
               </div>
 
               <div className="bg-white border border-[#E5DFD3] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-[#1C1917] tabular-nums">
-                    访客端公开快照：
+                    Cloudflare D1 公开快照：
                     <span className={hasPublicBundle ? 'text-[#14532D]' : 'text-[#9A3412]'}>
                       {hasPublicBundle ? '已同步' : '待生成'}
                     </span>
@@ -566,18 +613,34 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     <span className="text-[#57534E]">最近同步：{formattedSyncTime}</span>
                   </p>
                   <p className="text-xs text-[#57534E]">
-                    访客端单文档读取 + 30 分钟本地缓存已启用：首次访问最多消耗 1 次云端读取，30 分钟内重复访问零读取。
+                    已启用 D1 单接口快照 + 30 分钟本地缓存与图片边缘强缓存分发，无需额外对象存储。
                   </p>
+                  {importProgress && (
+                    <p className="text-xs text-[#1E3A5F] font-medium pt-1">{importProgress}</p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSyncToCloud}
-                  disabled={syncing}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                  {syncing ? '正在同步…' : '同步修改内容到云端'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {isMainAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleImportFromFirestore}
+                      disabled={importingLegacy || syncing}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                    >
+                      <UploadCloud className={`w-3.5 h-3.5 ${importingLegacy ? 'animate-pulse' : ''}`} />
+                      {importingLegacy ? '迁移中…' : '从旧版 Firestore 导入'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSyncToCloud}
+                    disabled={syncing || importingLegacy}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                    {syncing ? '正在同步…' : '同步修改内容到 D1'}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

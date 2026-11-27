@@ -1,57 +1,21 @@
-import firebaseConfig from '../../firebase-applet-config.json';
+import { jsonResponse } from './_auth';
+import { authorizeCloudflareAdmin, type PagesContext } from './_cfContext';
 import {
   buildVisitorNotificationEmail,
-  isSameOriginRequest,
   parseRecipients,
   resolveAdminPortalUrl,
   resolveSenderAddress,
   sendResendEmail,
-  verifyAdminBearerToken,
 } from './_visitorNotify';
 
-interface TestEnv {
-  RESEND_API_KEY?: string;
-  VISITOR_NOTIFY_TO?: string;
-  VISITOR_NOTIFY_FROM?: string;
-  APP_URL?: string;
-  VITE_FIREBASE_API_KEY?: string;
-  VITE_FIREBASE_PROJECT_ID?: string;
-  VITE_FIREBASE_FIRESTORE_DATABASE_ID?: string;
-}
+export async function onRequestPost(context: PagesContext): Promise<Response> {
+  const auth = await authorizeCloudflareAdmin(context, { checkOrigin: true });
+  if (auth.ok === false) return auth.response;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store, max-age=0',
-    },
-  });
-}
-
-export async function onRequestPost(context: {
-  request: Request;
-  env?: TestEnv;
-}): Promise<Response> {
   const { request, env } = context;
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
-  if (!isSameOriginRequest(request.headers.get('origin'), host)) {
-    return jsonResponse({ ok: false, error: '非法请求来源' }, 403);
-  }
-
-  const authCheck = await verifyAdminBearerToken({
-    authHeader: request.headers.get('authorization'),
-    firebaseApiKey: env?.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
-    firebaseProjectId: env?.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-    firestoreDatabaseId:
-      env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId,
-  });
-
-  if (authCheck.ok === false) {
-    return jsonResponse({ ok: false, error: authCheck.message }, authCheck.status);
-  }
-
   const apiKey = typeof env?.RESEND_API_KEY === 'string' ? env.RESEND_API_KEY.trim() : '';
+
   if (!apiKey) {
     return jsonResponse(
       {
@@ -73,7 +37,7 @@ export async function onRequestPost(context: {
   const email = buildVisitorNotificationEmail({
     payload: {
       name: '测试来访者（后台验证）',
-      contact: authCheck.email,
+      contact: auth.access.email,
       message: '这是一条来自「来访留言与权限」后台的邮件推送测试记录。',
     },
     adminUrl,

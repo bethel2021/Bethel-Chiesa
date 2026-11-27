@@ -3,39 +3,12 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 import {buildHeadPrefetchScript} from './src/lib/headPrefetchScript.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function resolveClientFirebaseEndpoints(mode: string) {
-  const env = loadEnv(mode, __dirname, '');
-  let fileCfg: {
-    apiKey?: string;
-    projectId?: string;
-    firestoreDatabaseId?: string;
-  } = {};
-
-  const cfgPath = path.resolve(__dirname, 'firebase-applet-config.json');
-  if (fs.existsSync(cfgPath)) {
-    try {
-      fileCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    } catch {
-      // Ignore malformed config
-    }
-  }
-
-  return {
-    apiKey: env.VITE_FIREBASE_API_KEY || fileCfg.apiKey || '',
-    projectId: env.VITE_FIREBASE_PROJECT_ID || fileCfg.projectId || '',
-    databaseId:
-      env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || fileCfg.firestoreDatabaseId || '(default)',
-  };
-}
-
-export default defineConfig(({mode}) => {
-  const firebaseEndpoints = resolveClientFirebaseEndpoints(mode);
-
+export default defineConfig(() => {
   return {
     plugins: [
       react(),
@@ -43,7 +16,7 @@ export default defineConfig(({mode}) => {
       {
         name: 'inject-head-hero-prefetch',
         transformIndexHtml(html) {
-          const scriptTag = buildHeadPrefetchScript(firebaseEndpoints);
+          const scriptTag = buildHeadPrefetchScript();
           if (!scriptTag) return html;
           return html.replace('</head>', `    ${scriptTag}\n  </head>`);
         },
