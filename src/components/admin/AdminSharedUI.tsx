@@ -153,12 +153,27 @@ export function getFriendlyAdminError(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
   const msg = err.message.trim();
   if (!msg) return fallback;
+  const lowerMsg = msg.toLowerCase();
+  if (
+    lowerMsg.includes('resource-exhausted') ||
+    lowerMsg.includes('quota limit exceeded') ||
+    lowerMsg.includes('quota exceeded')
+  ) {
+    return '今日云端数据库免费读写额度已达上限，请待每日配额重置（约意大利时间 09:00）后再试。';
+  }
   if (msg.startsWith('{') && msg.endsWith('}')) {
     try {
       const parsed = JSON.parse(msg) as { error?: string };
       const inner = String(parsed.error ?? '').toLowerCase();
       if (inner.includes('permission-denied') || inner.includes('insufficient permissions')) {
         return '当前账号缺少此操作的权限，请确认已使用授权管理员账号登录。';
+      }
+      if (
+        inner.includes('resource-exhausted') ||
+        inner.includes('quota limit exceeded') ||
+        inner.includes('quota exceeded')
+      ) {
+        return '今日云端数据库免费读写额度已达上限，请待每日配额重置（约意大利时间 09:00）后再试。';
       }
       if (inner.includes('unavailable') || inner.includes('offline') || inner.includes('network')) {
         return '网络连接异常，请稍后重试。';

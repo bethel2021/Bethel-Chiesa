@@ -7,7 +7,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { BOOTSTRAPPED_ADMIN_EMAIL } from '../data/cacheConfig';
 import { db, firebaseApp, setAuthSummaryForErrors } from './firebase';
 
@@ -99,20 +99,11 @@ export function subscribeAdminAuthAndRbac(
     authReady: boolean;
   }) => void
 ): () => void {
-  let unsubAdminDoc: (() => void) | null = null;
   let authEpoch = 0;
-
-  const cleanupAdminDocListener = () => {
-    if (unsubAdminDoc) {
-      unsubAdminDoc();
-      unsubAdminDoc = null;
-    }
-  };
 
   const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
     authEpoch += 1;
     const currentEpoch = authEpoch;
-    cleanupAdminDocListener();
 
     setAuthSummaryForErrors({
       isSignedIn: Boolean(currentUser),
@@ -154,9 +145,10 @@ export function subscribeAdminAuthAndRbac(
       authReady: false,
     });
 
-    unsubAdminDoc = onSnapshot(
-      doc(db, 'admins', currentUser.uid),
-      (adminDoc) => {
+    const adminRef = doc(db, 'admins', currentUser.uid);
+    void getDocFromServer(adminRef)
+      .catch(() => getDoc(adminRef))
+      .then((adminDoc) => {
         if (currentEpoch !== authEpoch) return;
         const verifiedAdmin = adminDoc.exists() && currentUser.emailVerified;
         const canViewStats =
@@ -168,8 +160,8 @@ export function subscribeAdminAuthAndRbac(
           canViewVisitorStats: canViewStats,
           authReady: true,
         });
-      },
-      () => {
+      })
+      .catch(() => {
         if (currentEpoch !== authEpoch) return;
         onUpdate({
           user: currentUser,
@@ -178,13 +170,11 @@ export function subscribeAdminAuthAndRbac(
           canViewVisitorStats: false,
           authReady: true,
         });
-      }
-    );
+      });
   });
 
   return () => {
     authEpoch += 1;
-    cleanupAdminDocListener();
     unsubAuth();
   };
 }

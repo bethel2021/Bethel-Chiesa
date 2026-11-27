@@ -2,7 +2,7 @@ import type { PublicBundleData } from './publicBundleCache';
 
 export type EarlyBundleResult =
   | { status: 'ok'; bundle: PublicBundleData }
-  | { status: 'not-found' | 'error' };
+  | { status: 'not-found' | 'quota-exceeded' | 'error' };
 
 export interface EarlyHeroMediaEntry {
   uri: string;

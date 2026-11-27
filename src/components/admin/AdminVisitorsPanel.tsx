@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Mail, Plus, Send } from 'lucide-react';
+import { Mail, Plus, RefreshCw, Send } from 'lucide-react';
 import {
   useChurchAdminActions,
   useChurchAuth,
@@ -22,14 +22,23 @@ const STATUS_LABELS: Record<VisitorRequestItem['status'], string> = {
 };
 
 export function AdminVisitorsPanel() {
-  const { user, isMainAdmin, visitorRequests, adminUsers } = useChurchAuth();
+  const { user, isMainAdmin, visitorRequests, adminUsers, adminUsersLoading, loadAdminUsersData } =
+    useChurchAuth();
   const {
+    refreshAdminData,
     updateVisitorRequestStatus,
     deleteVisitorRequest,
     addAdminUser,
     updateAdminVisitorStatsPermission,
     removeAdminUser,
   } = useChurchAdminActions();
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (isMainAdmin) {
+      void loadAdminUsersData(false);
+    }
+  }, [isMainAdmin, loadAdminUsersData]);
 
   const [filter, setFilter] = useState<'all' | VisitorRequestItem['status']>('all');
   const [statusMsg, setStatusMsg] = useState<{
@@ -177,6 +186,27 @@ export function AdminVisitorsPanel() {
       <AdminPanelHeader
         title="来访登记与代祷留言"
         description="查看新朋友提交的来访预约与代祷事项（仅限授权同工查阅，保障个人隐私）。"
+        action={
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={async () => {
+              setRefreshing(true);
+              try {
+                await Promise.all([
+                  refreshAdminData(),
+                  isMainAdmin ? loadAdminUsersData(true) : Promise.resolve(),
+                ]);
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? '刷新中…' : '刷新留言'}
+          </button>
+        }
       />
 
       <StatusBanner status={statusMsg} onClear={() => setStatusMsg(null)} />
@@ -471,7 +501,11 @@ export function AdminVisitorsPanel() {
               </div>
             </form>
 
-            {adminUsers.length > 0 && (
+            {adminUsersLoading && adminUsers.length === 0 ? (
+              <div className="py-4 text-xs text-[#78716C] border-t border-[#EFEAE0]">
+                正在读取授权同工名录…
+              </div>
+            ) : adminUsers.length > 0 ? (
               <div className="divide-y divide-[#EFEAE0] border-t border-[#EFEAE0]">
                 {adminUsers.map((adm) => {
                   const hasStatsAccess = adm.canViewVisitorStats === true;
@@ -549,7 +583,7 @@ export function AdminVisitorsPanel() {
                   );
                 })}
               </div>
-            )}
+            ) : null}
           </>
         )}
       </div>

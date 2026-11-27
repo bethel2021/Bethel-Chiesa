@@ -82,7 +82,22 @@ export function buildHeadPrefetchScript(cfg: {
         bridge.resolvedResult = nf;
         return nf;
       }
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (res.status === 429) {
+        var qe429 = { status: 'quota-exceeded' };
+        bridge.resolvedResult = qe429;
+        return qe429;
+      }
+      if (!res.ok) {
+        return res.text().then(function(bodyText) {
+          var lower = (bodyText || '').toLowerCase();
+          if (lower.indexOf('resource_exhausted') !== -1 || lower.indexOf('quota') !== -1) {
+            var qe = { status: 'quota-exceeded' };
+            bridge.resolvedResult = qe;
+            return qe;
+          }
+          throw new Error('HTTP ' + res.status);
+        });
+      }
       return res.json().then(function(doc) {
         var bundle = decodeMap(doc && doc.fields);
         var hero = bundle && bundle.churchInfo && bundle.churchInfo.heroImage;

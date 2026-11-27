@@ -6,13 +6,55 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, isFirestoreQuotaError } from '../lib/firebase';
 
 const VISITOR_HASH_DOMAIN = 'bethel-church-visitor-counter-v1';
 const LOCAL_GEO_RECORDED_KEY = 'bethel_visitor_geo_recorded_v2';
+const LOCAL_VISITOR_TOTAL_CACHE_KEY = 'bethel_visitor_total_cache_v1';
+const VISITOR_TOTAL_CACHE_TTL_MS = 30 * 60 * 1000;
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/;
 
 let inflightCounterPromise: Promise<number | null> | null = null;
+
+interface CachedVisitorTotal {
+  total: number;
+  cachedAt: number;
+}
+
+function readCachedVisitorTotal(allowStale = false): number | null {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_VISITOR_TOTAL_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedVisitorTotal>;
+    if (
+      typeof parsed.total !== 'number' ||
+      !Number.isFinite(parsed.total) ||
+      parsed.total < 1 ||
+      typeof parsed.cachedAt !== 'number'
+    ) {
+      return null;
+    }
+    if (!allowStale && Date.now() - parsed.cachedAt >= VISITOR_TOTAL_CACHE_TTL_MS) {
+      return null;
+    }
+    return Math.floor(parsed.total);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedVisitorTotal(total: number): void {
+  if (!Number.isFinite(total) || total < 1) return;
+  try {
+    const payload: CachedVisitorTotal = {
+      total: Math.floor(total),
+      cachedAt: Date.now(),
+    };
+    window.localStorage.setItem(LOCAL_VISITOR_TOTAL_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
 
 interface ResolvedVisitorIdentity {
   ipHash: string;
@@ -132,27 +174,53 @@ async function resolveVisitorIdentity(): Promise<ResolvedVisitorIdentity | null>
 }
 
 async function readCurrentVisitorTotal(): Promise<number | null> {
+  const cachedFresh = readCachedVisitorTotal(false);
+  if (cachedFresh !== null) {
+    return cachedFresh;
+  }
+
   const counterRef = doc(db, 'site_stats', 'visitor_counter');
   try {
     const snap = await getDocFromServer(counterRef);
-    if (!snap.exists()) return null;
-    const raw = snap.data()?.totalVisitors;
-    return typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : null;
+    if (snap.exists()) {
+      const raw = snap.data()?.totalVisitors;
+      if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 1) {
+        const val = Math.floor(raw);
+        writeCachedVisitorTotal(val);
+        return val;
+      }
+    }
+    return readCachedVisitorTotal(true);
   } catch {
     try {
       const snap = await getDoc(counterRef);
-      if (!snap.exists()) return null;
-      const raw = snap.data()?.totalVisitors;
-      return typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : null;
+      if (snap.exists()) {
+        const raw = snap.data()?.totalVisitors;
+        if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 1) {
+          const val = Math.floor(raw);
+          writeCachedVisitorTotal(val);
+          return val;
+        }
+      }
     } catch {
-      return null;
+      // Ignore cache read error
     }
+    return readCachedVisitorTotal(true);
   }
 }
 
 function isGeoRecordedForIp(ipHash: string): boolean {
   try {
     return window.localStorage.getItem(LOCAL_GEO_RECORDED_KEY) === ipHash;
+  } catch {
+    return false;
+  }
+}
+
+function hasAnyGeoRecorded(): boolean {
+  try {
+    const val = window.localStorage.getItem(LOCAL_GEO_RECORDED_KEY);
+    return Boolean(val && SHA256_HEX_RE.test(val));
   } catch {
     return false;
   }
@@ -167,6 +235,12 @@ function markGeoRecordedForIp(ipHash: string): void {
 }
 
 async function executeTrackUniqueVisitor(): Promise<number | null> {
+  // Zero-network fast path when this browser already recorded an IP and cached total is fresh
+  const cachedFresh = readCachedVisitorTotal(false);
+  if (cachedFresh !== null && hasAnyGeoRecorded()) {
+    return cachedFresh;
+  }
+
   const identity = await resolveVisitorIdentity();
   if (!identity) {
     return await readCurrentVisitorTotal();
@@ -199,7 +273,10 @@ async function executeTrackUniqueVisitor(): Promise<number | null> {
       }
       return await readCurrentVisitorTotal();
     }
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaError(err)) {
+      return readCachedVisitorTotal(true);
+    }
     // Continue to atomic transaction which checks ipRef authoritatively
   }
 
@@ -242,19 +319,22 @@ async function executeTrackUniqueVisitor(): Promise<number | null> {
       return nextTotal;
     });
 
+    if (typeof totalVisitors === 'number' && totalVisitors >= 1) {
+      writeCachedVisitorTotal(totalVisitors);
+    }
     if (isResolvedCountry(country)) {
       markGeoRecordedForIp(ipHash);
     }
     return totalVisitors;
   } catch {
-    // Fallback to read-only counter fetch if offline or transient contention
+    // Fallback to read-only counter fetch if offline or quota-exhausted
     return await readCurrentVisitorTotal();
   }
 }
 
 export function trackUniqueVisitor(): Promise<number | null> {
   if (!inflightCounterPromise) {
-    inflightCounterPromise = executeTrackUniqueVisitor().catch(() => null);
+    inflightCounterPromise = executeTrackUniqueVisitor().catch(() => readCachedVisitorTotal(true));
   }
   return inflightCounterPromise;
 }

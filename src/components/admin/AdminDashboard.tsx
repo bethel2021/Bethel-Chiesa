@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   Bell,
@@ -72,6 +73,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     hasCloudData,
     hasPublicBundle,
     cloudLoading,
+    quotaExceeded,
     lastSyncedAt,
     churchInfo,
     coworkers,
@@ -92,7 +94,8 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     signInWithGoogle,
     signOutUser,
   } = useChurchAuth();
-  const { syncModifiedContentToCloud, publishPublicBundle } = useChurchAdminActions();
+  const { syncModifiedContentToCloud, publishPublicBundle, refreshAdminData } =
+    useChurchAdminActions();
 
   useEffect(() => {
     activateAdminSession();
@@ -108,6 +111,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [refreshingAdmin, setRefreshingAdmin] = useState(false);
   const [authError, setAuthError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
@@ -117,9 +121,16 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const autoPublishedRef = useRef(false);
 
   // If an existing cloud database was created before single-doc snapshot support,
-  // wait briefly for all admin collection listeners to settle and auto-generate public_bundle once.
+  // wait briefly for legacy collections to load and auto-generate public_bundle once.
   useEffect(() => {
-    if (!authReady || !isAdmin || cloudLoading || !hasCloudData || hasPublicBundle) {
+    if (
+      !authReady ||
+      !isAdmin ||
+      cloudLoading ||
+      quotaExceeded ||
+      !hasCloudData ||
+      hasPublicBundle
+    ) {
       return;
     }
     if (autoPublishedRef.current) return;
@@ -135,7 +146,15 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     }, 1500);
 
     return () => window.clearTimeout(timer);
-  }, [authReady, isAdmin, cloudLoading, hasCloudData, hasPublicBundle, publishPublicBundle]);
+  }, [
+    authReady,
+    isAdmin,
+    cloudLoading,
+    quotaExceeded,
+    hasCloudData,
+    hasPublicBundle,
+    publishPublicBundle,
+  ]);
 
   const handleSyncToCloud = async () => {
     setSyncing(true);
@@ -469,7 +488,39 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
 
         {/* Workspace Canvas */}
         <main className="flex-1 p-6 md:p-8 max-w-[1040px] w-full mx-auto">
-          {!hasCloudData && (
+          {quotaExceeded && (
+            <div className="mb-6 bg-[#FEF3C7]/70 border border-[#F59E0B]/40 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-[#B45309] shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-semibold text-[#78350F]">
+                    今日云端免费读取额度已达上限（当前展示本地缓存数据）
+                  </p>
+                  <p className="text-[#92400E] leading-relaxed">
+                    系统已自动切换为轻量单文档读取与本地缓存模式。云端每日配额通常在太平洋时间零点（约意大利时间 09:00）自动重置，重置后点击右侧按钮即可恢复最新同步。
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={refreshingAdmin}
+                onClick={async () => {
+                  setRefreshingAdmin(true);
+                  try {
+                    await refreshAdminData();
+                  } finally {
+                    setRefreshingAdmin(false);
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#78350F] bg-white border border-[#F59E0B]/50 hover:bg-[#FFFBEB] disabled:opacity-60 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingAdmin ? 'animate-spin' : ''}`} />
+                {refreshingAdmin ? '重试中…' : '重试连接云端'}
+              </button>
+            </div>
+          )}
+
+          {!hasCloudData && !quotaExceeded && (
             <div className="mb-6 bg-[#F3EFE6] border border-[#DFD8C8] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-[#1C1917]">
@@ -515,7 +566,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                     <span className="text-[#57534E]">最近同步：{formattedSyncTime}</span>
                   </p>
                   <p className="text-xs text-[#57534E]">
-                    访客端单文档读取 + 10 分钟本地缓存已启用：首次访问最多消耗 1 次云端读取，10 分钟内重复访问零读取。
+                    访客端单文档读取 + 30 分钟本地缓存已启用：首次访问最多消耗 1 次云端读取，30 分钟内重复访问零读取。
                   </p>
                 </div>
                 <button

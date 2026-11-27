@@ -1,5 +1,5 @@
 export const PUBLIC_CACHE_KEY = 'bethel_church_public_bundle_v3';
-export const PUBLIC_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes local cache TTL
+export const PUBLIC_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes local cache TTL
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'chinarenzhian@gmail.com';
 
 export const SUNDAY_SUMMARY_SCHEDULE = [

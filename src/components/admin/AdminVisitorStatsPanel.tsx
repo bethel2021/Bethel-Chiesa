@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Globe2, Lock, MapPin, ShieldCheck } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Globe2, Lock, MapPin, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useChurchAuth } from '../../context/ChurchDataContext';
 import { AdminPanelHeader } from './AdminSharedUI';
 
@@ -51,7 +51,20 @@ interface CountryStatRow {
 }
 
 export function AdminVisitorStatsPanel() {
-  const { canViewVisitorStats, isMainAdmin, visitorStats, visitorIpRecords } = useChurchAuth();
+  const {
+    canViewVisitorStats,
+    isMainAdmin,
+    visitorStats,
+    visitorIpRecords,
+    visitorStatsLoading,
+    loadVisitorStatsData,
+  } = useChurchAuth();
+
+  useEffect(() => {
+    if (canViewVisitorStats) {
+      void loadVisitorStatsData(false);
+    }
+  }, [canViewVisitorStats, loadVisitorStatsData]);
 
   const { todayCount, weekCount, monthCount, countryStats, regionStats, totalSampleCount } =
     useMemo(() => {
@@ -147,6 +160,17 @@ export function AdminVisitorStatsPanel() {
       <AdminPanelHeader
         title="独立访客统计数据"
         description="基于同 IP 仅计一次的去重计数统计，按来访 IP 归属地汇总至国家与省份/大区；原始 IP 全程经过 SHA-256 哈希脱敏处理，不入库保存。"
+        action={
+          <button
+            type="button"
+            disabled={visitorStatsLoading}
+            onClick={() => void loadVisitorStatsData(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${visitorStatsLoading ? 'animate-spin' : ''}`} />
+            {visitorStatsLoading ? '加载中…' : '刷新统计'}
+          </button>
+        }
       />
 
       {/* Permission & De-identification Notice */}

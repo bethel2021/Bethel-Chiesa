@@ -81,6 +81,21 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export function isFirestoreQuotaError(error: unknown): boolean {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: string }).code).toLowerCase()
+      : '';
+  if (code === 'resource-exhausted') return true;
+  const msg = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
+  return (
+    msg.includes('resource-exhausted') ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('quota exceeded') ||
+    msg.includes('quota metric')
+  );
+}
+
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
