@@ -306,11 +306,33 @@ export async function backupD1ToFirestore(params: {
           warnings,
           imageCounter
         );
+        const coverRef =
+          clampStr(backedImage || mr.image, FIELD_LIMITS.ministryRoster.image) ||
+          '/images/default.webp';
+        const backedGallery: string[] = [];
+        for (const img of (mr.galleryImages ?? []).slice(
+          0,
+          FIELD_LIMITS.ministryRoster.galleryMaxCount
+        )) {
+          const backedItem = await backupImageToFirestoreChunks(
+            img,
+            db,
+            sdk,
+            imageCache,
+            warnings,
+            imageCounter
+          );
+          const cleanRef = clampStr(backedItem || img, FIELD_LIMITS.ministryRoster.image);
+          if (cleanRef && cleanRef !== coverRef && !backedGallery.includes(cleanRef)) {
+            backedGallery.push(cleanRef);
+          }
+        }
         return {
           id: sanitizeFirestoreId(mr.id, 'mr', idx),
           category: mr.category,
           title: clampStr(mr.title, FIELD_LIMITS.ministryRoster.title) || '事工展示',
-          image: clampStr(backedImage || mr.image, FIELD_LIMITS.ministryRoster.image) || '/images/default.webp',
+          image: coverRef,
+          ...(backedGallery.length > 0 ? { galleryImages: backedGallery } : {}),
           schedule: clampStr(mr.schedule, FIELD_LIMITS.ministryRoster.schedule),
           description: clampStr(mr.description, FIELD_LIMITS.ministryRoster.description),
           sortOrder: clampSortOrder(mr.sortOrder, idx + 1),

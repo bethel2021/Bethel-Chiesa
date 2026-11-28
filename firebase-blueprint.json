@@ -120,7 +120,7 @@
     },
     "MinistryRosterDoc": {
       "title": "MinistryRosterDoc",
-      "description": "Church ministry highlights photo, title, schedule, and description",
+      "description": "Church ministry highlights photo album, cover image, gallery images, title, schedule, and description",
       "type": "object",
       "properties": {
         "category": {
@@ -129,6 +129,7 @@
         },
         "title": { "type": "string", "minLength": 1, "maxLength": 140 },
         "image": { "type": "string", "minLength": 1, "maxLength": 480000 },
+        "galleryImages": { "type": "array", "description": "Up to 12 additional album photo references" },
         "schedule": { "type": "string", "maxLength": 140 },
         "description": { "type": "string", "maxLength": 500 },
         "sortOrder": { "type": "number" },

@@ -223,7 +223,7 @@ service cloud.firestore {
       return data.keys().hasAll([
         'category', 'title', 'image', 'schedule', 'description', 'sortOrder', 'updatedAt'
       ]) && data.keys().hasOnly([
-        'category', 'title', 'image', 'schedule', 'description', 'sortOrder', 'updatedAt'
+        'category', 'title', 'image', 'galleryImages', 'schedule', 'description', 'sortOrder', 'updatedAt'
       ])
       && data.category in [
         'choir',
@@ -233,6 +233,7 @@ service cloud.firestore {
       ]
       && isStringBounds(data.title, 1, 140)
       && isValidImageRef(data.image, 1, 480000)
+      && (!('galleryImages' in data) || isValidStringList(data.galleryImages, 12))
       && isStringBounds(data.schedule, 0, 140)
       && isStringBounds(data.description, 0, 500)
       && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 1000

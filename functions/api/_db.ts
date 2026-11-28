@@ -195,7 +195,7 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_worship_times_sort ON worship_times(sort_order)`,
   `CREATE TABLE IF NOT EXISTS liturgy_steps (id TEXT PRIMARY KEY, liturgy_type TEXT NOT NULL, time TEXT NOT NULL, step TEXT NOT NULL, scripture_or_hymn TEXT NOT NULL DEFAULT '', leader TEXT NOT NULL, note TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_liturgy_steps_sort ON liturgy_steps(sort_order)`,
-  `CREATE TABLE IF NOT EXISTS ministry_roster (id TEXT PRIMARY KEY, category TEXT NOT NULL, title TEXT NOT NULL, image TEXT NOT NULL, schedule TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ministry_roster (id TEXT PRIMARY KEY, category TEXT NOT NULL, title TEXT NOT NULL, image TEXT NOT NULL, gallery_json TEXT NOT NULL DEFAULT '[]', schedule TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_ministry_roster_sort ON ministry_roster(sort_order)`,
   `CREATE TABLE IF NOT EXISTS weekday_ministries (id TEXT PRIMARY KEY, day TEXT NOT NULL, time TEXT NOT NULL, title TEXT NOT NULL, location TEXT NOT NULL DEFAULT '', leader TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_weekday_ministries_sort ON weekday_ministries(sort_order)`,
@@ -222,6 +222,15 @@ export async function ensureSchema(db: SqlDb, cacheKey?: object): Promise<void> 
   if (!schemaInitInFlight) {
     schemaInitInFlight = (async () => {
       await db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)));
+      const cols = await db
+        .prepare('PRAGMA table_info(ministry_roster)')
+        .all<{ name: string }>();
+      const hasGalleryJson = cols.results.some((col) => col.name === 'gallery_json');
+      if (!hasGalleryJson) {
+        await db
+          .prepare("ALTER TABLE ministry_roster ADD COLUMN gallery_json TEXT NOT NULL DEFAULT '[]'")
+          .run();
+      }
       if (cacheKey) {
         initializedDbs.add(cacheKey);
       }

@@ -1,10 +1,22 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Pencil, Plus, X } from 'lucide-react';
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Images,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import {
   useChurchAdminActions,
   usePublicChurchData,
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
+import { optimizeUploadedImage } from '../../utils/imageOptimizer';
+import { SafeImage } from '../SafeImage';
 import {
   MINISTRY_CATEGORY_LABELS,
   MINISTRY_CATEGORY_OPTIONS,
@@ -322,29 +334,151 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
     );
   }
 
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const [galleryBusy, setGalleryBusy] = useState(false);
+  const [galleryProgressText, setGalleryProgressText] = useState('');
+  const [galleryError, setGalleryError] = useState('');
+
+  const closeRosterModal = () => {
+    setEditingRoster(null);
+    setGalleryError('');
+    setGalleryProgressText('');
+  };
+
+  const handleGalleryFilesSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0 || !editingRoster) return;
+
+    setGalleryError('');
+    const maxExtra = FIELD_LIMITS.ministryRoster.galleryMaxCount;
+    const currentGallery = editingRoster.galleryImages ?? [];
+    const availableSlots =
+      (editingRoster.image ? 0 : 1) + Math.max(0, maxExtra - currentGallery.length);
+
+    if (availableSlots <= 0) {
+      setGalleryError(`每场活动相册最多支持 1 张封面照 + ${maxExtra} 张附图。`);
+      return;
+    }
+
+    const filesToProcess = files.slice(0, availableSlots);
+    const skippedForCap = files.length - filesToProcess.length;
+
+    setGalleryBusy(true);
+    let nextCover = editingRoster.image;
+    const nextGallery = [...currentGallery];
+    let failedCount = 0;
+
+    try {
+      for (let idx = 0; idx < filesToProcess.length; idx += 1) {
+        setGalleryProgressText(`正在压缩优化第 ${idx + 1} / ${filesToProcess.length} 张照片…`);
+        try {
+          const result = await optimizeUploadedImage(filesToProcess[idx], 'poster');
+          if (!nextCover) {
+            nextCover = result.dataUrl;
+          } else if (
+            nextGallery.length < maxExtra &&
+            result.dataUrl !== nextCover &&
+            !nextGallery.includes(result.dataUrl)
+          ) {
+            nextGallery.push(result.dataUrl);
+          }
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      setEditingRoster((prev) =>
+        prev
+          ? {
+              ...prev,
+              image: nextCover,
+              galleryImages: nextGallery,
+            }
+          : prev
+      );
+
+      const warnings: string[] = [];
+      if (skippedForCap > 0) {
+        warnings.push(`已达到单场上限（1 封面 + ${maxExtra} 附图），其余 ${skippedForCap} 张未加入。`);
+      }
+      if (failedCount > 0) {
+        warnings.push(`有 ${failedCount} 张文件格式不受支持或压缩失败，已跳过。`);
+      }
+      if (warnings.length > 0) {
+        setGalleryError(warnings.join(' '));
+      }
+    } finally {
+      setGalleryBusy(false);
+      setGalleryProgressText('');
+    }
+  };
+
+  const promoteGalleryPhotoToCover = (index: number) => {
+    if (!editingRoster) return;
+    const gallery = [...(editingRoster.galleryImages ?? [])];
+    const chosen = gallery[index];
+    if (!chosen) return;
+    const oldCover = editingRoster.image;
+    gallery.splice(index, 1);
+    if (oldCover && oldCover !== chosen && !gallery.includes(oldCover)) {
+      gallery.unshift(oldCover);
+    }
+    setEditingRoster({
+      ...editingRoster,
+      image: chosen,
+      galleryImages: gallery.slice(0, FIELD_LIMITS.ministryRoster.galleryMaxCount),
+    });
+  };
+
+  const moveGalleryPhoto = (index: number, delta: -1 | 1) => {
+    if (!editingRoster) return;
+    const gallery = [...(editingRoster.galleryImages ?? [])];
+    const target = index + delta;
+    if (target < 0 || target >= gallery.length) return;
+    [gallery[index], gallery[target]] = [gallery[target], gallery[index]];
+    setEditingRoster({
+      ...editingRoster,
+      galleryImages: gallery,
+    });
+  };
+
+  const removeGalleryPhoto = (index: number) => {
+    if (!editingRoster) return;
+    const gallery = [...(editingRoster.galleryImages ?? [])];
+    gallery.splice(index, 1);
+    setEditingRoster({
+      ...editingRoster,
+      galleryImages: gallery,
+    });
+  };
+
   return (
     <div className="space-y-8">
       <AdminPanelHeader
-        title="精彩瞬间展示与照片管理"
-        description="管理教会小组、诗班、团契及主日学等活动精彩瞬间照片、标题、时间与文字说明。"
+        title="活动专题相册与精彩瞬间管理"
+        description="按专题活动管理教会聚会、诗班、团契与主日学照片。每场活动支持 1 张主封面照与最多 12 张相册附图，首页将呈现杂志风错落封面与灯箱翻页浏览。"
         action={
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              setGalleryError('');
+              setGalleryProgressText('');
               setEditingRoster({
                 id: '',
                 category: filterCat === 'all' ? 'choir' : filterCat,
                 title: '',
                 image: '',
+                galleryImages: [],
                 schedule: '每周主日',
                 description: '',
                 sortOrder: ministryRoster.length + 1,
-              })
-            }
+              });
+            }}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] rounded-md cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            新增精彩瞬间照片
+            新增活动专题相册
           </button>
         }
       />
@@ -354,7 +488,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       {/* Category Tabs */}
       <div className="flex flex-wrap gap-1.5">
         {(
-          [{ id: 'all', label: '全部精彩瞬间' }, ...MINISTRY_CATEGORY_OPTIONS] as {
+          [{ id: 'all', label: '全部专题相册' }, ...MINISTRY_CATEGORY_OPTIONS] as {
             id: 'all' | MinistryRosterCategory;
             label: string;
           }[]
@@ -378,64 +512,79 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
       <div className="bg-white border border-[#E5DFD3] rounded-lg divide-y divide-[#EFEAE0]">
         {visibleMoments.length === 0 ? (
           <div className="px-6 py-8 text-center text-xs text-[#78716C]">
-            当前分类暂无精彩瞬间照片，点击右上角“新增精彩瞬间照片”添加。
+            当前分类暂无活动专题相册，点击右上角“新增活动专题相册”添加。
           </div>
         ) : (
-          visibleMoments.map((item) => (
-            <div
-              key={item.id}
-              className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-4 flex-1">
-                <div className="w-20 h-14 rounded-md overflow-hidden bg-[#EFEAE0] shrink-0 border border-[#D6CFC2]">
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
-                    <span className="font-mono tabular-nums">#{item.sortOrder}</span>
-                    <span className="px-2 py-0.5 bg-[#F3EFE6] text-[#1E3A5F] rounded font-medium">
-                      {MINISTRY_CATEGORY_LABELS[item.category] ?? '精彩瞬间'}
-                    </span>
-                    {item.schedule && (
-                      <span className="font-mono text-[11px] text-[#57534E]">{item.schedule}</span>
+          visibleMoments.map((item) => {
+            const totalPhotos = (item.image ? 1 : 0) + (item.galleryImages?.length ?? 0);
+            return (
+              <div
+                key={item.id}
+                className="px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="w-24 h-16 rounded-md overflow-hidden bg-[#EFEAE0] shrink-0 border border-[#D6CFC2]">
+                    <SafeImage
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover object-top"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#78716C]">
+                      <span className="font-mono tabular-nums">#{item.sortOrder}</span>
+                      <span className="font-medium text-[#1E3A5F]">
+                        {MINISTRY_CATEGORY_LABELS[item.category] ?? '精彩瞬间'}
+                      </span>
+                      {item.schedule && (
+                        <span className="font-mono text-[11px] text-[#57534E]">
+                          · {item.schedule}
+                        </span>
+                      )}
+                      <span className="font-mono text-[11px] text-[#78716C] tabular-nums">
+                        · 共 {totalPhotos} 张照片
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-[#1C1917]">{item.title}</h3>
+                    {item.description && (
+                      <p className="text-xs text-[#57534E] line-clamp-2">{item.description}</p>
                     )}
                   </div>
-                  <h3 className="text-sm font-semibold text-[#1C1917]">{item.title}</h3>
-                  {item.description && (
-                    <p className="text-xs text-[#57534E] line-clamp-2">{item.description}</p>
-                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGalleryError('');
+                      setGalleryProgressText('');
+                      setEditingRoster({
+                        ...item,
+                        galleryImages: item.galleryImages ?? [],
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    编辑相册
+                  </button>
+                  <ConfirmDeleteButton
+                    onConfirm={async () => {
+                      setStatus(null);
+                      try {
+                        await deleteMinistryRoster(item.id);
+                        setStatus({ type: 'success', message: `已删除相册「${item.title}」。` });
+                      } catch (err) {
+                        setStatus({
+                          type: 'error',
+                          message: getFriendlyAdminError(err, '删除相册失败，请重试。'),
+                        });
+                      }
+                    }}
+                  />
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEditingRoster(item)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  编辑
-                </button>
-                <ConfirmDeleteButton
-                  onConfirm={async () => {
-                    setStatus(null);
-                    try {
-                      await deleteMinistryRoster(item.id);
-                      setStatus({ type: 'success', message: `已删除「${item.title}」。` });
-                    } catch (err) {
-                      setStatus({
-                        type: 'error',
-                        message: getFriendlyAdminError(err, '删除照片失败，请重试。'),
-                      });
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -443,10 +592,10 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
         <ModalDialog
           disableDismiss
           labelledBy="moment-modal-title"
-          maxWidthClass="max-w-lg"
+          maxWidthClass="max-w-2xl"
           overlayClassName="bg-[#141210]/55"
-          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl"
-          onClose={() => setEditingRoster(null)}
+          containerClassName="bg-[#FAF8F4] border border-[#E5DFD3] rounded-lg shadow-xl max-h-[90vh] overflow-y-auto"
+          onClose={closeRosterModal}
         >
           <form onSubmit={handleSaveRoster} className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5DFD3]">
@@ -454,11 +603,11 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 id="moment-modal-title"
                 className="font-editorial text-xl font-semibold text-[#1C1917]"
               >
-                {editingRoster.id ? '编辑精彩瞬间照片' : '新增精彩瞬间照片'}
+                {editingRoster.id ? '编辑活动专题相册' : '新增活动专题相册'}
               </h3>
               <button
                 type="button"
-                onClick={() => setEditingRoster(null)}
+                onClick={closeRosterModal}
                 aria-label="关闭弹窗"
                 className="p-1.5 text-[#57534E] cursor-pointer"
               >
@@ -502,19 +651,19 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
               </FieldLabel>
             </div>
 
-            <FieldLabel label="照片标题 *">
+            <FieldLabel label="活动专题标题 *">
               <input
                 type="text"
                 required
                 maxLength={FIELD_LIMITS.ministryRoster.title}
                 value={editingRoster.title}
                 onChange={(e) => setEditingRoster({ ...editingRoster, title: e.target.value })}
-                placeholder="例如：诗班献诗与声部排练"
+                placeholder="例如：2026 春季洗礼与圣餐主日"
                 className={inputClass}
               />
             </FieldLabel>
 
-            <FieldLabel label="时间 / 地点标签（可选）" hint="例如：每周主日 13:15 圣殿">
+            <FieldLabel label="活动时间 / 地点标签（可选）" hint="例如：2026年4月 · 主日圣殿">
               <input
                 type="text"
                 maxLength={FIELD_LIMITS.ministryRoster.schedule}
@@ -526,14 +675,130 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
             </FieldLabel>
 
             <ImageFieldControl
-              label="活动照片"
+              label="活动主封面照"
               value={editingRoster.image}
-              onChange={(nextImg) => setEditingRoster({ ...editingRoster, image: nextImg })}
+              onChange={(nextImg) =>
+                setEditingRoster({
+                  ...editingRoster,
+                  image: nextImg,
+                  galleryImages: (editingRoster.galleryImages ?? []).filter((g) => g !== nextImg),
+                })
+              }
               previewAspect="landscape"
               preset="poster"
               required
-              hint="自动缩放至 1200px 并压缩为轻量 WebP，或输入外链网址"
+              hint="作为首页杂志封面主图；支持自动压缩为轻量 WebP"
             />
+
+            {/* Multi-photo Gallery Uploader */}
+            <div className="space-y-3 bg-[#FAF8F4] border border-[#E5DFD3] rounded-md p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-medium text-[#292524] inline-flex items-center gap-1.5">
+                    <Images className="w-3.5 h-3.5 text-[#1E3A5F]" />
+                    活动相册附图（可一次多选上传，最多 {FIELD_LIMITS.ministryRoster.galleryMaxCount} 张）
+                  </span>
+                  <p className="text-[11px] text-[#78716C] mt-0.5">
+                    已添加 {editingRoster.galleryImages?.length ?? 0} / {FIELD_LIMITS.ministryRoster.galleryMaxCount} 张附图；所有照片会在保存时自动存入 D1 媒体库。
+                  </p>
+                </div>
+                <div>
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleGalleryFilesSelected}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={
+                      galleryBusy ||
+                      (editingRoster.galleryImages?.length ?? 0) >=
+                        FIELD_LIMITS.ministryRoster.galleryMaxCount
+                    }
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-50 rounded cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {galleryBusy ? '处理中…' : '批量选择多张照片'}
+                  </button>
+                </div>
+              </div>
+
+              {galleryProgressText && (
+                <p className="text-[11px] text-[#1E3A5F] font-medium">{galleryProgressText}</p>
+              )}
+
+              {galleryError && (
+                <p className="text-[11px] text-[#9A3412] bg-[#FEF2F2] border border-[#FECACA] rounded px-2.5 py-1.5">
+                  {galleryError}
+                </p>
+              )}
+
+              {(editingRoster.galleryImages?.length ?? 0) > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
+                  {(editingRoster.galleryImages ?? []).map((imgUrl, idx) => (
+                    <div
+                      key={`${idx}-${imgUrl.slice(0, 24)}`}
+                      className="bg-white border border-[#DFD8C8] rounded overflow-hidden flex flex-col"
+                    >
+                      <div className="relative aspect-[4/3] bg-[#EFEAE0]">
+                        <SafeImage
+                          src={imgUrl}
+                          alt={`相册附图 ${idx + 1}`}
+                          fitMode="cover"
+                          className="w-full h-full object-top"
+                        />
+                        <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-mono bg-black/60 text-white rounded">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                      <div className="px-1.5 py-1 flex items-center justify-between gap-1 border-t border-[#EFEAE0] bg-[#FAF8F4]">
+                        <button
+                          type="button"
+                          onClick={() => promoteGalleryPhotoToCover(idx)}
+                          title="设为封面"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-1 text-[10px] font-medium text-[#1E3A5F] hover:bg-[#EFEAE0] rounded cursor-pointer"
+                        >
+                          <Star className="w-3 h-3" />
+                          封面
+                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveGalleryPhoto(idx, -1)}
+                            aria-label="前移照片"
+                            className="p-1 text-[#57534E] hover:bg-[#EFEAE0] disabled:opacity-30 rounded cursor-pointer"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === (editingRoster.galleryImages?.length ?? 0) - 1}
+                            onClick={() => moveGalleryPhoto(idx, 1)}
+                            aria-label="后移照片"
+                            className="p-1 text-[#57534E] hover:bg-[#EFEAE0] disabled:opacity-30 rounded cursor-pointer"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryPhoto(idx)}
+                            aria-label="删除附图"
+                            className="p-1 text-[#9A3412] hover:bg-[#FEE2E2] rounded cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <FieldLabel label="活动说明 / 见证文字（可选）">
               <textarea
@@ -541,7 +806,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 maxLength={FIELD_LIMITS.ministryRoster.description}
                 value={editingRoster.description}
                 onChange={(e) => setEditingRoster({ ...editingRoster, description: e.target.value })}
-                placeholder="记录活动背后的美好见证或说明…"
+                placeholder="记录活动背后的美好见证、聚会人数或感恩事项…"
                 className={textareaClass}
               />
             </FieldLabel>
@@ -549,17 +814,17 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
             <div className="pt-3 border-t border-[#E5DFD3] flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setEditingRoster(null)}
+                onClick={closeRosterModal}
                 className="px-4 py-2 text-xs font-medium text-[#57534E] border border-[#D6CFC2] rounded-md cursor-pointer"
               >
                 取消
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] rounded-md cursor-pointer"
+                disabled={saving || galleryBusy}
+                className="px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] rounded-md cursor-pointer disabled:opacity-60"
               >
-                {saving ? '保存中…' : '确认保存'}
+                {saving ? '保存并同步媒体…' : galleryBusy ? '照片压缩中…' : '确认保存'}
               </button>
             </div>
           </form>

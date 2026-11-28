@@ -48,6 +48,47 @@ function sanitizeImageRef(val: unknown, maxLen: number): string {
   return trimmed.slice(0, maxLen);
 }
 
+function sanitizeMinistryGallery(
+  rawGallery: unknown,
+  coverImage: string,
+  maxCount: number,
+  maxLen: number
+): string[] {
+  if (!Array.isArray(rawGallery)) return [];
+  const seen = new Set<string>(coverImage ? [coverImage] : []);
+  const out: string[] = [];
+  for (const entry of rawGallery.slice(0, maxCount * 2)) {
+    if (out.length >= maxCount) break;
+    if (typeof entry !== 'string') continue;
+    const clean = sanitizeImageRef(entry, maxLen);
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
+}
+
+function parseMinistryGalleryJson(rawJson: unknown, coverImage: string): string[] {
+  if (typeof rawJson !== 'string' || !rawJson) return [];
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>(coverImage ? [coverImage] : []);
+    const out: string[] = [];
+    for (const item of parsed) {
+      if (out.length >= FIELD_LIMITS.ministryRoster.galleryMaxCount) break;
+      if (typeof item !== 'string') continue;
+      const trimmed = item.trim();
+      if (!trimmed || !SAFE_IMAGE_SRC_REGEX.test(trimmed) || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      out.push(trimmed);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 function makeId(prefix: string): string {
   const rnd = Math.random().toString(36).slice(2, 8);
   return `${prefix}-${Date.now()}-${rnd}`;
@@ -192,13 +233,14 @@ export async function rebuildPublicSnapshot(db: SqlDb): Promise<{
       }>(),
     db
       .prepare(
-        'SELECT id, category, title, image, schedule, description, sort_order FROM ministry_roster ORDER BY sort_order ASC LIMIT 80'
+        'SELECT id, category, title, image, gallery_json, schedule, description, sort_order FROM ministry_roster ORDER BY sort_order ASC LIMIT 80'
       )
       .all<{
         id: string;
         category: string;
         title: string;
         image: string;
+        gallery_json: string;
         schedule: string;
         description: string;
         sort_order: number;
@@ -267,15 +309,19 @@ export async function rebuildPublicSnapshot(db: SqlDb): Promise<{
       note: r.note,
       sortOrder: Number(r.sort_order),
     })),
-    ministryRoster: mrRows.results.map((r) => ({
-      id: r.id,
-      category: r.category,
-      title: r.title,
-      image: r.image,
-      schedule: r.schedule,
-      description: r.description,
-      sortOrder: Number(r.sort_order),
-    })),
+    ministryRoster: mrRows.results.map((r) => {
+      const galleryImages = parseMinistryGalleryJson(r.gallery_json, r.image);
+      return {
+        id: r.id,
+        category: r.category,
+        title: r.title,
+        image: r.image,
+        ...(galleryImages.length > 0 ? { galleryImages } : {}),
+        schedule: r.schedule,
+        description: r.description,
+        sortOrder: Number(r.sort_order),
+      };
+    }),
     weekdayMinistries: wmRows.results.map((r) => ({
       id: r.id,
       day: r.day,
@@ -338,7 +384,10 @@ async function isMediaKeyStillReferenced(db: SqlDb, mediaKey: string): Promise<b
   }
   const [cw, mr, ann] = await Promise.all([
     db.prepare('SELECT id FROM coworkers WHERE image = ? LIMIT 1').bind(url).first(),
-    db.prepare('SELECT id FROM ministry_roster WHERE image = ? LIMIT 1').bind(url).first(),
+    db
+      .prepare('SELECT id FROM ministry_roster WHERE image = ? OR INSTR(gallery_json, ?) > 0 LIMIT 1')
+      .bind(url, JSON.stringify(url))
+      .first(),
     db.prepare('SELECT id FROM announcements WHERE image = ? LIMIT 1').bind(url).first(),
   ]);
   return Boolean(cw || mr || ann);
@@ -779,16 +828,24 @@ export async function handleSyncAll(
     )
       ? String(obj.category)
       : 'choir';
+    const coverImage = sanitizeImageRef(obj.image, L.image);
+    const galleryImages = sanitizeMinistryGallery(
+      obj.galleryImages,
+      coverImage,
+      L.galleryMaxCount,
+      L.image
+    );
     statements.push(
       db
         .prepare(
-          'INSERT INTO ministry_roster (id, category, title, image, schedule, description, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO ministry_roster (id, category, title, image, gallery_json, schedule, description, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )
         .bind(
           validateSafeDocId(obj.id, 'roster'),
           cat,
           clampStr(obj.title, L.title),
-          sanitizeImageRef(obj.image, L.image),
+          coverImage,
+          JSON.stringify(galleryImages),
           clampStr(obj.schedule, L.schedule),
           clampStr(obj.description, L.description),
           clampSortOrder(obj.sortOrder, idx + 1),
@@ -1002,36 +1059,56 @@ export async function handleUpsertCollectionItem(
     const L = FIELD_LIMITS.ministryRoster;
     const id = validateSafeDocId(rawItem.id, 'roster');
     const prev = await db
-      .prepare('SELECT image FROM ministry_roster WHERE id = ? LIMIT 1')
+      .prepare('SELECT image, gallery_json FROM ministry_roster WHERE id = ? LIMIT 1')
       .bind(id)
-      .first<{ image: string }>();
-    oldImage = prev?.image;
+      .first<{ image: string; gallery_json: string }>();
+    const prevGallery = parseMinistryGalleryJson(prev?.gallery_json, prev?.image ?? '');
+    const oldMediaCandidates = [prev?.image, ...prevGallery].filter(Boolean) as string[];
     const cat = ['choir', 'small-group', 'youth', 'sunday-school'].includes(
       String(rawItem.category)
     )
       ? String(rawItem.category)
       : 'choir';
     const image = sanitizeImageRef(rawItem.image, L.image);
+    const galleryImages = sanitizeMinistryGallery(
+      rawItem.galleryImages,
+      image,
+      L.galleryMaxCount,
+      L.image
+    );
     await db
       .prepare(
-        `INSERT INTO ministry_roster (id, category, title, image, schedule, description, sort_order, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO ministry_roster (id, category, title, image, gallery_json, schedule, description, sort_order, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            category = excluded.category, title = excluded.title, image = excluded.image,
-           schedule = excluded.schedule, description = excluded.description,
-           sort_order = excluded.sort_order, updated_at = excluded.updated_at`
+           gallery_json = excluded.gallery_json, schedule = excluded.schedule,
+           description = excluded.description, sort_order = excluded.sort_order, updated_at = excluded.updated_at`
       )
       .bind(
         id,
         cat,
         clampStr(rawItem.title, L.title),
         image,
+        JSON.stringify(galleryImages),
         clampStr(rawItem.schedule, L.schedule),
         clampStr(rawItem.description, L.description),
         clampSortOrder(rawItem.sortOrder, 0),
         nowIso
       )
       .run();
+
+    const rebuilt = await rebuildPublicSnapshot(db);
+    if (oldMediaCandidates.length > 0) {
+      await cleanupOrphanedMediaKeys(db, oldMediaCandidates);
+    }
+
+    return jsonResponse({
+      ok: true,
+      bundle: rebuilt?.bundle ?? null,
+      version: rebuilt?.version ?? Date.now(),
+      updatedAt: rebuilt?.updatedAt ?? nowIso,
+    });
   } else if (collectionName === 'weekday_ministries') {
     const L = FIELD_LIMITS.weekdayMinistry;
     const id = validateSafeDocId(rawItem.id, 'wm');
@@ -1142,20 +1219,31 @@ export async function handleDeleteCollectionItem(
     return jsonResponse({ ok: false, error: '缺少记录 ID。' }, 400);
   }
 
-  let oldImage: string | undefined;
-  const selectImageSql = SELECT_IMAGE_BY_COLLECTION_SQL[collectionName];
-  if (selectImageSql) {
+  const oldMediaCandidates: string[] = [];
+  if (collectionName === 'ministry_roster') {
     const row = await db
-      .prepare(selectImageSql)
+      .prepare('SELECT image, gallery_json FROM ministry_roster WHERE id = ? LIMIT 1')
       .bind(cleanId)
-      .first<{ image: string }>();
-    oldImage = row?.image;
+      .first<{ image: string; gallery_json: string }>();
+    if (row?.image) oldMediaCandidates.push(row.image);
+    if (row?.gallery_json) {
+      oldMediaCandidates.push(...parseMinistryGalleryJson(row.gallery_json, row.image));
+    }
+  } else {
+    const selectImageSql = SELECT_IMAGE_BY_COLLECTION_SQL[collectionName];
+    if (selectImageSql) {
+      const row = await db
+        .prepare(selectImageSql)
+        .bind(cleanId)
+        .first<{ image: string }>();
+      if (row?.image) oldMediaCandidates.push(row.image);
+    }
   }
 
   await db.prepare(deleteSql).bind(cleanId).run();
   const rebuilt = await rebuildPublicSnapshot(db);
-  if (oldImage) {
-    await cleanupOrphanedMediaKeys(db, [oldImage]);
+  if (oldMediaCandidates.length > 0) {
+    await cleanupOrphanedMediaKeys(db, oldMediaCandidates);
   }
 
   return jsonResponse({

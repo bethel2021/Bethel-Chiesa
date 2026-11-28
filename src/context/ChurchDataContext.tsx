@@ -777,10 +777,21 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     );
 
     const resolvedRoster = await Promise.all(
-      normalizeMinistryRoster(current.ministryRoster).map(async (mr) => ({
-        ...mr,
-        image: await persistImageToD1IfNeeded(mr.image, getBearerToken),
-      }))
+      normalizeMinistryRoster(current.ministryRoster).map(async (mr) => {
+        const resolvedCover = await persistImageToD1IfNeeded(mr.image, getBearerToken);
+        const rawGallery = mr.galleryImages ?? [];
+        const resolvedGallery = await Promise.all(
+          rawGallery.map((url) => persistImageToD1IfNeeded(url, getBearerToken))
+        );
+        const dedupedGallery = Array.from(
+          new Set(resolvedGallery.filter((u) => u && u !== resolvedCover))
+        ).slice(0, FIELD_LIMITS.ministryRoster.galleryMaxCount);
+        return {
+          ...mr,
+          image: resolvedCover,
+          ...(dedupedGallery.length > 0 ? { galleryImages: dedupedGallery } : {}),
+        };
+      })
     );
 
     const resolvedAnnouncements = await Promise.all(
@@ -1021,11 +1032,30 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       const resolvedImage = item.image
         ? await persistImageToD1IfNeeded(item.image, getBearerToken)
         : '';
+      const cleanCover = sanitizeImageRef(resolvedImage, L.image);
+      const rawGallery = Array.isArray(item.galleryImages) ? item.galleryImages : [];
+      const resolvedGallery = await Promise.all(
+        rawGallery
+          .slice(0, L.galleryMaxCount)
+          .map(async (entry) => {
+            const persisted = entry ? await persistImageToD1IfNeeded(entry, getBearerToken) : '';
+            return persisted ? sanitizeImageRef(persisted, L.image) : '';
+          })
+      );
+      const seen = new Set<string>(cleanCover ? [cleanCover] : []);
+      const cleanGallery: string[] = [];
+      for (const imgUrl of resolvedGallery) {
+        if (!imgUrl || seen.has(imgUrl)) continue;
+        seen.add(imgUrl);
+        cleanGallery.push(imgUrl);
+      }
+
       const cleaned: MinistryRosterItem = {
         id,
         category: normalizeMinistryCategory(item.category),
         title: clampStr(item.title, L.title),
-        image: sanitizeImageRef(resolvedImage, L.image),
+        image: cleanCover,
+        ...(cleanGallery.length > 0 ? { galleryImages: cleanGallery } : {}),
         schedule: clampStr(item.schedule, L.schedule),
         description: clampStr(item.description, L.description),
         sortOrder: clampSortOrder(item.sortOrder, 0),

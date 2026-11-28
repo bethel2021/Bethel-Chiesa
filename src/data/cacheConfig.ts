@@ -52,6 +52,7 @@ export const FIELD_LIMITS = {
   ministryRoster: {
     title: 140,
     image: 480_000,
+    galleryMaxCount: 12,
     schedule: 140,
     description: 500,
   },

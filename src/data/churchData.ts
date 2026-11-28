@@ -103,6 +103,7 @@ export interface MinistryRosterItem {
   category: MinistryRosterCategory;
   title: string;
   image: string;
+  galleryImages?: string[];
   schedule: string;
   description: string;
   sortOrder: number;

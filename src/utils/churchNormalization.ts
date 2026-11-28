@@ -109,15 +109,33 @@ export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCowor
   });
 }
 
+export function normalizeMinistryGallery(rawGallery: unknown, coverImage: string): string[] {
+  if (!Array.isArray(rawGallery)) return [];
+  const maxCount = FIELD_LIMITS.ministryRoster.galleryMaxCount;
+  const seen = new Set<string>(coverImage ? [coverImage] : []);
+  const out: string[] = [];
+  for (const entry of rawGallery) {
+    if (out.length >= maxCount) break;
+    if (typeof entry !== 'string') continue;
+    const safe = filterSafeImageSrc(entry, '');
+    if (!safe || seen.has(safe)) continue;
+    seen.add(safe);
+    out.push(safe);
+  }
+  return out;
+}
+
 export function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
   const L = FIELD_LIMITS.ministryRoster;
   return list.map((item, idx) => {
     const safeImg = filterSafeImageSrc(item.image, '');
+    const galleryImages = normalizeMinistryGallery(item.galleryImages, safeImg);
     return {
       id: String(item.id || `moment-${idx + 1}`),
       category: normalizeMinistryCategory(item.category),
       title: clampStr(item.title, L.title),
       image: safeImg,
+      ...(galleryImages.length > 0 ? { galleryImages } : {}),
       schedule: clampStr(item.schedule, L.schedule),
       description: clampStr(item.description, L.description),
       sortOrder: clampSortOrder(item.sortOrder, idx + 1),
