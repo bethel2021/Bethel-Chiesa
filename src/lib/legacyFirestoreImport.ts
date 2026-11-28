@@ -36,7 +36,7 @@ import {
   readCachedVisitorRequests,
   readCachedVisitorStatsBundle,
 } from './adminSessionCache';
-import { firebasePublicConfig, getCurrentAuthUid } from './firebase';
+import { firebaseApp, firebasePublicConfig, getCurrentAuthUid } from './firebase';
 import {
   blobToDataUrl,
   dataUrlToBlobFast,
@@ -96,26 +96,68 @@ function extractDocId(docName: string | undefined): string {
   return parts[parts.length - 1] || '';
 }
 
+function getErrorCodeAndMsg(err: unknown): string {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code?: unknown }).code ?? '')
+      : '';
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return `${code} ${msg}`.toLowerCase();
+}
+
 function isQuotaExceededError(err: unknown): boolean {
-  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  const combined = getErrorCodeAndMsg(err);
   return (
-    msg.includes('429') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('resource-exhausted') ||
-    msg.includes('quota')
+    combined.includes('429') ||
+    combined.includes('resource_exhausted') ||
+    combined.includes('resource-exhausted') ||
+    combined.includes('quota')
   );
 }
 
 function isPermissionDeniedError(err: unknown): boolean {
-  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  const combined = getErrorCodeAndMsg(err);
   return (
-    msg.includes('http 403') ||
-    msg.includes('http 401') ||
-    msg.includes('permission_denied') ||
-    msg.includes('permission-denied') ||
-    msg.includes('insufficient permissions') ||
-    msg.includes('unauthenticated')
+    combined.includes('http 403') ||
+    combined.includes('http 401') ||
+    combined.includes('permission_denied') ||
+    combined.includes('permission-denied') ||
+    combined.includes('insufficient permissions') ||
+    combined.includes('unauthenticated')
   );
+}
+
+function normalizeSdkValue(val: unknown): unknown {
+  if (val === null || val === undefined) return val;
+  if (
+    typeof val === 'object' &&
+    'toDate' in val &&
+    typeof (val as { toDate?: unknown }).toDate === 'function'
+  ) {
+    try {
+      return (val as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(val)) {
+    return val.map(normalizeSdkValue);
+  }
+  if (typeof val === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      out[k] = normalizeSdkValue(v);
+    }
+    return out;
+  }
+  return val;
+}
+
+async function getLegacyFirestoreInstance() {
+  const { getFirestore } = await import('firebase/firestore');
+  return firebasePublicConfig.firestoreDatabaseId
+    ? getFirestore(firebaseApp, firebasePublicConfig.firestoreDatabaseId)
+    : getFirestore(firebaseApp);
 }
 
 function firestoreRestBase(): string {
@@ -192,6 +234,50 @@ async function fetchFirestoreCollection(
   }
 
   return out;
+}
+
+async function fetchDocPreferSdk(
+  path: string,
+  token: string | null,
+  allowPublicRetry = false
+): Promise<Record<string, unknown> | null> {
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length >= 2 && segments.length % 2 === 0) {
+    try {
+      const [{ doc, getDocFromServer }, db] = await Promise.all([
+        import('firebase/firestore'),
+        getLegacyFirestoreInstance(),
+      ]);
+      const snap = await getDocFromServer(doc(db, segments[0], ...segments.slice(1)));
+      if (!snap.exists()) return null;
+      return normalizeSdkValue(snap.data()) as Record<string, unknown>;
+    } catch (sdkErr) {
+      if (isQuotaExceededError(sdkErr)) throw sdkErr;
+    }
+  }
+  return await fetchFirestoreDoc(path, token, allowPublicRetry);
+}
+
+async function fetchCollectionPreferSdk(
+  colName: string,
+  token: string | null,
+  pageSize = 300,
+  allowPublicRetry = false
+): Promise<Array<Record<string, unknown> & { id: string }>> {
+  try {
+    const [{ collection, getDocsFromServer }, db] = await Promise.all([
+      import('firebase/firestore'),
+      getLegacyFirestoreInstance(),
+    ]);
+    const snap = await getDocsFromServer(collection(db, colName));
+    return snap.docs.map((d) => ({
+      ...(normalizeSdkValue(d.data()) as Record<string, unknown>),
+      id: d.id,
+    }));
+  } catch (sdkErr) {
+    if (isQuotaExceededError(sdkErr)) throw sdkErr;
+  }
+  return await fetchFirestoreCollection(colName, token, pageSize, allowPublicRetry);
 }
 
 async function migrateImageToD1(
@@ -561,7 +647,7 @@ export async function runLegacyFirestoreMigration(
   let hitContentPermission = false;
 
   try {
-    publicBundle = await fetchFirestoreDoc('church_sections/public_bundle', token, true);
+    publicBundle = await fetchDocPreferSdk('church_sections/public_bundle', token, true);
   } catch (err) {
     if (isQuotaExceededError(err)) {
       hitContentQuota = true;
@@ -607,18 +693,18 @@ export async function runLegacyFirestoreMigration(
     }
   } else if (!hitContentQuota && !hitContentPermission) {
     try {
-      const infoDoc = await fetchFirestoreDoc('church_sections/info', token, true);
+      const infoDoc = await fetchDocPreferSdk('church_sections/info', token, true);
       if (infoDoc) {
         hasContent = true;
         churchInfo = normalizeChurchInfo(infoDoc as Partial<ChurchInfo>);
         const [cw, lp, wt, ls, mr, wm, ann] = await Promise.all([
-          fetchFirestoreCollection('coworkers', token, 300, true),
-          fetchFirestoreCollection('pastors', token, 300, true),
-          fetchFirestoreCollection('worship_times', token, 300, true),
-          fetchFirestoreCollection('liturgy_steps', token, 300, true),
-          fetchFirestoreCollection('ministry_roster', token, 300, true),
-          fetchFirestoreCollection('weekday_ministries', token, 300, true),
-          fetchFirestoreCollection('announcements', token, 300, true),
+          fetchCollectionPreferSdk('coworkers', token, 300, true),
+          fetchCollectionPreferSdk('pastors', token, 300, true),
+          fetchCollectionPreferSdk('worship_times', token, 300, true),
+          fetchCollectionPreferSdk('liturgy_steps', token, 300, true),
+          fetchCollectionPreferSdk('ministry_roster', token, 300, true),
+          fetchCollectionPreferSdk('weekday_ministries', token, 300, true),
+          fetchCollectionPreferSdk('announcements', token, 300, true),
         ]);
         if (cw.length || lp.length) {
           coworkers = mergeLegacyPastorsIntoCoworkers(
@@ -695,10 +781,10 @@ export async function runLegacyFirestoreMigration(
   };
 
   const [adminsRaw, requestsRaw, visitorCounterFetched, visitorIpsRaw] = await Promise.all([
-    tryOptional(() => fetchFirestoreCollection('admins', token), '同工权限名单'),
-    tryOptional(() => fetchFirestoreCollection('visitor_requests', token), '来访留言'),
-    tryOptional(() => fetchFirestoreDoc('site_stats/visitor_counter', token, true), '总访客计数'),
-    tryOptional(() => fetchFirestoreCollection('visitor_ips', token, 500), '访客归属地明细'),
+    tryOptional(() => fetchCollectionPreferSdk('admins', token), '同工权限名单'),
+    tryOptional(() => fetchCollectionPreferSdk('visitor_requests', token), '来访留言'),
+    tryOptional(() => fetchDocPreferSdk('site_stats/visitor_counter', token, true), '总访客计数'),
+    tryOptional(() => fetchCollectionPreferSdk('visitor_ips', token, 500), '访客归属地明细'),
   ]);
 
   const admins = adminsRaw
