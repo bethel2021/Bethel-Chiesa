@@ -32,7 +32,10 @@ service cloud.firestore {
     }
 
     function isBootstrappedAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'chinarenzhian@gmail.com';
+      return isVerifiedUser()
+        && 'email' in request.auth.token
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'chinarenzhian@gmail.com';
     }
 
     function isAdmin() {

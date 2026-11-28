@@ -325,12 +325,12 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     announcements,
   ]);
 
-  const getBearerToken = useCallback(async (): Promise<string | null> => {
+  const getBearerToken = useCallback(async (forceRefresh = false): Promise<string | null> => {
     if (userRef.current) {
-      return await userRef.current.getIdToken();
+      return await userRef.current.getIdToken(forceRefresh);
     }
     const mod = await import('../lib/firebaseAuth');
-    return await mod.getCurrentIdToken();
+    return await mod.getCurrentIdToken(forceRefresh);
   }, []);
 
   const adminFetch = useCallback(

@@ -106,20 +106,45 @@ function isQuotaExceededError(err: unknown): boolean {
   );
 }
 
+function isPermissionDeniedError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  return (
+    msg.includes('http 403') ||
+    msg.includes('http 401') ||
+    msg.includes('permission_denied') ||
+    msg.includes('permission-denied') ||
+    msg.includes('insufficient permissions') ||
+    msg.includes('unauthenticated')
+  );
+}
+
 function firestoreRestBase(): string {
   return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
     firebasePublicConfig.projectId
   )}/databases/${encodeURIComponent(firebasePublicConfig.firestoreDatabaseId)}/documents`;
 }
 
+function buildFirestoreRestUrl(pathOrCollection: string, query?: string): string {
+  const params: string[] = [];
+  if (query) params.push(query);
+  if (firebasePublicConfig.apiKey) {
+    params.push(`key=${encodeURIComponent(firebasePublicConfig.apiKey)}`);
+  }
+  const suffix = params.length > 0 ? `?${params.join('&')}` : '';
+  return `${firestoreRestBase()}/${pathOrCollection}${suffix}`;
+}
+
 async function fetchFirestoreDoc(
   path: string,
-  token: string
+  token: string | null,
+  allowPublicRetry = false
 ): Promise<Record<string, unknown> | null> {
-  const res = await fetch(`${firestoreRestBase()}/${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(buildFirestoreRestUrl(path), { headers });
   if (res.status === 404) return null;
+  if ((res.status === 401 || res.status === 403) && allowPublicRetry && token) {
+    return await fetchFirestoreDoc(path, null, false);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`读取旧版 Firestore (${path}) 失败：HTTP ${res.status} ${text.slice(0, 120)}`);
@@ -130,20 +155,22 @@ async function fetchFirestoreDoc(
 
 async function fetchFirestoreCollection(
   colName: string,
-  token: string,
-  pageSize = 300
+  token: string | null,
+  pageSize = 300,
+  allowPublicRetry = false
 ): Promise<Array<Record<string, unknown> & { id: string }>> {
   const out: Array<Record<string, unknown> & { id: string }> = [];
   let pageToken = '';
 
   for (let page = 0; page < 8; page += 1) {
-    const url = `${firestoreRestBase()}/${encodeURIComponent(
-      colName
-    )}?pageSize=${pageSize}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const query = `pageSize=${pageSize}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+    const url = buildFirestoreRestUrl(encodeURIComponent(colName), query);
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(url, { headers });
     if (res.status === 404) break;
+    if ((res.status === 401 || res.status === 403) && allowPublicRetry && token && page === 0) {
+      return await fetchFirestoreCollection(colName, null, pageSize, false);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(
@@ -169,7 +196,7 @@ async function fetchFirestoreCollection(
 
 async function migrateImageToD1(
   rawUrl: string | undefined,
-  getToken: () => Promise<string | null>,
+  getToken: (forceRefresh?: boolean) => Promise<string | null>,
   uploadedCache: Map<string, string>,
   warnings: string[]
 ): Promise<string> {
@@ -189,8 +216,8 @@ async function migrateImageToD1(
       migrated = await uploadBlobToD1Media(blob, getToken);
     }
   } catch (err) {
-    if (isQuotaExceededError(err)) {
-      warnings.push('部分旧版图片因 Firestore 额度限制暂未能拉取，已保留原链接。');
+    if (isQuotaExceededError(err) || isPermissionDeniedError(err)) {
+      warnings.push('部分旧版图片因 Firestore 额度或权限限制暂未能拉取，已保留原链接。');
       migrated = trimmed;
     } else {
       throw err;
@@ -332,7 +359,7 @@ async function uploadContentImagesAndSendToD1(params: {
   visitorRequests: unknown[];
   visitorCounter: unknown;
   visitorIps: unknown[];
-  getToken: () => Promise<string | null>;
+  getToken: (forceRefresh?: boolean) => Promise<string | null>;
   onProgress?: (step: string) => void;
   usedLocalCacheFallback?: boolean;
   warnings: string[];
@@ -442,7 +469,7 @@ async function uploadContentImagesAndSendToD1(params: {
 
 export async function importBackupJsonToD1(
   rawJsonText: string,
-  getToken: () => Promise<string | null>,
+  getToken: (forceRefresh?: boolean) => Promise<string | null>,
   onProgress?: (step: string) => void
 ): Promise<LegacyImportSummary> {
   let parsed: Record<string, unknown>;
@@ -507,10 +534,10 @@ export async function importBackupJsonToD1(
 }
 
 export async function runLegacyFirestoreMigration(
-  getToken: () => Promise<string | null>,
+  getToken: (forceRefresh?: boolean) => Promise<string | null>,
   onProgress?: (step: string) => void
 ): Promise<LegacyImportSummary> {
-  const token = await getToken();
+  const token = await getToken(true);
   if (!token) {
     throw new Error('请先使用主管理员账号登录后再导入旧数据。');
   }
@@ -531,12 +558,15 @@ export async function runLegacyFirestoreMigration(
   onProgress?.('正在读取旧版 Firestore 公开内容…');
   let publicBundle: Record<string, unknown> | null = null;
   let hitContentQuota = false;
+  let hitContentPermission = false;
 
   try {
-    publicBundle = await fetchFirestoreDoc('church_sections/public_bundle', token);
+    publicBundle = await fetchFirestoreDoc('church_sections/public_bundle', token, true);
   } catch (err) {
     if (isQuotaExceededError(err)) {
       hitContentQuota = true;
+    } else if (isPermissionDeniedError(err)) {
+      hitContentPermission = true;
     } else {
       throw err;
     }
@@ -575,20 +605,20 @@ export async function runLegacyFirestoreMigration(
         publicBundle.announcements as Partial<AnnouncementItem>[]
       );
     }
-  } else if (!hitContentQuota) {
+  } else if (!hitContentQuota && !hitContentPermission) {
     try {
-      const infoDoc = await fetchFirestoreDoc('church_sections/info', token);
+      const infoDoc = await fetchFirestoreDoc('church_sections/info', token, true);
       if (infoDoc) {
         hasContent = true;
         churchInfo = normalizeChurchInfo(infoDoc as Partial<ChurchInfo>);
         const [cw, lp, wt, ls, mr, wm, ann] = await Promise.all([
-          fetchFirestoreCollection('coworkers', token),
-          fetchFirestoreCollection('pastors', token),
-          fetchFirestoreCollection('worship_times', token),
-          fetchFirestoreCollection('liturgy_steps', token),
-          fetchFirestoreCollection('ministry_roster', token),
-          fetchFirestoreCollection('weekday_ministries', token),
-          fetchFirestoreCollection('announcements', token),
+          fetchFirestoreCollection('coworkers', token, 300, true),
+          fetchFirestoreCollection('pastors', token, 300, true),
+          fetchFirestoreCollection('worship_times', token, 300, true),
+          fetchFirestoreCollection('liturgy_steps', token, 300, true),
+          fetchFirestoreCollection('ministry_roster', token, 300, true),
+          fetchFirestoreCollection('weekday_ministries', token, 300, true),
+          fetchFirestoreCollection('announcements', token, 300, true),
         ]);
         if (cw.length || lp.length) {
           coworkers = mergeLegacyPastorsIntoCoworkers(
@@ -611,13 +641,15 @@ export async function runLegacyFirestoreMigration(
     } catch (err) {
       if (isQuotaExceededError(err)) {
         hitContentQuota = true;
+      } else if (isPermissionDeniedError(err)) {
+        hitContentPermission = true;
       } else {
         throw err;
       }
     }
   }
 
-  if (hitContentQuota && !hasContent) {
+  if ((hitContentQuota || hitContentPermission) && !hasContent) {
     const cachedBundle = readLocalBundleCache();
     if (cachedBundle?.bundle?.churchInfo) {
       hasContent = true;
@@ -629,10 +661,18 @@ export async function runLegacyFirestoreMigration(
       ministryRoster = cachedBundle.bundle.ministryRoster;
       weekdayMinistries = cachedBundle.bundle.weekdayMinistries;
       announcements = cachedBundle.bundle.announcements;
-      warnings.push('Firestore 今日额度已满，已自动改用本浏览器本地缓存的旧版页面内容进行导入。');
-    } else {
+      warnings.push(
+        hitContentPermission
+          ? '旧版 Firestore 公开内容读取被拒绝，已自动改用本浏览器本地缓存的旧版页面内容进行导入。'
+          : 'Firestore 今日额度已满，已自动改用本浏览器本地缓存的旧版页面内容进行导入。'
+      );
+    } else if (hitContentQuota) {
       throw new Error(
         '旧版 Firestore 今日免费读取额度已达上限，且当前浏览器无本地缓存。您可以：1) 先点击「同步默认模板到 D1」立即启用新库；2) 打开之前访问过网站的旧浏览器页面导出 JSON 备份后再导入；3) 待明日（约意大利时间 09:00）Firestore 额度重置后再点击导入。'
+      );
+    } else {
+      throw new Error(
+        '旧版 Firestore 读取权限不足且当前浏览器无本地缓存，无法自动拉取内容。请使用之前访问过旧站点的浏览器导出 JSON 备份后导入，或确认旧版 Firestore 安全规则允许当前账号读取。'
       );
     }
   }
@@ -643,7 +683,11 @@ export async function runLegacyFirestoreMigration(
       return await fn();
     } catch (err) {
       if (isQuotaExceededError(err)) {
-        warnings.push(`${label}因 Firestore 额度已满未拉取`);
+        warnings.push(`${label}因 Firestore 额度已满未拉取（已尝试使用缓存）`);
+        return null;
+      }
+      if (isPermissionDeniedError(err)) {
+        warnings.push(`${label}因 Firestore 权限不足（HTTP 403）未拉取，已跳过`);
         return null;
       }
       throw err;
@@ -653,7 +697,7 @@ export async function runLegacyFirestoreMigration(
   const [adminsRaw, requestsRaw, visitorCounterFetched, visitorIpsRaw] = await Promise.all([
     tryOptional(() => fetchFirestoreCollection('admins', token), '同工权限名单'),
     tryOptional(() => fetchFirestoreCollection('visitor_requests', token), '来访留言'),
-    tryOptional(() => fetchFirestoreDoc('site_stats/visitor_counter', token), '总访客计数'),
+    tryOptional(() => fetchFirestoreDoc('site_stats/visitor_counter', token, true), '总访客计数'),
     tryOptional(() => fetchFirestoreCollection('visitor_ips', token, 500), '访客归属地明细'),
   ]);
 
