@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { Link2, RotateCcw, Trash2, Upload } from 'lucide-react';
-import { isD1MediaUrl, isMediaUri } from '../../lib/mediaStorage';
+import { Link2, Trash2, Upload } from 'lucide-react';
+import { isD1MediaUrl } from '../../lib/mediaStorage';
 import {
   optimizeUploadedImage,
   type ImageOptimizationPreset,
@@ -13,7 +13,6 @@ interface ImageFieldControlProps {
   label: string;
   value: string;
   onChange: (nextValue: string) => void;
-  defaultValue?: string;
   allowClear?: boolean;
   previewAspect?: 'landscape' | 'portrait' | 'square';
   preset?: ImageOptimizationPreset;
@@ -33,7 +32,6 @@ export function ImageFieldControl({
   label,
   value,
   onChange,
-  defaultValue,
   allowClear = false,
   previewAspect = 'landscape',
   preset,
@@ -57,8 +55,7 @@ export function ImageFieldControl({
 
   const isDataUri = value.startsWith('data:image/');
   const isD1Media = isD1MediaUrl(value);
-  const isCloudMedia = isD1Media || isMediaUri(value);
-  const isUploadedBinary = isDataUri || isCloudMedia;
+  const isUploadedBinary = isDataUri || isD1Media;
   const approxBytes = isDataUri ? Math.round(value.length * 0.75) : 0;
 
   const previewFrameClass =
@@ -157,22 +154,6 @@ export function ImageFieldControl({
               </button>
             )}
 
-            {defaultValue && value !== defaultValue && (
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg('');
-                  setForceUrlMode(false);
-                  setUploadMeta(null);
-                  onChange(defaultValue);
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#57534E] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] rounded cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                恢复默认
-              </button>
-            )}
-
             {allowClear && value && (
               <button
                 type="button"
@@ -192,10 +173,8 @@ export function ImageFieldControl({
 
           {isUploadedBinary && !forceUrlMode ? (
             <p className="text-xs text-[#14532D] bg-[#EEF5F0] border border-[#B7D4C0] rounded px-3 py-1.5 tabular-nums">
-              {isCloudMedia
-                ? isD1Media
-                  ? '已保存至 Cloudflare D1 数据库存储，并开启浏览器与边缘强缓存加速加载。'
-                  : '已保存云端优化图片，主页与后台均可快速清晰加载。'
+              {isD1Media
+                ? '已保存至 Cloudflare D1 数据库存储，并开启浏览器与边缘强缓存加速加载。'
                 : uploadMeta
                 ? uploadMeta.wasResized || uploadMeta.wasCompressed
                   ? `已自动优化：${
@@ -223,7 +202,7 @@ export function ImageFieldControl({
                 setUploadMeta(null);
                 onChange(e.target.value);
               }}
-              placeholder="支持填写 https://... 外链图片或 /src/assets/images/... 本地路径"
+              placeholder="支持填写 https://... 外链图片或 /api/media/... 站内图片路径"
               className={inputClass}
             />
           )}

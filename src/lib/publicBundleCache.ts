@@ -58,3 +58,11 @@ export function writeLocalBundleCache(bundle: PublicBundleData, hasCloudBundle: 
   }
   return now;
 }
+
+export function clearLocalBundleCache(): void {
+  try {
+    window.localStorage.removeItem(PUBLIC_CACHE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}

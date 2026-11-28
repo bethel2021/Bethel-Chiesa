@@ -2,17 +2,11 @@ import type { PublicBundleData } from './publicBundleCache';
 
 export type EarlyBundleResult =
   | { status: 'ok'; bundle: PublicBundleData }
-  | { status: 'not-found' | 'quota-exceeded' | 'error' };
-
-export interface EarlyHeroMediaEntry {
-  uri: string;
-  promise: Promise<string[] | null>;
-}
+  | { status: 'not-found' | 'error' };
 
 export interface BethelPrefetchBridge {
   bundlePromise?: Promise<EarlyBundleResult>;
   resolvedResult?: EarlyBundleResult;
-  heroMedia?: EarlyHeroMediaEntry;
 }
 
 declare global {
@@ -34,19 +28,6 @@ export async function awaitEarlyPrefetchedBundle(): Promise<EarlyBundleResult | 
   if (!bridge.bundlePromise) return null;
   try {
     return await bridge.bundlePromise;
-  } catch {
-    return null;
-  }
-}
-
-export async function consumeEarlyHeroMediaChunks(mediaUri: string): Promise<string[] | null> {
-  if (typeof window === 'undefined') return null;
-  const entry = window.__BETHEL_PREFETCH__?.heroMedia;
-  if (!entry || entry.uri !== mediaUri.trim()) {
-    return null;
-  }
-  try {
-    return await entry.promise;
   } catch {
     return null;
   }

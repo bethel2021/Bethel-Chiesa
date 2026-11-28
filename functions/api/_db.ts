@@ -102,32 +102,39 @@ function base64ToUint8Array(base64: string): Uint8Array {
 export function createD1MediaStore(db: SqlDb): MediaStore {
   return {
     async get(key: string) {
-      const meta = await db
-        .prepare('SELECT content_type, byte_size, chunk_count FROM media_files WHERE key = ? LIMIT 1')
+      const joined = await db
+        .prepare(
+          `SELECT f.content_type, c.chunk_index, c.data_b64
+           FROM media_files f
+           INNER JOIN media_chunks c ON c.media_key = f.key
+           WHERE f.key = ?
+           ORDER BY c.chunk_index ASC`
+        )
         .bind(key)
-        .first<{ content_type: string; byte_size: number; chunk_count: number }>();
+        .all<{ content_type: string; chunk_index: number; data_b64: string }>();
 
-      if (!meta) return null;
+      const rows = joined.results;
+      if (!rows.length) return null;
 
-      const chunkRes = await db
-        .prepare('SELECT chunk_index, data_b64 FROM media_chunks WHERE media_key = ? ORDER BY chunk_index ASC')
-        .bind(key)
-        .all<{ chunk_index: number; data_b64: string }>();
-
-      if (!chunkRes.results.length) return null;
-
-      const decodedChunks = chunkRes.results.map((row) => base64ToUint8Array(row.data_b64));
-      const totalLength = decodedChunks.reduce((sum, arr) => sum + arr.byteLength, 0);
-      const merged = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const chunk of decodedChunks) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
+      const contentType = rows[0].content_type || 'application/octet-stream';
+      const bytes =
+        rows.length === 1
+          ? base64ToUint8Array(rows[0].data_b64)
+          : (() => {
+              const decodedChunks = rows.map((row) => base64ToUint8Array(row.data_b64));
+              const totalLength = decodedChunks.reduce((sum, arr) => sum + arr.byteLength, 0);
+              const out = new Uint8Array(totalLength);
+              let offset = 0;
+              for (const chunk of decodedChunks) {
+                out.set(chunk, offset);
+                offset += chunk.byteLength;
+              }
+              return out;
+            })();
 
       return {
-        bytes: merged,
-        contentType: meta.content_type || 'application/octet-stream',
+        bytes,
+        contentType,
         etag: `"media-${key}"`,
       };
     },

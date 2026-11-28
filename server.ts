@@ -14,7 +14,6 @@ import {
   handleGetMedia,
   handleGetPublicBundle,
   handleGetVisitorStats,
-  handleImportLegacyData,
   handleListAdmins,
   handleSaveChurchInfo,
   handleSyncAll,
@@ -460,20 +459,6 @@ async function startServer(): Promise<void> {
     const access = await authorizeExpressAdmin(req, res, { requireVisitorStats: true });
     if (!access) return;
     await sendWebResponse(res, await handleGetVisitorStats(db));
-  });
-
-  app.post('/api/admin/import-legacy', jsonBodyParser, async (req: Request, res: Response) => {
-    const access = await authorizeExpressAdmin(req, res, {
-      checkOrigin: true,
-      requireMainAdmin: true,
-    });
-    if (!access) return;
-    const body = req.body as Record<string, unknown> | undefined;
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      res.status(400).json({ ok: false, error: '请求格式无效。' });
-      return;
-    }
-    await sendWebResponse(res, await handleImportLegacyData(db, body));
   });
 
   // Email notification endpoints

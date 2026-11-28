@@ -32,9 +32,11 @@ export function Footer() {
             <p className="font-editorial text-xl font-semibold text-[var(--theme-ink)] mb-2">
               {churchInfo.name}
             </p>
-            <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed max-w-sm">
-              {churchInfo.scriptureQuote} —— {churchInfo.scriptureRef}
-            </p>
+            {(churchInfo.scriptureQuote || churchInfo.scriptureRef) && (
+              <p className="text-xs text-[var(--theme-ink-muted)] leading-relaxed max-w-sm">
+                {[churchInfo.scriptureQuote, churchInfo.scriptureRef].filter(Boolean).join(' —— ')}
+              </p>
+            )}
           </div>
 
           <div className="md:col-span-3 space-y-2 text-xs text-[var(--theme-ink-muted)]">

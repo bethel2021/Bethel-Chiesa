@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Church } from 'lucide-react';
-import {
-  DATA_IMAGE_URI_REGEX,
-  getCachedMediaObjectUrl,
-  isMediaUri,
-  resolveMediaUri,
-} from '../lib/mediaStorage';
+import { DATA_IMAGE_URI_REGEX } from '../lib/mediaStorage';
 import { SAFE_HTTP_OR_ROOT_RELATIVE_REGEX } from '../utils/urlSafety';
 
 interface SafeImageProps {
@@ -34,95 +29,16 @@ export function SafeImage({
   fitMode,
 }: SafeImageProps) {
   const trimmed = defer ? '' : String(src ?? '').trim();
-  const mediaRef = isMediaUri(trimmed) ? trimmed : '';
-  const directSrc = !mediaRef && isSafeDirectImageSrc(trimmed) ? trimmed : '';
+  const effectiveSrc = isSafeDirectImageSrc(trimmed) ? trimmed : '';
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [inView, setInView] = useState(priority);
-  const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string>(() =>
-    mediaRef ? getCachedMediaObjectUrl(mediaRef) || '' : ''
-  );
   const [hasError, setHasError] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
-
-  useEffect(() => {
-    if (priority || inView) return;
-    const el = containerRef.current;
-    if (!el || typeof IntersectionObserver === 'undefined') {
-      setInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '450px 0px' }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [priority, inView, defer]);
-
-  useEffect(() => {
-    setHasError(false);
-    setIsPortrait(false);
-
-    if (!mediaRef) {
-      setResolvedMediaUrl('');
-      return;
-    }
-
-    const cached = getCachedMediaObjectUrl(mediaRef);
-    if (cached) {
-      setResolvedMediaUrl(cached);
-      return;
-    }
-
-    if (!priority && !inView) {
-      return;
-    }
-
-    let cancelled = false;
-    setResolvedMediaUrl('');
-
-    resolveMediaUri(mediaRef)
-      .then((objectUrl) => {
-        if (!cancelled) {
-          setResolvedMediaUrl(objectUrl);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHasError(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mediaRef, directSrc, priority, inView]);
 
   if (defer) {
     return (
       <div
-        ref={containerRef}
         aria-label={alt}
         className={`bg-[var(--theme-ink)]/10 ${className}`}
-      />
-    );
-  }
-
-  const effectiveSrc = mediaRef ? resolvedMediaUrl : directSrc;
-
-  if (mediaRef && !effectiveSrc && !hasError) {
-    return (
-      <div
-        ref={containerRef}
-        aria-label={alt}
-        className={`bg-[var(--theme-ink)]/15 animate-pulse ${className}`}
       />
     );
   }

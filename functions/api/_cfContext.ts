@@ -18,10 +18,33 @@ export interface CloudflarePagesEnv {
   VITE_FIREBASE_API_KEY?: string;
 }
 
+export interface WorkersEdgeCache {
+  match(request: Request | string): Promise<Response | undefined>;
+  put(request: Request | string, response: Response): Promise<void>;
+}
+
+export function getWorkersDefaultCache(): WorkersEdgeCache | null {
+  try {
+    const g = globalThis as unknown as { caches?: { default?: WorkersEdgeCache } };
+    const edgeCache = g?.caches?.default;
+    if (
+      edgeCache &&
+      typeof edgeCache.match === 'function' &&
+      typeof edgeCache.put === 'function'
+    ) {
+      return edgeCache;
+    }
+  } catch {
+    // Unavailable outside Cloudflare Workers/Pages runtime
+  }
+  return null;
+}
+
 export interface PagesContext<P = Record<string, string | string[]>> {
   request: Request & { cf?: { country?: string; region?: string } };
   env?: CloudflarePagesEnv;
   params?: P;
+  waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 export async function getCloudflareDb(env?: CloudflarePagesEnv): Promise<

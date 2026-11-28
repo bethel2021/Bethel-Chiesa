@@ -1,5 +1,4 @@
 import { usePublicChurchData } from '../context/ChurchDataContext';
-import { CHURCH_IMAGES } from '../data/churchData';
 import { SafeImage } from './SafeImage';
 
 export function PastorsSection() {
@@ -29,7 +28,7 @@ export function PastorsSection() {
             <div className="lg:col-span-7 flex flex-col space-y-4">
               <div className="w-full aspect-[16/10] rounded-md overflow-hidden bg-[var(--theme-surface-alt)] shadow-sm">
                 <SafeImage
-                  src={churchInfo.churchTeamImage || CHURCH_IMAGES.churchTeam}
+                  src={churchInfo.churchTeamImage}
                   alt="教会同工团队合影"
                   fallbackLabel="教会同工团队合影"
                   defer={cloudLoading}

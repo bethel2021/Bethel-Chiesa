@@ -11,15 +11,8 @@ import {
 import type { User } from 'firebase/auth';
 import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
-  ANNOUNCEMENTS,
-  CHURCH_INFO,
-  LITURGY_COMMUNION,
-  LITURGY_STANDARD,
+  EMPTY_CHURCH_INFO,
   normalizeMinistryCategory,
-  PULPIT_COWORKERS,
-  SUNDAY_MINISTRY_ROSTER,
-  SUNDAY_WORSHIP_TIMES,
-  WEEKDAY_MINISTRIES,
   type AdminUserItem,
   type AnnouncementItem,
   type ChurchInfo,
@@ -52,6 +45,7 @@ import {
 import { getCurrentAuthUid } from '../lib/firebase';
 import { persistImageToD1IfNeeded, preloadImageRef } from '../lib/mediaStorage';
 import {
+  clearLocalBundleCache,
   isCacheFresh,
   readLocalBundleCache,
   writeLocalBundleCache,
@@ -63,7 +57,6 @@ import {
   clampStr,
   cleanWeekdayMinistry,
   makeDocId,
-  mergeLegacyPastorsIntoCoworkers,
   normalizeAnnouncementCategory,
   normalizeAnnouncements,
   normalizeChurchInfo,
@@ -73,11 +66,10 @@ import {
   removeById,
   sanitizeImageRef,
   upsertSorted,
-  type LegacyPastorLike,
 } from '../utils/churchNormalization';
 
 export type { PublicBundleData };
-export type DataSourceMode = 'local-cache' | 'cloud-bundle' | 'admin-live' | 'default';
+export type DataSourceMode = 'local-cache' | 'cloud-bundle' | 'admin-live' | 'empty';
 
 export interface PublicChurchDataValue {
   churchInfo: ChurchInfo;
@@ -127,24 +119,11 @@ export interface ChurchAdminActionsValue {
   syncModifiedContentToCloud: () => Promise<void>;
   publishPublicBundle: () => Promise<void>;
   refreshAdminData: () => Promise<void>;
-  importFromLegacyFirestore: (onProgress?: (step: string) => void) => Promise<{
-    migratedImages: number;
-    importedAdmins: number;
-    importedRequests: number;
-    importedIps: number;
-    usedLocalCacheFallback?: boolean;
-    warnings: string[];
-  }>;
-  exportChurchBackupJson: () => Promise<string>;
-  importChurchBackupJson: (
-    rawJsonText: string,
-    onProgress?: (step: string) => void
-  ) => Promise<{
-    migratedImages: number;
-    importedAdmins: number;
-    importedRequests: number;
-    importedIps: number;
-    usedLocalCacheFallback?: boolean;
+  backupToFirestore: (onProgress?: (step: string) => void) => Promise<{
+    backedUpImages: number;
+    backedUpDocs: number;
+    backedUpAdmins: number;
+    backedUpRequests: number;
     warnings: string[];
   }>;
   saveSiteTheme: (theme: SiteThemeId) => Promise<void>;
@@ -195,11 +174,12 @@ function resolveInitialAdminRoute(): boolean {
 
 export function ChurchDataProvider({ children }: { children: ReactNode }) {
   const rawCache = typeof window !== 'undefined' ? readLocalBundleCache() : null;
-  const freshCache = isCacheFresh(rawCache) ? rawCache : null;
+  const cloudRawCache = rawCache?.hasCloudBundle ? rawCache : null;
+  const freshCache = isCacheFresh(cloudRawCache) ? cloudRawCache : null;
   const earlySnapshot =
     !freshCache && typeof window !== 'undefined' ? getEarlyPrefetchedBundleSnapshot() : null;
   const initialEarlyBundle = earlySnapshot?.status === 'ok' ? earlySnapshot.bundle : null;
-  const initialBundle = freshCache?.bundle ?? initialEarlyBundle ?? rawCache?.bundle ?? null;
+  const initialBundle = freshCache?.bundle ?? initialEarlyBundle ?? cloudRawCache?.bundle ?? null;
 
   const [adminSessionRequested, setAdminSessionRequested] = useState<boolean>(
     resolveInitialAdminRoute
@@ -219,14 +199,14 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     Boolean(freshCache?.hasCloudBundle || initialEarlyBundle)
   );
   const [dataSource, setDataSource] = useState<DataSourceMode>(
-    freshCache ? 'local-cache' : initialEarlyBundle ? 'cloud-bundle' : 'default'
+    freshCache ? 'local-cache' : initialEarlyBundle ? 'cloud-bundle' : 'empty'
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(
     freshCache ? freshCache.cachedAt : null
   );
 
   const [churchInfo, setChurchInfo] = useState<ChurchInfo>(
-    initialBundle?.churchInfo ? normalizeChurchInfo(initialBundle.churchInfo) : CHURCH_INFO
+    initialBundle?.churchInfo ? normalizeChurchInfo(initialBundle.churchInfo) : EMPTY_CHURCH_INFO
   );
   const initialCachedHeroRef = useRef(initialBundle?.churchInfo?.heroImage);
   const earlyPrefetchBundleRef = useRef<PublicBundleData | null>(initialEarlyBundle);
@@ -256,34 +236,25 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const initialLegacyPastors = (initialBundle as { pastors?: LegacyPastorLike[] } | null)?.pastors;
   const [coworkers, setCoworkers] = useState<PulpitCoworker[]>(
-    initialBundle?.coworkers?.length || initialLegacyPastors?.length
-      ? mergeLegacyPastorsIntoCoworkers(initialBundle?.coworkers ?? [], initialLegacyPastors)
-      : PULPIT_COWORKERS
+    initialBundle?.coworkers ? normalizeCoworkers(initialBundle.coworkers) : []
   );
   const [worshipTimes, setWorshipTimes] = useState<WorshipTimeSlot[]>(
-    initialBundle?.worshipTimes?.length ? initialBundle.worshipTimes : SUNDAY_WORSHIP_TIMES
+    initialBundle?.worshipTimes ?? []
   );
   const [liturgySteps, setLiturgySteps] = useState<LiturgyStep[]>(
-    initialBundle?.liturgySteps?.length
-      ? initialBundle.liturgySteps
-      : [...LITURGY_STANDARD, ...LITURGY_COMMUNION]
+    initialBundle?.liturgySteps ?? []
   );
   const [ministryRoster, setMinistryRoster] = useState<MinistryRosterItem[]>(
-    initialBundle?.ministryRoster?.length
-      ? normalizeMinistryRoster(initialBundle.ministryRoster)
-      : SUNDAY_MINISTRY_ROSTER
+    initialBundle?.ministryRoster ? normalizeMinistryRoster(initialBundle.ministryRoster) : []
   );
   const [weekdayMinistries, setWeekdayMinistries] = useState<WeekdayMinistry[]>(
-    initialBundle?.weekdayMinistries?.length
+    initialBundle?.weekdayMinistries
       ? normalizeWeekdayMinistries(initialBundle.weekdayMinistries)
-      : WEEKDAY_MINISTRIES
+      : []
   );
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(
-    initialBundle?.announcements?.length
-      ? normalizeAnnouncements(initialBundle.announcements)
-      : ANNOUNCEMENTS
+    initialBundle?.announcements ? normalizeAnnouncements(initialBundle.announcements) : []
   );
 
   const [visitorRequests, setVisitorRequests] = useState<VisitorRequestItem[]>([]);
@@ -367,19 +338,22 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       preloadImageRef(merged.heroImage, 'high');
       setChurchInfo(merged);
     }
-    const legacyPastors = (bundle as { pastors?: LegacyPastorLike[] }).pastors;
-    if (bundle.coworkers?.length || legacyPastors?.length) {
-      setCoworkers(mergeLegacyPastorsIntoCoworkers(bundle.coworkers ?? [], legacyPastors));
+    if (Array.isArray(bundle.coworkers)) {
+      setCoworkers(normalizeCoworkers(bundle.coworkers));
     }
-    if (bundle.worshipTimes?.length) setWorshipTimes(bundle.worshipTimes);
-    if (bundle.liturgySteps?.length) setLiturgySteps(bundle.liturgySteps);
-    if (bundle.ministryRoster?.length) {
+    if (Array.isArray(bundle.worshipTimes)) {
+      setWorshipTimes(bundle.worshipTimes);
+    }
+    if (Array.isArray(bundle.liturgySteps)) {
+      setLiturgySteps(bundle.liturgySteps);
+    }
+    if (Array.isArray(bundle.ministryRoster)) {
       setMinistryRoster(normalizeMinistryRoster(bundle.ministryRoster));
     }
-    if (bundle.weekdayMinistries?.length) {
+    if (Array.isArray(bundle.weekdayMinistries)) {
       setWeekdayMinistries(normalizeWeekdayMinistries(bundle.weekdayMinistries));
     }
-    if (bundle.announcements?.length) {
+    if (Array.isArray(bundle.announcements)) {
       setAnnouncements(normalizeAnnouncements(bundle.announcements));
     }
   }, []);
@@ -445,10 +419,10 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     async (forceRefresh = false) => {
       if (!forceRefresh) {
         const cached = readLocalBundleCache();
-        if (isCacheFresh(cached)) {
+        if (isCacheFresh(cached) && cached.hasCloudBundle) {
           applyBundleToState(cached.bundle);
-          setHasCloudData(cached.hasCloudBundle);
-          setHasPublicBundle(cached.hasCloudBundle);
+          setHasCloudData(true);
+          setHasPublicBundle(true);
           setDataSource('local-cache');
           setLastSyncedAt(cached.cachedAt);
           setCloudLoading(false);
@@ -494,24 +468,14 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const defaultBundle: PublicBundleData = {
-          churchInfo: CHURCH_INFO,
-          coworkers: PULPIT_COWORKERS,
-          worshipTimes: SUNDAY_WORSHIP_TIMES,
-          liturgySteps: [...LITURGY_STANDARD, ...LITURGY_COMMUNION],
-          ministryRoster: SUNDAY_MINISTRY_ROSTER,
-          weekdayMinistries: WEEKDAY_MINISTRIES,
-          announcements: ANNOUNCEMENTS,
-          version: 0,
-        };
-        const syncedAt = writeLocalBundleCache(defaultBundle, false);
+        clearLocalBundleCache();
         setHasCloudData(false);
         setHasPublicBundle(false);
         setQuotaExceeded(false);
-        setDataSource('default');
-        setLastSyncedAt(syncedAt);
+        setDataSource('empty');
+        setLastSyncedAt(null);
       } catch {
-        // Keep local cache / default fallback rendered smoothly
+        // Keep local cache rendered if network fails
       } finally {
         setCloudLoading(false);
       }
@@ -831,9 +795,9 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     const normalizedSnapshot = {
       churchInfo: buildChurchInfoFields({
         ...current.churchInfo,
-        heroImage: resolvedHeroImage || CHURCH_INFO.heroImage,
-        fellowshipImage: resolvedFellowshipImage || CHURCH_INFO.fellowshipImage,
-        churchTeamImage: resolvedTeamImage || CHURCH_INFO.churchTeamImage,
+        heroImage: resolvedHeroImage,
+        fellowshipImage: resolvedFellowshipImage,
+        churchTeamImage: resolvedTeamImage,
       }),
       coworkers: resolvedCoworkers,
       worshipTimes: current.worshipTimes,
@@ -855,70 +819,45 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
     syncLocalCacheFromServerBundle(res.bundle);
   }, [adminFetch, applyBundleToState, getBearerToken, syncLocalCacheFromServerBundle]);
 
-  const importFromLegacyFirestore = useCallback(
+  const backupToFirestore = useCallback(
     async (onProgress?: (step: string) => void) => {
-      const { runLegacyFirestoreMigration } = await import('../lib/legacyFirestoreImport');
-      const summary = await runLegacyFirestoreMigration(getBearerToken, onProgress);
-      await refreshAdminData();
-      if (isMainAdmin) {
-        await loadAdminUsersData(true);
-      }
-      if (canViewVisitorStats) {
-        await loadVisitorStatsData(true);
-      }
-      return summary;
-    },
-    [
-      canViewVisitorStats,
-      getBearerToken,
-      isMainAdmin,
-      loadAdminUsersData,
-      loadVisitorStatsData,
-      refreshAdminData,
-    ]
-  );
+      const { backupD1ToFirestore } = await import('../lib/firestoreBackup');
+      const current = latestStateRef.current;
 
-  const exportChurchBackupJson = useCallback(async () => {
-    const { buildChurchBackupJson } = await import('../lib/legacyFirestoreImport');
-    const current = latestStateRef.current;
-    return await buildChurchBackupJson({
-      content: {
-        churchInfo: current.churchInfo,
-        coworkers: current.coworkers,
-        worshipTimes: current.worshipTimes,
-        liturgySteps: current.liturgySteps,
-        ministryRoster: current.ministryRoster,
-        weekdayMinistries: current.weekdayMinistries,
-        announcements: current.announcements,
-      },
-      admins: adminUsers,
-      visitorRequests,
-      visitorStats,
-      visitorIpRecords,
-    });
-  }, [adminUsers, visitorIpRecords, visitorRequests, visitorStats]);
+      let latestAdmins = adminUsers;
+      if (isMainAdmin && !adminUsersLoadedRef.current) {
+        try {
+          const usersRes = await adminFetch<{ users?: AdminUserItem[] }>('/api/admin/users', {
+            cache: 'no-store',
+          });
+          if (Array.isArray(usersRes.users)) {
+            latestAdmins = usersRes.users;
+            setAdminUsers(usersRes.users);
+            adminUsersLoadedRef.current = true;
+          }
+        } catch {
+          // Proceed with current adminUsers state
+        }
+      }
 
-  const importChurchBackupJson = useCallback(
-    async (rawJsonText: string, onProgress?: (step: string) => void) => {
-      const { importBackupJsonToD1 } = await import('../lib/legacyFirestoreImport');
-      const summary = await importBackupJsonToD1(rawJsonText, getBearerToken, onProgress);
-      await refreshAdminData();
-      if (isMainAdmin) {
-        await loadAdminUsersData(true);
-      }
-      if (canViewVisitorStats) {
-        await loadVisitorStatsData(true);
-      }
-      return summary;
+      return await backupD1ToFirestore({
+        content: {
+          churchInfo: current.churchInfo,
+          coworkers: current.coworkers,
+          worshipTimes: current.worshipTimes,
+          liturgySteps: current.liturgySteps,
+          ministryRoster: current.ministryRoster,
+          weekdayMinistries: current.weekdayMinistries,
+          announcements: current.announcements,
+        },
+        admins: latestAdmins,
+        visitorRequests,
+        isMainAdmin,
+        getToken: getBearerToken,
+        onProgress,
+      });
     },
-    [
-      canViewVisitorStats,
-      getBearerToken,
-      isMainAdmin,
-      loadAdminUsersData,
-      loadVisitorStatsData,
-      refreshAdminData,
-    ]
+    [adminFetch, adminUsers, getBearerToken, isMainAdmin, visitorRequests]
   );
 
   const saveSortedCollectionDoc = useCallback(
@@ -1379,9 +1318,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       syncModifiedContentToCloud,
       publishPublicBundle,
       refreshAdminData,
-      importFromLegacyFirestore,
-      exportChurchBackupJson,
-      importChurchBackupJson,
+      backupToFirestore,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,
@@ -1406,9 +1343,7 @@ export function ChurchDataProvider({ children }: { children: ReactNode }) {
       syncModifiedContentToCloud,
       publishPublicBundle,
       refreshAdminData,
-      importFromLegacyFirestore,
-      exportChurchBackupJson,
-      importChurchBackupJson,
+      backupToFirestore,
       saveSiteTheme,
       saveChurchInfo,
       saveCoworker,

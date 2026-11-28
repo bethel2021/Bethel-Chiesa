@@ -6,7 +6,6 @@ import {
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
 import {
-  CHURCH_IMAGES,
   MINISTRY_CATEGORY_LABELS,
   MINISTRY_CATEGORY_OPTIONS,
   MINISTRY_CATEGORY_ORDER,
@@ -336,7 +335,7 @@ export function AdminMinistryEditor({ mode }: { mode: 'roster' | 'weekday' }) {
                 id: '',
                 category: filterCat === 'all' ? 'choir' : filterCat,
                 title: '',
-                image: CHURCH_IMAGES.annChoir,
+                image: '',
                 schedule: '每周主日',
                 description: '',
                 sortOrder: ministryRoster.length + 1,

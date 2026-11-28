@@ -562,6 +562,7 @@ export async function handleGetMedia(
 
   const headers: Record<string, string> = {
     'content-type': obj.contentType,
+    'content-length': String(obj.bytes.byteLength),
     'cache-control': 'public, max-age=31536000, immutable',
     'x-content-type-options': 'nosniff',
     etag: obj.etag,

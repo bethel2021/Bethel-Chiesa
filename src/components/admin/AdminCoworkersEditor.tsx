@@ -214,7 +214,6 @@ export function AdminCoworkersEditor() {
                 onChange={(nextUrl) =>
                   setEditingCoworker({ ...editingCoworker, image: nextUrl })
                 }
-                defaultValue=""
                 previewAspect="square"
                 preset="avatar"
                 hint="自动缩放到头像尺寸并压缩为轻量 WebP，或留空使用首字母默认头像"

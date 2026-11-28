@@ -5,7 +5,7 @@ import {
   usePublicChurchData,
 } from '../../context/ChurchDataContext';
 import { FIELD_LIMITS } from '../../data/cacheConfig';
-import { CHURCH_IMAGES, type ChurchInfo } from '../../data/churchData';
+import type { ChurchInfo } from '../../data/churchData';
 import { normalizeSiteTheme, SITE_THEMES } from '../../data/themes';
 import { normalizeChurchInfo } from '../../utils/churchNormalization';
 import {
@@ -158,7 +158,6 @@ export function AdminInfoEditor() {
             label="主堂主视觉图片"
             value={form.heroImage}
             onChange={(nextUrl) => setForm({ ...form, heroImage: nextUrl })}
-            defaultValue={CHURCH_IMAGES.heroSanctuary}
             previewAspect="landscape"
             preset="hero"
             hint="自动缩放至 1920px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"
@@ -168,7 +167,6 @@ export function AdminInfoEditor() {
             label="教会简介团契图片"
             value={form.fellowshipImage}
             onChange={(nextUrl) => setForm({ ...form, fellowshipImage: nextUrl })}
-            defaultValue={CHURCH_IMAGES.fellowshipIntro}
             previewAspect="landscape"
             preset="banner"
             hint="自动缩放至 1440px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"
@@ -178,7 +176,6 @@ export function AdminInfoEditor() {
             label="同工团队合影图片"
             value={form.churchTeamImage}
             onChange={(nextUrl) => setForm({ ...form, churchTeamImage: nextUrl })}
-            defaultValue={CHURCH_IMAGES.churchTeam}
             previewAspect="landscape"
             preset="banner"
             hint="自动缩放至 1440px 并压缩为轻量 WebP（支持 20 MB 内 JPG / PNG / WebP）"

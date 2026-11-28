@@ -3,7 +3,7 @@
 本架构仅使用 **Cloudflare Pages + Pages Functions + D1（SQLite 数据库）**，无需创建或绑定 R2 存储桶，并保留 **Firebase Auth（Google 登录）** 作为后台同工身份认证：
 - **彻底告别 Firestore 每日 5 万读取配额**：Cloudflare D1 免费版提供每日 **500 万行读取 / 10 万行写入**与 **5 GB 免费存储**。
 - **全能单数据库架构**：教会图文内容、访客留言、同工权限、去重访客 IP 统计，以及压缩优化后的图片（以安全二进制分片方式存入 `media_files` / `media_chunks` 表，并通过 `/api/media/<key>` 配合边缘强缓存极速分发）全部统一存于 D1。
-- **内置一键数据迁移工具**：支持从旧版 Firestore 一键导入所有教会图文内容、历史图片、管理员权限名录、来访留言及去重访客 IP 统计。
+- **双重云端备份保险**：日常读写全量运行在 Cloudflare D1，同时后台提供「备份数据到 Firestore」一键容灾备份能力。
 
 ---
 
@@ -77,11 +77,10 @@ npx wrangler d1 migrations apply bethel-church-db --remote
 
 ---
 
-## 五、上线后一键迁移旧版 Firestore 数据
+## 五、双重云端容灾备份（备份数据到 Firestore）
 
-完成上述部署与 D1 绑定后：
+日常网站所有图文、图片及留言读写均在 Cloudflare D1 数据库内极速完成；如需保留第二份云端备份：
 
 1. 使用主管理员账号（`chinarenzhian@gmail.com`）打开 `https://你的域名/admin` 并完成 Google 登录。
-2. 在后台顶部提示条或「后台总览与同步」模块中点击 **「从旧版 Firestore 一键导入」**。
-3. 系统将在浏览器端拉取旧版 Firestore 中的全部数据与 `media://` 分片图片，全部统一写入 Cloudflare D1 数据库（含图片转存、教会信息、讲台同工、周间事工、精彩瞬间、家事公告、来访留言、管理员权限与去重访客 IP 记录）。
-4. 迁移完成后刷新公开首页，即可确认所有内容与图片均正常加载。
+2. 在「后台总览与同步」模块点击 **「备份数据到 Firestore」**。
+3. 系统会将当前 D1 中的全部教会图文内容、图片分片、管理员名录及来访留言同步备份一份至 Firestore。

@@ -66,9 +66,11 @@ export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
                     <path d="M12 1.5l2.15 7.35L21.5 11l-7.35 2.15L12 20.5l-2.15-7.35L2.5 11l7.35-2.15L12 1.5z" />
                   </svg>
                 )}
-                <span>
-                  {churchInfo.founded} · {churchInfo.shortAddress}
-                </span>
+                {(churchInfo.founded || churchInfo.shortAddress) && (
+                  <span>
+                    {[churchInfo.founded, churchInfo.shortAddress].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </p>
 
               <h1 className="font-editorial text-[2rem] min-[360px]:text-4xl sm:text-5xl md:text-[3.5rem] font-semibold leading-[1.25] sm:leading-[1.15] tracking-tight text-white mb-4 [text-shadow:0_2px_14px_rgba(0,0,0,0.65)]">
@@ -82,12 +84,16 @@ export function HeroSection({ onSelectAnnouncement }: HeroSectionProps = {}) {
                 )}
               </h1>
 
-              <p className="font-editorial text-base sm:text-lg text-white font-medium leading-relaxed mb-3">
-                {churchInfo.scriptureQuote}
-                <span className="text-sm text-white/90 font-normal ml-2">
-                  —— {churchInfo.scriptureRef}
-                </span>
-              </p>
+              {(churchInfo.scriptureQuote || churchInfo.scriptureRef) && (
+                <p className="font-editorial text-base sm:text-lg text-white font-medium leading-relaxed mb-3">
+                  {churchInfo.scriptureQuote}
+                  {churchInfo.scriptureRef && (
+                    <span className="text-sm text-white/90 font-normal ml-2">
+                      —— {churchInfo.scriptureRef}
+                    </span>
+                  )}
+                </p>
+              )}
 
               <p className="text-sm sm:text-base text-white/95 leading-relaxed mb-7 max-w-xl lg:max-w-none lg:whitespace-nowrap">
                 {churchInfo.heroSubtitle}

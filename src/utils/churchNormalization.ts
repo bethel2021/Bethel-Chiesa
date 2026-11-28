@@ -1,9 +1,7 @@
 import { FIELD_LIMITS } from '../data/cacheConfig';
 import {
-  ANNOUNCEMENTS,
-  CHURCH_INFO,
+  EMPTY_CHURCH_INFO,
   normalizeMinistryCategory,
-  normalizeWeekdayMinistries,
   type AnnouncementItem,
   type ChurchInfo,
   type MinistryRosterItem,
@@ -11,7 +9,7 @@ import {
   type WeekdayMinistry,
 } from '../data/churchData';
 import { normalizeSiteTheme } from '../data/themes';
-import { DATA_IMAGE_URI_REGEX, isMediaUri } from '../lib/mediaStorage';
+import { DATA_IMAGE_URI_REGEX } from '../lib/mediaStorage';
 import {
   filterSafeImageSrc,
   SAFE_HTTP_OR_ROOT_RELATIVE_REGEX,
@@ -45,9 +43,8 @@ export function sanitizeImageRef(val: string | undefined, maxLen: number): strin
   const trimmed = String(val ?? '').trim();
   if (!trimmed) return '';
   const isSafeUrlOrPath = SAFE_HTTP_OR_ROOT_RELATIVE_REGEX.test(trimmed);
-  const isSafeMediaRef = isMediaUri(trimmed);
   const isSafeDataUri = DATA_IMAGE_URI_REGEX.test(trimmed);
-  if (!isSafeUrlOrPath && !isSafeMediaRef && !isSafeDataUri) {
+  if (!isSafeUrlOrPath && !isSafeDataUri) {
     throw new Error('图片地址格式无效：请上传 JPG/PNG/WebP 原图，或填写以 https:// 或 / 开头的有效路径。');
   }
   if (trimmed.length > maxLen) {
@@ -56,46 +53,46 @@ export function sanitizeImageRef(val: string | undefined, maxLen: number): strin
   return trimmed;
 }
 
-const EVANGELISM_DEFAULT_DESC =
-  '领受主的大使命，借着福音聚会与生活见证向同胞及社区传扬基督救恩与盼望。';
-
 export function normalizeChurchInfo(raw: Partial<ChurchInfo> | undefined): ChurchInfo {
-  const base = raw ? { ...CHURCH_INFO, ...raw } : { ...CHURCH_INFO };
-  let themeVerseRef = clampStr(base.themeVerseRef, FIELD_LIMITS.churchInfo.themeVerseRef);
+  const L = FIELD_LIMITS.churchInfo;
+  const base = raw ? { ...EMPTY_CHURCH_INFO, ...raw } : { ...EMPTY_CHURCH_INFO };
+  let themeVerseRef = clampStr(base.themeVerseRef, L.themeVerseRef);
   if (themeVerseRef.includes('伯特利教会年度主题经文')) {
     themeVerseRef = themeVerseRef.replace(/·?\s*伯特利教会年度主题经文/g, '').trim();
   }
-  if (!themeVerseRef) {
-    themeVerseRef = CHURCH_INFO.themeVerseRef;
-  }
+  const introParagraphs = Array.isArray(base.introParagraphs)
+    ? base.introParagraphs
+        .slice(0, L.introParagraphMaxCount)
+        .map((s) => clampStr(typeof s === 'string' ? s : '', L.introParagraphLen))
+        .filter(Boolean)
+    : [];
   const coreValues = Array.isArray(base.coreValues)
-    ? base.coreValues.map((cv) => {
-        const title = String(cv.title ?? '').trim();
-        const description = String(cv.description ?? '').trim();
-        if (title === '广传福音' && !description) {
-          return { ...cv, description: EVANGELISM_DEFAULT_DESC };
-        }
-        return cv;
-      })
-    : CHURCH_INFO.coreValues;
+    ? base.coreValues.slice(0, L.coreValuesMaxCount).map((cv, idx) => ({
+        index: clampStr(cv?.index || String(idx + 1).padStart(2, '0'), L.coreValueIndex),
+        title: clampStr(cv?.title, L.coreValueTitle),
+        description: clampStr(cv?.description, L.coreValueDescription),
+      }))
+    : [];
   return {
-    ...base,
-    coreValues,
+    name: clampStr(base.name, L.name),
+    founded: clampStr(base.founded, L.founded),
+    scriptureQuote: clampStr(base.scriptureQuote, L.scriptureQuote),
+    scriptureRef: clampStr(base.scriptureRef, L.scriptureRef),
+    heroSubtitle: clampStr(base.heroSubtitle, L.heroSubtitle),
+    heroImage: filterSafeImageSrc(base.heroImage, ''),
+    fellowshipImage: filterSafeImageSrc(base.fellowshipImage, ''),
+    churchTeamImage: filterSafeImageSrc(base.churchTeamImage, ''),
+    address: clampStr(base.address, L.address),
+    shortAddress: clampStr(base.shortAddress, L.shortAddress),
+    pastoralPhone: clampStr(base.pastoralPhone, L.pastoralPhone),
+    themeVerse: clampStr(base.themeVerse, L.themeVerse),
     themeVerseRef,
-    heroImage: filterSafeImageSrc(base.heroImage, CHURCH_INFO.heroImage),
-    fellowshipImage: filterSafeImageSrc(base.fellowshipImage, CHURCH_INFO.fellowshipImage),
-    churchTeamImage: filterSafeImageSrc(base.churchTeamImage, CHURCH_INFO.churchTeamImage),
+    thisWeekLabel: clampStr(base.thisWeekLabel, L.thisWeekLabel),
+    nextWeekLabel: clampStr(base.nextWeekLabel, L.nextWeekLabel),
     siteTheme: normalizeSiteTheme(base.siteTheme),
+    introParagraphs,
+    coreValues,
   };
-}
-
-
-export interface LegacyPastorLike {
-  id?: string;
-  name?: string;
-  role?: string;
-  image?: string;
-  sortOrder?: number;
 }
 
 export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCoworker[] {
@@ -112,58 +109,17 @@ export function normalizeCoworkers(list: Partial<PulpitCoworker>[]): PulpitCowor
   });
 }
 
-export function mergeLegacyPastorsIntoCoworkers(
-  coworkers: Partial<PulpitCoworker>[],
-  legacyPastors?: LegacyPastorLike[]
-): PulpitCoworker[] {
-  const normalizedCoworkers = normalizeCoworkers(coworkers);
-  if (!Array.isArray(legacyPastors) || legacyPastors.length === 0) {
-    return normalizedCoworkers;
-  }
-
-  const existingIds = new Set(normalizedCoworkers.map((c) => c.id));
-  const convertedPastors: PulpitCoworker[] = legacyPastors
-    .filter((p) => p && typeof p.name === 'string' && p.name.trim().length > 0)
-    .filter((p, idx) => !existingIds.has(String(p.id || `pastor-${idx + 1}`)))
-    .map((p, idx) => {
-      const safeImg = filterSafeImageSrc(p.image);
-      return {
-        id: String(p.id || `pastor-${idx + 1}`),
-        name: clampStr(p.name, FIELD_LIMITS.coworker.name),
-        title: clampStr(p.role, FIELD_LIMITS.coworker.title),
-        ...(safeImg ? { image: safeImg } : {}),
-        sortOrder: clampSortOrder(p.sortOrder, idx + 1),
-      };
-    });
-
-  if (convertedPastors.length === 0) {
-    return normalizedCoworkers;
-  }
-
-  const maxPastorOrder = convertedPastors.reduce(
-    (max, p) => Math.max(max, p.sortOrder),
-    0
-  );
-  const shiftedCoworkers = normalizedCoworkers.map((cw) => ({
-    ...cw,
-    sortOrder: cw.sortOrder <= maxPastorOrder ? cw.sortOrder + maxPastorOrder : cw.sortOrder,
-  }));
-
-  return [...convertedPastors, ...shiftedCoworkers].sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
 export function normalizeMinistryRoster(list: Partial<MinistryRosterItem>[]): MinistryRosterItem[] {
   const L = FIELD_LIMITS.ministryRoster;
   return list.map((item, idx) => {
-    const rawImg = String(item.image || '');
-    const safeImg = filterSafeImageSrc(rawImg);
+    const safeImg = filterSafeImageSrc(item.image, '');
     return {
       id: String(item.id || `moment-${idx + 1}`),
       category: normalizeMinistryCategory(item.category),
-      title: clampStr(String(item.title || (item as any).role || ''), L.title),
-      image: safeImg || '/src/assets/images/ann_christmas_choir_1795542572912.jpg',
+      title: clampStr(item.title, L.title),
+      image: safeImg,
       schedule: clampStr(item.schedule, L.schedule),
-      description: clampStr(String(item.description || (item as any).thisWeek || ''), L.description),
+      description: clampStr(item.description, L.description),
       sortOrder: clampSortOrder(item.sortOrder, idx + 1),
     };
   });
@@ -190,14 +146,17 @@ export function cleanWeekdayMinistry(
   };
 }
 
+export function normalizeWeekdayMinistries(list: Partial<WeekdayMinistry>[]): WeekdayMinistry[] {
+  return [...list]
+    .map((item, idx) => cleanWeekdayMinistry(item, idx + 1))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
   const L = FIELD_LIMITS.churchInfo;
   let themeVerseRef = clampStr(info.themeVerseRef, L.themeVerseRef);
   if (themeVerseRef.includes('伯特利教会年度主题经文')) {
     themeVerseRef = themeVerseRef.replace(/·?\s*伯特利教会年度主题经文/g, '').trim();
-  }
-  if (!themeVerseRef) {
-    themeVerseRef = CHURCH_INFO.themeVerseRef;
   }
   return {
     name: clampStr(info.name, L.name),
@@ -205,11 +164,9 @@ export function buildChurchInfoFields(info: ChurchInfo): ChurchInfo {
     scriptureQuote: clampStr(info.scriptureQuote, L.scriptureQuote),
     scriptureRef: clampStr(info.scriptureRef, L.scriptureRef),
     heroSubtitle: clampStr(info.heroSubtitle, L.heroSubtitle),
-    heroImage: sanitizeImageRef(info.heroImage, L.heroImage) || CHURCH_INFO.heroImage,
-    fellowshipImage:
-      sanitizeImageRef(info.fellowshipImage, L.fellowshipImage) || CHURCH_INFO.fellowshipImage,
-    churchTeamImage:
-      sanitizeImageRef(info.churchTeamImage, L.churchTeamImage) || CHURCH_INFO.churchTeamImage,
+    heroImage: sanitizeImageRef(info.heroImage, L.heroImage),
+    fellowshipImage: sanitizeImageRef(info.fellowshipImage, L.fellowshipImage),
+    churchTeamImage: sanitizeImageRef(info.churchTeamImage, L.churchTeamImage),
     address: clampStr(info.address, L.address),
     shortAddress: clampStr(info.shortAddress, L.shortAddress),
     pastoralPhone: clampStr(info.pastoralPhone, L.pastoralPhone),
@@ -237,19 +194,12 @@ export function normalizeAnnouncementCategory(raw: unknown): AnnouncementItem['c
   return '特别聚会';
 }
 
-const DEFAULT_ANNOUNCEMENT_IMAGE_MAP: Record<string, string> = Object.fromEntries(
-  ANNOUNCEMENTS.filter((item) => item.image).map((item) => [item.id, item.image as string])
-);
-
 export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): AnnouncementItem[] {
   const L = FIELD_LIMITS.announcement;
   return list.map((item, idx) => {
     const id = String(item.id || `ann-${idx + 1}`);
     const category = normalizeAnnouncementCategory(item.category);
-    const rawImage =
-      typeof item.image === 'string'
-        ? filterSafeImageSrc(item.image)
-        : DEFAULT_ANNOUNCEMENT_IMAGE_MAP[id] || '';
+    const rawImage = typeof item.image === 'string' ? filterSafeImageSrc(item.image, '') : '';
     const details = Array.isArray(item.details)
       ? item.details
           .slice(0, L.detailsMaxCount)
@@ -271,12 +221,10 @@ export function normalizeAnnouncements(list: Partial<AnnouncementItem>[]): Annou
       ...(cleanTime ? { time: cleanTime } : {}),
       ...(cleanLocation ? { location: cleanLocation } : {}),
       ...(cleanContact ? { contact: cleanContact } : {}),
-      ...(typeof item.image === 'string' || rawImage ? { image: rawImage } : {}),
+      ...(rawImage ? { image: rawImage } : {}),
       isFeatured: Boolean(item.isFeatured),
       details,
       sortOrder: clampSortOrder(item.sortOrder, idx + 1),
     };
   });
 }
-
-export { normalizeWeekdayMinistries };

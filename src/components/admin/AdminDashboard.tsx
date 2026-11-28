@@ -7,9 +7,7 @@ import {
   BookOpen,
   CalendarDays,
   Database,
-  Download,
   FileText,
-  FileUp,
   Image,
   LogOut,
   Menu,
@@ -102,9 +100,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     syncModifiedContentToCloud,
     publishPublicBundle,
     refreshAdminData,
-    importFromLegacyFirestore,
-    exportChurchBackupJson,
-    importChurchBackupJson,
+    backupToFirestore,
   } = useChurchAdminActions();
 
   useEffect(() => {
@@ -121,9 +117,8 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [importingLegacy, setImportingLegacy] = useState(false);
-  const [exportingBackup, setExportingBackup] = useState(false);
-  const [importProgress, setImportProgress] = useState('');
+  const [backingUpFirestore, setBackingUpFirestore] = useState(false);
+  const [backupProgress, setBackupProgress] = useState('');
   const [refreshingAdmin, setRefreshingAdmin] = useState(false);
   const [authError, setAuthError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
@@ -131,7 +126,6 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
-  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   const autoPublishedRef = useRef(false);
 
   useEffect(() => {
@@ -188,82 +182,27 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
     }
   };
 
-  const handleImportFromFirestore = async () => {
-    if (!isMainAdmin || importingLegacy) return;
-    setImportingLegacy(true);
+  const handleBackupToFirestore = async () => {
+    if (!isMainAdmin || backingUpFirestore) return;
+    setBackingUpFirestore(true);
     setSyncStatus(null);
-    setImportProgress('正在连接旧版 Firestore（若额度已满将自动尝试本机缓存）…');
+    setBackupProgress('正在准备备份数据至 Firestore…');
     try {
-      const summary = await importFromLegacyFirestore((step) => setImportProgress(step));
+      const summary = await backupToFirestore((step) => setBackupProgress(step));
       const warnSuffix =
         summary.warnings.length > 0 ? `（提示：${summary.warnings.join('；')}）` : '';
       setSyncStatus({
         type: 'success',
-        message: `已完成数据导入：迁移 ${summary.migratedImages} 张图片、${summary.importedAdmins} 位管理员、${summary.importedRequests} 条来访留言与 ${summary.importedIps} 条去重访客记录到 Cloudflare D1。${warnSuffix}`,
+        message: `已完成双重保险备份到 Firestore：写入 ${summary.backedUpDocs} 条内容文档、${summary.backedUpImages} 张图片、${summary.backedUpAdmins} 位管理员与 ${summary.backedUpRequests} 条来访留言。${warnSuffix}`,
       });
     } catch (err) {
       setSyncStatus({
         type: 'error',
-        message: getFriendlyAdminError(err, '从旧版 Firestore 导入失败，请检查网络或权限后重试。'),
+        message: getFriendlyAdminError(err, '备份数据到 Firestore 失败，请检查权限或配额后重试。'),
       });
     } finally {
-      setImportingLegacy(false);
-      setImportProgress('');
-    }
-  };
-
-  const handleExportBackupJson = async () => {
-    if (exportingBackup) return;
-    setExportingBackup(true);
-    setSyncStatus(null);
-    try {
-      const jsonText = await exportChurchBackupJson();
-      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const dateStr = new Date().toISOString().slice(0, 10);
-      a.href = url;
-      a.download = `bethel-church-backup-${dateStr}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setSyncStatus({
-        type: 'success',
-        message: '已导出完整 JSON 备份文件（含当前页面图文与缓存图片），可在新环境直接一键导入到 Cloudflare D1。',
-      });
-    } catch (err) {
-      setSyncStatus({
-        type: 'error',
-        message: getFriendlyAdminError(err, '导出备份文件失败，请稍后重试。'),
-      });
-    } finally {
-      setExportingBackup(false);
-    }
-  };
-
-  const handleImportBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !isMainAdmin || importingLegacy) return;
-    setImportingLegacy(true);
-    setSyncStatus(null);
-    setImportProgress('正在解析备份文件…');
-    try {
-      const text = await file.text();
-      const summary = await importChurchBackupJson(text, (step) => setImportProgress(step));
-      setSyncStatus({
-        type: 'success',
-        message: `已完成备份文件导入：写入 ${summary.migratedImages} 张图片、${summary.importedAdmins} 位管理员、${summary.importedRequests} 条来访留言与 ${summary.importedIps} 条访客记录到 Cloudflare D1。`,
-      });
-    } catch (err) {
-      setSyncStatus({
-        type: 'error',
-        message: getFriendlyAdminError(err, '导入 JSON 备份文件失败，请确认文件格式正确。'),
-      });
-    } finally {
-      setImportingLegacy(false);
-      setImportProgress('');
+      setBackingUpFirestore(false);
+      setBackupProgress('');
     }
   };
 
@@ -612,60 +551,25 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
             </div>
           )}
 
-          <input
-            ref={backupFileInputRef}
-            type="file"
-            accept=".json,application/json"
-            onChange={handleImportBackupFile}
-            className="hidden"
-          />
-
           {!hasCloudData && !quotaExceeded && (
             <div className="mb-6 bg-[#F3EFE6] border border-[#DFD8C8] rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-[#1C1917]">
-                  尚未检测到 Cloudflare D1 云端数据
+                  Cloudflare D1 数据库尚无公开快照
                 </h2>
                 <p className="text-xs text-[#57534E] mt-1">
-                  {isMainAdmin
-                    ? '你可以从旧版 Firestore 或本地 JSON 备份一键导入历史内容、照片与访客数据到 D1；若旧版 Firestore 今日额度已满，可直接先点击「同步默认模板到 D1」立即启用网站。'
-                    : '点击右侧按钮可将当前主页内容写入 Cloudflare D1 数据库，以便跨设备持久化编辑与发布。'}
+                  请编辑教会内容后点击右侧按钮写入 Cloudflare D1 数据库，以便跨设备持久化同步与发布。
                 </p>
-                {importProgress && (
-                  <p className="text-xs text-[#1E3A5F] font-medium mt-2">{importProgress}</p>
-                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {isMainAdmin && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => backupFileInputRef.current?.click()}
-                      disabled={importingLegacy || syncing}
-                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#FAF8F4] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
-                    >
-                      <FileUp className="w-3.5 h-3.5" />
-                      导入 JSON 备份
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleImportFromFirestore}
-                      disabled={importingLegacy || syncing}
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#1E3A5F] hover:bg-[#FAF8F4] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
-                    >
-                      <UploadCloud className={`w-3.5 h-3.5 ${importingLegacy ? 'animate-pulse' : ''}`} />
-                      {importingLegacy ? '正在迁移…' : '从旧版 Firestore 导入'}
-                    </button>
-                  </>
-                )}
                 <button
                   type="button"
                   onClick={handleSyncToCloud}
-                  disabled={syncing || importingLegacy}
+                  disabled={syncing || backingUpFirestore}
                   className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                  {syncing ? '正在同步…' : '同步默认模板到 D1'}
+                  {syncing ? '正在同步…' : '写入当前内容到 D1'}
                 </button>
               </div>
             </div>
@@ -697,46 +601,26 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   <p className="text-xs text-[#57534E]">
                     已启用 D1 单接口快照 + 30 分钟本地缓存与图片边缘强缓存分发，无需额外对象存储。
                   </p>
-                  {importProgress && (
-                    <p className="text-xs text-[#1E3A5F] font-medium pt-1">{importProgress}</p>
+                  {backupProgress && (
+                    <p className="text-xs text-[#1E3A5F] font-medium pt-1">{backupProgress}</p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleExportBackupJson}
-                    disabled={exportingBackup || importingLegacy || syncing}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-[#57534E] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    {exportingBackup ? '导出中…' : '导出备份'}
-                  </button>
                   {isMainAdmin && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => backupFileInputRef.current?.click()}
-                        disabled={importingLegacy || syncing}
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
-                      >
-                        <FileUp className="w-3.5 h-3.5" />
-                        导入备份
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleImportFromFirestore}
-                        disabled={importingLegacy || syncing}
-                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
-                      >
-                        <UploadCloud className={`w-3.5 h-3.5 ${importingLegacy ? 'animate-pulse' : ''}`} />
-                        {importingLegacy ? '迁移中…' : '从旧版 Firestore 导入'}
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={handleBackupToFirestore}
+                      disabled={backingUpFirestore || syncing}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[#1E3A5F] bg-white border border-[#D6CFC2] hover:bg-[#F3EFE6] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      {backingUpFirestore ? '备份中…' : '备份数据到 Firestore'}
+                    </button>
                   )}
                   <button
                     type="button"
                     onClick={handleSyncToCloud}
-                    disabled={syncing || importingLegacy}
+                    disabled={syncing || backingUpFirestore}
                     className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1E3A5F] hover:bg-[#162C49] disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
@@ -750,7 +634,7 @@ export function AdminDashboard({ onBackToSite }: { onBackToSite: () => void }) {
                   {
                     tab: 'info' as AdminTab,
                     label: '教会简介与联系',
-                    count: hasCloudData ? '云端已就绪' : '使用默认模板',
+                    count: hasCloudData ? 'D1 云端已就绪' : '待写入 D1',
                     sub: '主视觉 · 异象 · 堂址电话',
                   },
                   {
